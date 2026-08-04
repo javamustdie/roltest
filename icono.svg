@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="El Diezmo de Corvalar">
+  <!-- Ocho piedras apiladas: una por cada diezmo pagado. La novena, sin apilar. -->
+  <rect width="512" height="512" fill="#12140E"/>
+  <g fill="none" stroke="#3A422C" stroke-width="9" stroke-linecap="round">
+    <path d="M96 470 L104 214"/>
+    <path d="M416 470 L408 236"/>
+    <path d="M150 470 L156 300"/>
+    <path d="M362 470 L356 288"/>
+  </g>
+  <circle cx="256" cy="150" r="86" fill="#1B1F14" stroke="#C8823C" stroke-width="4" opacity="0.5"/>
+  <g fill="#8E9377">
+    <ellipse cx="256" cy="392" rx="74" ry="21"/>
+    <ellipse cx="256" cy="356" rx="62" ry="19"/>
+    <ellipse cx="256" cy="323" rx="51" ry="17"/>
+    <ellipse cx="256" cy="293" rx="41" ry="15"/>
+  </g>
+  <g fill="#DCD8C4">
+    <ellipse cx="256" cy="266" rx="32" ry="13"/>
+    <ellipse cx="256" cy="242" rx="24" ry="11"/>
+  </g>
+  <ellipse cx="256" cy="221" rx="17" ry="9" fill="#C8823C"/>
+</svg>

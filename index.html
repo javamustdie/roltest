@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12140E">
+<title>El Diezmo de Corvalar</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icono.svg">
+<style>
+  /* Misma paleta y tipografía que el resto del material de mesa.
+     Compromiso deliberado con el tema oscuro: se juega con poca luz. */
+  :root, :root[data-theme="dark"], :root[data-theme="light"] {
+    --turba:#12140E; --musgo:#1B1F14; --musgo-alto:#232817; --liquen:#3A422C;
+    --tiza:#DCD8C4; --tiza-baja:#8E9377; --sebo:#C8823C;
+    --herrumbre:#8D3524; --ambar:#D9A04A;
+    --serif: Georgia,"Iowan Old Style",Palatino,"Book Antiqua",serif;
+    --mono: ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --barra: 68px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  body {
+    margin: 0; background: var(--turba); color: var(--tiza);
+    font: 400 16px/1.5 var(--serif);
+    -webkit-text-size-adjust: 100%;
+    display: flex; flex-direction: column;
+  }
+
+  /* El `display` del navegador para [hidden] lo pisa CUALQUIER regla de display propia, y
+     aquí hay unas cuantas (.lienzo es block, .fila y .lienzo-vacio son flex). Sin esto,
+     `elemento.hidden = true` no oculta nada: la app mostraba a la vez el arte de la escena y
+     el hueco de «sin arte», y los botones del reloj seguían visibles en la partida de prueba. */
+  [hidden] { display: none !important; }
+
+  /* ── Cabecera ─────────────────────────────────────────────────────── */
+  header {
+    flex: none; display: flex; align-items: center; gap: 12px;
+    padding: max(10px, env(safe-area-inset-top)) 16px 10px;
+    border-bottom: 1px solid var(--liquen); background: var(--turba);
+  }
+  header .lugar { font: 500 .66rem/1 var(--mono); letter-spacing:.2em; color: var(--sebo); }
+  header h1 { margin:0; font:400 1.02rem/1.2 var(--serif); flex:1; min-width:0;
+              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .reloj { display:flex; align-items:center; gap:6px; padding:5px 10px;
+           border:1px solid var(--liquen); background:var(--musgo);
+           font:500 .64rem/1 var(--mono); letter-spacing:.1em; text-transform:uppercase;
+           color:var(--tiza-baja); white-space:nowrap; }
+  .reloj b { font-size:.86rem; color:var(--sebo); font-variant-numeric:tabular-nums; }
+  .reloj[data-urgente="si"] { border-color:var(--herrumbre); background:#1E1310; }
+  .reloj[data-urgente="si"] b { color:var(--ambar); }
+
+  /* ── Vistas ───────────────────────────────────────────────────────── */
+  main { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
+         padding:14px 16px calc(var(--barra) + 96px); }
+  .vista { display:none; flex-direction:column; gap:14px; }
+  /* Hueco al final para el botón flotante de hablar: está fijo sobre el contenido y sin esto
+     tapa la última línea de cada vista (el aviso de la narración, la nota del reloj…). */
+  .vista[data-activa] { display:flex; padding-bottom:calc(64px + 28px); }
+
+  h2 { margin:0; font:500 .68rem/1 var(--mono); letter-spacing:.18em;
+       text-transform:uppercase; color:var(--tiza-baja); }
+  section { background:var(--musgo); border:1px solid var(--liquen);
+            padding:13px 15px; display:flex; flex-direction:column; gap:10px; }
+
+  .lienzo { width:100%; aspect-ratio:16/9; max-height:min(34vh,320px);
+            border:1px solid var(--liquen); object-fit:cover; display:block;
+            background:linear-gradient(#191D12,#0E100A); }
+  .lienzo-vacio { display:flex; align-items:center; justify-content:center;
+                  color:var(--tiza-baja); font-style:italic; font-size:.86rem;
+                  text-align:center; padding:18px; }
+  figcaption { margin-top:6px; font-size:.78rem; font-style:italic; color:var(--tiza-baja); }
+  figure { margin:0; }
+
+  ul.sabeis { margin:0; padding-left:1.1em; display:flex; flex-direction:column; gap:6px; }
+  ul.sabeis li { font-size:.95rem; }
+  ul.sabeis li::marker { color:var(--sebo); }
+
+  /* ── Botones ──────────────────────────────────────────────────────── */
+  button { font:400 .95rem/1 var(--serif); background:var(--musgo-alto); color:var(--tiza);
+           border:1px solid var(--liquen); padding:12px 16px; min-height:48px;
+           cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+           gap:9px; transition:border-color 120ms, background 120ms; }
+  button:active:not(:disabled) { background:#2C331E; }
+  button:focus-visible { outline:2px solid var(--sebo); outline-offset:2px; }
+  button:disabled { color:var(--tiza-baja); cursor:default; }
+  button .icono { color:var(--sebo); }
+  button:disabled .icono { color:#5C6149; }
+  .fila { display:flex; gap:9px; flex-wrap:wrap; }
+  .fila > button { flex:1; min-width:110px; }
+
+  .barra-progreso { height:3px; background:#FFFFFF12; margin-top:8px; }
+  .barra-progreso i { display:block; height:100%; background:var(--sebo); width:0; }
+
+  /* ── Grupo ────────────────────────────────────────────────────────── */
+  .pj { display:flex; flex-direction:column; gap:9px; padding:12px 14px;
+        background:var(--musgo); border:1px solid var(--liquen); }
+  .pj[data-estado="tocado"] { border-left:3px solid var(--ambar); }
+  .pj[data-estado="grave"]  { border-left:3px solid var(--herrumbre); }
+  .pj-cab { display:flex; align-items:baseline; gap:9px; }
+  .pj-cab .nom { font-size:1.04rem; }
+  .pj-cab .cls { font-size:.74rem; color:var(--tiza-baja); font-style:italic; }
+  .pj-cab .ca  { margin-left:auto; font:500 .7rem/1 var(--mono); color:var(--tiza-baja); }
+  .pg-fila { display:flex; align-items:center; gap:10px; }
+  .pg-fila .val { font:500 1.18rem/1 var(--mono); font-variant-numeric:tabular-nums;
+                  min-width:5.4em; text-align:center; }
+  .pj[data-estado="tocado"] .val { color:var(--ambar); }
+  .pj[data-estado="grave"]  .val { color:#D4644A; }
+  .pg-fila button { flex:1; min-height:44px; font-size:1.1rem; }
+  .marcas { display:flex; flex-wrap:wrap; gap:6px; }
+  .marca { font:400 .74rem/1 var(--mono); padding:5px 8px; border:1px solid var(--herrumbre);
+           color:#C4705C; background:#1E1310; }
+  .agot { font:500 .7rem/1 var(--mono); color:var(--tiza-baja); letter-spacing:.08em; }
+
+  .sumin { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:9px; }
+  .sumin div { display:flex; align-items:center; gap:8px; padding:9px 11px;
+               background:var(--musgo-alto); border:1px solid var(--liquen); }
+  .sumin span { flex:1; font-size:.88rem; }
+  .sumin b { font:500 1.02rem/1 var(--mono); font-variant-numeric:tabular-nums; color:var(--sebo); }
+  .sumin [data-vacio="si"] b { color:var(--herrumbre); }
+  .sumin button { min-height:32px; min-width:32px; padding:0 9px; font-size:1rem; }
+
+  /* ── Mapa ─────────────────────────────────────────────────────────── */
+  svg.mapa { width:100%; height:auto; background:#0E100A; border:1px solid var(--liquen); }
+  svg.mapa .arista { stroke:var(--liquen); stroke-width:.5; }
+  svg.mapa .arista.conocida { stroke:var(--sebo); stroke-opacity:.55; }
+  svg.mapa .nodo { fill:var(--musgo-alto); stroke:var(--liquen); stroke-width:.6; }
+  svg.mapa .nodo.visitada { fill:#3A3520; stroke:var(--sebo); }
+  svg.mapa .nodo.actual { fill:var(--sebo); stroke:#E8C07A; stroke-width:1.1; }
+  svg.mapa text { fill:var(--tiza-baja); font-family:Georgia,serif; font-size:3.1px;
+                  text-anchor:middle; }
+  svg.mapa .visitada + text, svg.mapa .actual + text { fill:var(--tiza); }
+  svg.mapa g { cursor:pointer; }
+
+  /* ── Conversación ─────────────────────────────────────────────────── */
+  .charla { display:flex; flex-direction:column; gap:9px; }
+  .turno { padding:10px 13px; border:1px solid var(--liquen); background:var(--musgo); }
+  .turno[data-de="mesa"] { background:var(--musgo-alto); border-left:3px solid var(--tiza-baja); }
+  .turno[data-de="dj"]   { border-left:3px solid var(--sebo); }
+  .turno .quien { font:500 .62rem/1 var(--mono); letter-spacing:.14em; text-transform:uppercase;
+                  color:var(--tiza-baja); margin-bottom:5px; }
+  .turno p { margin:0; font-size:.96rem; line-height:1.55; }
+
+  /* ── Ajustes ──────────────────────────────────────────────────────── */
+  label { display:flex; flex-direction:column; gap:6px; font-size:.86rem; }
+  label small { color:var(--tiza-baja); font-size:.76rem; font-style:italic; }
+  input, select { font:400 .92rem/1 var(--mono); background:#0E100A; color:var(--tiza);
+                  border:1px solid var(--liquen); padding:11px 12px; min-height:46px; width:100%; }
+  input:focus, select:focus { outline:2px solid var(--sebo); outline-offset:1px; }
+  .aviso-clave { font-size:.8rem; color:var(--tiza-baja); line-height:1.5;
+                 border-left:2px solid var(--sebo); padding-left:10px; }
+  .estado-linea { font:400 .82rem/1.4 var(--mono); }
+  .ok { color:#8FA86A; } .mal { color:#D4644A; } .neutro { color:var(--tiza-baja); }
+
+  /* ── Botón de hablar, flotante ────────────────────────────────────── */
+  .hablar {
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(var(--barra) + 14px + env(safe-area-inset-bottom));
+    width:min(340px, calc(100vw - 32px)); min-height:64px;
+    background:var(--sebo); color:#17140F; border:none;
+    font:400 1.06rem/1 var(--serif); letter-spacing:.02em;
+    box-shadow:0 6px 24px #000000a0; z-index:20;
+    touch-action:none; user-select:none;
+  }
+  .hablar[data-modo="grabando"] { background:var(--herrumbre); color:#F2E4DE; }
+  .hablar[data-modo="pensando"], .hablar[data-modo="hablando"] {
+    background:var(--musgo-alto); color:var(--tiza); border:1px solid var(--sebo);
+  }
+  .hablar:disabled { background:var(--musgo); color:var(--tiza-baja); box-shadow:none; }
+
+  /* ── Barra de pestañas ────────────────────────────────────────────── */
+  nav {
+    position:fixed; left:0; right:0; bottom:0; z-index:25;
+    display:grid; grid-template-columns:repeat(4,1fr);
+    background:var(--musgo); border-top:1px solid var(--liquen);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav button { flex-direction:column; gap:3px; min-height:var(--barra);
+               border:none; background:none; font:400 .68rem/1 var(--mono);
+               letter-spacing:.06em; color:var(--tiza-baja); padding:8px 4px; }
+  nav button .g { font-size:1.15rem; line-height:1; }
+  nav button[data-activa] { color:var(--sebo); background:#1F2416; }
+
+  @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="lugar" id="cab-lugar">L0</span>
+  <h1 id="cab-nombre">El camino del sur</h1>
+  <div class="reloj" id="cab-reloj" data-urgente="no">Luna Muerta <b>3</b></div>
+</header>
+
+<main>
+  <!-- ══ ESCENA ══════════════════════════════════════════════════════ -->
+  <div class="vista" id="v-escena" data-activa>
+    <figure>
+      <img class="lienzo" id="esc-arte" alt="" hidden>
+      <div class="lienzo lienzo-vacio" id="esc-arte-vacio">
+        Sin arte para esta escena todavía
+      </div>
+      <figcaption id="esc-pie"></figcaption>
+    </figure>
+
+    <section>
+      <h2>Narración</h2>
+      <button id="esc-play"><span class="icono">▶</span><span>Reproducir</span></button>
+      <!-- preload="metadata" y no "none": con "none" el navegador no toca el fichero hasta que
+           alguien pulsa, así que un audio que falta no se detecta y el botón se queda activo
+           mintiendo. Cargar solo la cabecera basta para saber si está y desactivarlo antes. -->
+      <audio id="esc-audio" preload="metadata"></audio>
+      <div class="barra-progreso"><i id="esc-progreso"></i></div>
+      <p style="margin:.5rem 0 0;font-size:.78rem;color:var(--tiza-baja)" id="esc-nota-audio"></p>
+    </section>
+
+    <section>
+      <h2>Lo que sabéis</h2>
+      <ul class="sabeis" id="esc-sabeis"></ul>
+    </section>
+
+    <section>
+      <h2>Conversación con el DJ</h2>
+      <div class="charla" id="charla">
+        <div class="turno" data-de="dj">
+          <div class="quien">director de juego</div>
+          <p>Aprieta el botón de abajo y pregúntame lo que quieras. Suéltalo cuando acabes.</p>
+        </div>
+      </div>
+      <button id="charla-limpiar"><span class="icono">✕</span><span>Vaciar conversación</span></button>
+    </section>
+  </div>
+
+  <!-- ══ MAPA ════════════════════════════════════════════════════════ -->
+  <div class="vista" id="v-mapa">
+    <section>
+      <h2>Dónde estáis</h2>
+      <svg class="mapa" id="mapa" viewBox="0 0 100 100" role="img"
+           aria-label="Mapa de localizaciones de la aventura"></svg>
+      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
+        Toca una localización para moveros allí. Las que no habéis visitado salen apagadas.
+      </p>
+    </section>
+    <section>
+      <h2 id="reloj-titulo">El reloj</h2>
+      <div class="fila" id="reloj-botones">
+        <button id="noche-mas"><span class="icono">☾</span><span>Cae la noche</span></button>
+        <button id="noche-menos"><span class="icono">↺</span><span>Deshacer</span></button>
+      </div>
+      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="noche-nota"></p>
+    </section>
+  </div>
+
+  <!-- ══ GRUPO ═══════════════════════════════════════════════════════ -->
+  <div class="vista" id="v-grupo">
+    <div id="grupo-lista" style="display:flex;flex-direction:column;gap:12px"></div>
+    <section>
+      <h2>Suministros</h2>
+      <div class="sumin" id="sumin"></div>
+    </section>
+    <section>
+      <h2>Reiniciar</h2>
+      <button id="reiniciar"><span class="icono">⟲</span><span>Empezar partida de cero</span></button>
+    </section>
+  </div>
+
+  <!-- ══ AJUSTES ═════════════════════════════════════════════════════ -->
+  <div class="vista" id="v-ajustes">
+    <section>
+      <h2>Qué estáis jugando</h2>
+      <label>
+        Aventura
+        <small>Cada una guarda su propia partida: cambiar no pierde el avance de la otra.</small>
+        <select id="aventura">
+          <option value="prueba">Prueba · El Pozo de Sarna — 30-45 min</option>
+          <option value="corvalar">El Diezmo de Corvalar — la campaña</option>
+        </select>
+      </label>
+      <p class="aviso-clave">
+        Empezad por <b>la prueba</b>. Está hecha para comprobar en mesa que el DJ aplica bien las
+        reglas, y trae una hoja de verificación para pillarle si se equivoca.
+      </p>
+    </section>
+    <section>
+      <h2>Claves de API</h2>
+      <p class="aviso-clave">
+        Se guardan <b>solo en este dispositivo</b> y no se envían a ningún sitio salvo al servicio
+        al que pertenecen. Si prestas el tablet, bórralas.
+      </p>
+      <label>
+        ElevenLabs
+        <small>Para la voz del DJ y para transcribir lo que decís.</small>
+        <input type="password" id="clave-11" autocomplete="off" placeholder="sk_...">
+      </label>
+      <label>
+        Anthropic
+        <small>El cerebro del DJ. console.anthropic.com → API keys.</small>
+        <input type="password" id="clave-cl" autocomplete="off" placeholder="sk-ant-...">
+      </label>
+      <label>
+        Modelo
+        <small>Sonnet 5 es el equilibrio bueno entre latencia e inteligencia.</small>
+        <select id="modelo">
+          <option value="claude-sonnet-5">Sonnet 5 — rápido y listo (recomendado)</option>
+          <option value="claude-haiku-4-5">Haiku 4.5 — el más rápido y barato</option>
+          <option value="claude-opus-5">Opus 5 — el más listo, más lento</option>
+        </select>
+      </label>
+      <label>
+        Voz del DJ al improvisar
+        <small>Modelo rápido: la mitad de precio y apenas se nota al hablar.</small>
+        <select id="voz-modelo">
+          <option value="eleven_flash_v2_5">Rápido — 0,05 $/1k car. (recomendado)</option>
+          <option value="eleven_multilingual_v2">Calidad — 0,10 $/1k car.</option>
+        </select>
+      </label>
+      <div class="fila">
+        <button id="guardar"><span class="icono">✓</span><span>Guardar</span></button>
+        <button id="probar"><span class="icono">⚡</span><span>Probar conexión</span></button>
+      </div>
+      <div class="estado-linea neutro" id="estado-claves">Sin comprobar.</div>
+    </section>
+    <section>
+      <h2>Gasto de esta sesión</h2>
+      <div class="estado-linea neutro" id="gasto">Aún nada.</div>
+      <button id="gasto-reset"><span class="icono">⟲</span><span>Poner el contador a cero</span></button>
+    </section>
+  </div>
+</main>
+
+<button class="hablar" id="hablar" data-modo="listo">
+  <span class="icono">🎤</span><span id="hablar-txt">Mantén pulsado para hablar</span>
+</button>
+
+<nav>
+  <button data-va="escena" data-activa><span class="g">📖</span><span>Escena</span></button>
+  <button data-va="mapa"><span class="g">🗺</span><span>Mapa</span></button>
+  <button data-va="grupo"><span class="g">🛡</span><span>Grupo</span></button>
+  <button data-va="ajustes"><span class="g">⚙</span><span>Ajustes</span></button>
+</nav>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
