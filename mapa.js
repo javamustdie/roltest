@@ -652,40 +652,7 @@ export function pintarMapaEn(svg, localizaciones, estado) {
     return Math.hypot(dx, dy) <= radioEn(Math.atan2(dy, dx)) * k;
   };
 
-  // ── 3. Río: baja de la sierra, pasa por el vado si lo hay y desemboca ───────
-  const vado = P.find((p) => tipoDe(p) === "vado") || null;
-  const aNorte = -Math.PI / 2 + (azar() - 0.5) * 0.9;
-  const nace = {
-    x: c.x + Math.cos(aNorte) * radioEn(aNorte) * 0.66,
-    y: c.y + Math.sin(aNorte) * radioEn(aNorte) * 0.66,
-  };
-  const medio = vado ? { x: vado.px, y: vado.py + 2 } : { x: c.x, y: c.y };
-  const aSalida = Math.atan2(medio.y - nace.y, medio.x - nace.x);
-  const aBoca = Math.atan2(medio.y - c.y, medio.x - c.x) || aSalida;
-  const boca = {
-    x: c.x + Math.cos(aBoca) * radioEn(aBoca) * 1.03,
-    y: c.y + Math.sin(aBoca) * radioEn(aBoca) * 1.03,
-  };
-  const cauce = [nace];
-  const clave = [nace, medio, boca];
-  for (let s = 0; s < clave.length - 1; s++) {
-    const a = clave[s];
-    const b = clave[s + 1];
-    const largo = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    const n = 3;
-    for (let k = 1; k <= n; k++) {
-      const t = k / (n + 1);
-      const off = (azar() - 0.5) * largo * 0.24;
-      cauce.push({
-        x: a.x + (b.x - a.x) * t - ((b.y - a.y) / largo) * off,
-        y: a.y + (b.y - a.y) * t + ((b.x - a.x) / largo) * off,
-      });
-    }
-    cauce.push(b);
-  }
-  const dRio = curvaAbierta(cauce);
-
-  // ── 4. Caminos entre localizaciones conectadas ──────────────────────────────
+  // ── 3. Caminos de tierra entre localizaciones conectadas ────────────────────
   const hechos = new Set();
   const caminos = [];
   const puntosCamino = [];
@@ -722,20 +689,10 @@ export function pintarMapaEn(svg, localizaciones, estado) {
       }
     }
   }
-  // Muestras del río, mismo motivo.
-  for (let s = 0; s < cauce.length - 1; s++) {
-    for (let t = 0; t < 1; t += 0.34) {
-      puntosCamino.push({
-        x: cauce[s].x + (cauce[s + 1].x - cauce[s].x) * t,
-        y: cauce[s].y + (cauce[s + 1].y - cauce[s].y) * t,
-      });
-    }
-  }
-
   const lejosDeNodos = (x, y, d) => !P.some((p) => Math.hypot(p.px - x, p.py - y) < d);
   const lejosDeSendas = (x, y, d) => !puntosCamino.some((q) => Math.hypot(q.x - x, q.y - y) < d);
 
-  // ── 5. Relieve y vegetación: candidatos en rejilla temblada dentro de tierra ─
+  // ── 4. Relieve y vegetación: candidatos en rejilla temblada dentro de tierra ─
   const cand = [];
   const paso = 25;
   for (let y = LIM.y0; y <= LIM.y1; y += paso) {
@@ -760,94 +717,160 @@ export function pintarMapaEn(svg, localizaciones, estado) {
     }
   }
 
-  // Montañas: las cotas más altas, separadas entre sí y lejos de nodos y caminos.
+  // ── 5. Montañas: las cotas más altas, lejos de nodos y caminos ──────────────
   const montes = [];
   for (const q of [...cand].sort((a, b) => b.alt - a.alt)) {
-    if (montes.length >= 15) break;
-    if (q.dCentro > 0.84) continue;
-    if (!lejosDeNodos(q.x, q.y, 78) || !lejosDeSendas(q.x, q.y, 42)) continue;
-    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 52)) continue;
+    if (montes.length >= 10) break;
+    if (q.dCentro > 0.82) continue;
+    if (!lejosDeNodos(q.x, q.y, 84) || !lejosDeSendas(q.x, q.y, 46)) continue;
+    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 74)) continue;
     montes.push(q);
   }
-  // Cada cumbre arrastra una o dos hermanas más bajas: así se lee como cordillera.
+  // Cada cumbre arrastra dos o tres hermanas más bajas: así se lee como cordillera.
   const dibujos = [];
   for (const m of montes) {
-    const s = 0.82 + azar() * 0.42;
+    const s = 0.78 + azar() * 0.32;
     dibujos.push({ y: m.y, s: monte(m.x, m.y, s) });
-    const n = 1 + Math.floor(azar() * 2);
+    const n = 2 + Math.floor(azar() * 2);
     for (let k = 0; k < n; k++) {
-      const lado = azar() < 0.5 ? -1 : 1;
-      const hx = m.x + lado * (26 + azar() * 20) * s;
-      const hy = m.y + (2 + azar() * 12);
-      if (!enTierra(hx, hy, 0.9) || !lejosDeNodos(hx, hy, 62) || !lejosDeSendas(hx, hy, 34)) continue;
-      dibujos.push({ y: hy, s: monte(hx, hy, s * (0.58 + azar() * 0.22)) });
+      const lado = k % 2 === 0 ? -1 : 1;
+      const hx = m.x + lado * (24 + azar() * 22) * s;
+      const hy = m.y + (3 + azar() * 14);
+      if (!enTierra(hx, hy, 0.9) || !lejosDeNodos(hx, hy, 66) || !lejosDeSendas(hx, hy, 34)) continue;
+      dibujos.push({ y: hy, s: monte(hx, hy, s * (0.5 + azar() * 0.26)) });
     }
   }
 
-  // Colinas: la cota media que rodea la sierra.
+  // ── 6. Río: nace en la sierra, pasa por el vado si lo hay y desemboca ───────
+  const vado = P.find((p) => tipoDe(p) === "vado") || null;
+  // El manantial sale de la cumbre más al norte; si no hay sierra, del interior alto.
+  const cumbre = montes.length
+    ? montes.reduce((a, b) => (b.y < a.y ? b : a))
+    : (() => {
+        const a = -Math.PI / 2 + (azar() - 0.5) * 0.9;
+        return { x: c.x + Math.cos(a) * radioEn(a) * 0.6, y: c.y + Math.sin(a) * radioEn(a) * 0.6 };
+      })();
+  const nace = { x: cumbre.x + 8, y: cumbre.y + 14 };
+  const medio = vado ? { x: vado.px, y: vado.py + 2 } : { x: c.x, y: c.y + 20 };
+  const aBoca =
+    Math.atan2(medio.y - c.y, medio.x - c.x) || Math.atan2(medio.y - nace.y, medio.x - nace.x);
+  const boca = {
+    x: c.x + Math.cos(aBoca) * radioEn(aBoca) * 1.04,
+    y: c.y + Math.sin(aBoca) * radioEn(aBoca) * 1.04,
+  };
+  const cauce = [nace];
+  const clave = [nace, medio, boca];
+  for (let s = 0; s < clave.length - 1; s++) {
+    const a = clave[s];
+    const b = clave[s + 1];
+    const largo = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const n = 3;
+    for (let k = 1; k <= n; k++) {
+      const t = k / (n + 1);
+      const off = (azar() - 0.5) * largo * 0.24;
+      cauce.push({
+        x: a.x + (b.x - a.x) * t - ((b.y - a.y) / largo) * off,
+        y: a.y + (b.y - a.y) * t + ((b.x - a.x) / largo) * off,
+      });
+    }
+    cauce.push(b);
+  }
+  const dRio = curvaAbierta(cauce);
+  // El río también es "senda": ni árboles ni colinas encima.
+  for (let s = 0; s < cauce.length - 1; s++) {
+    for (let t = 0; t < 1; t += 0.25) {
+      puntosCamino.push({
+        x: cauce[s].x + (cauce[s + 1].x - cauce[s].x) * t,
+        y: cauce[s].y + (cauce[s + 1].y - cauce[s].y) * t,
+      });
+    }
+  }
+
+  // ── 7. Turbera: charcas alargadas en el curso bajo del río ──────────────────
+  const turba = [];
+  const zonasTurba = [];
+  for (let k = 0; k < 9; k++) {
+    const t = 0.42 + (k / 9) * 0.56;
+    const idx = lim(Math.round(t * (cauce.length - 1)), 1, cauce.length - 1);
+    const base = cauce[idx];
+    const lado = k % 2 === 0 ? 1 : -1;
+    const bx = base.x + lado * (34 + azar() * 44);
+    const by = base.y + (azar() - 0.5) * 50;
+    const rx = 40 + azar() * 34;
+    const ry = 20 + azar() * 14;
+    if (!enTierra(bx, by, 0.86) || !lejosDeNodos(bx, by, 62)) continue;
+    if (montes.some((m) => Math.hypot(m.x - bx, m.y - by) < 78)) continue;
+    zonasTurba.push({ x: bx, y: by, rx, ry });
+    turba.push(charca(bx, by, rx, ry, azar, sufijo));
+  }
+  const enTurbera = (x, y, holgura = 10) =>
+    zonasTurba.some((z) => {
+      const dx = (x - z.x) / (z.rx + holgura);
+      const dy = (y - z.y) / (z.ry + holgura);
+      return dx * dx + dy * dy < 1;
+    });
+
+  // ── 8. Colinas: la cota media que rodea la sierra ───────────────────────────
   const colinas = [];
   for (const q of [...cand].sort((a, b) => b.alt - a.alt)) {
-    if (colinas.length >= 16) break;
+    if (colinas.length >= 15) break;
     if (q.dCentro > 0.9) continue;
     if (!lejosDeNodos(q.x, q.y, 62) || !lejosDeSendas(q.x, q.y, 30)) continue;
-    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 46)) continue;
-    if (colinas.some((h) => Math.hypot(h.x - q.x, h.y - q.y) < 44)) continue;
+    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 50)) continue;
+    if (colinas.some((h) => Math.hypot(h.x - q.x, h.y - q.y) < 46)) continue;
+    if (enTurbera(q.x, q.y, 20)) continue;
     colinas.push(q);
     dibujos.push({ y: q.y, s: colina(q.x, q.y, 0.85 + azar() * 0.5) });
   }
 
-  // Bosque: matas de copas superpuestas donde la espesura manda.
+  // ── 9. Bosque: matas de copas superpuestas donde la espesura manda ──────────
   const matas = [];
   for (const q of [...cand].sort((a, b) => b.esp - a.esp)) {
-    if (matas.length >= 190) break;
-    if (!lejosDeNodos(q.x, q.y, 52) || !lejosDeSendas(q.x, q.y, 21)) continue;
-    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 44)) continue;
+    if (matas.length >= 185) break;
+    if (!lejosDeNodos(q.x, q.y, 54) || !lejosDeSendas(q.x, q.y, 21)) continue;
+    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 48)) continue;
     if (colinas.some((h) => Math.hypot(h.x - q.x, h.y - q.y) < 34)) continue;
     if (matas.some((t) => Math.hypot(t.x - q.x, t.y - q.y) < 17)) continue;
+    if (enTurbera(q.x, q.y, 4)) continue; // en la turbera no crece bosque
     if (q.esp < 0.42) continue;
     matas.push(q);
     dibujos.push({ y: q.y, s: mata(q.x, q.y, 0.7 + azar() * 0.55, q.esp, azar) });
   }
-  // Y unas piedras suetas y matojos en lo pelado, para que no haya vacíos lisos.
+  // Y unas piedras sueltas y matojos en lo pelado, para que no haya vacíos lisos.
   for (const q of cand) {
-    if (q.esp > 0.42 || azar() > 0.16) continue;
+    if (q.esp > 0.42 || azar() > 0.18) continue;
     if (!lejosDeNodos(q.x, q.y, 46) || !lejosDeSendas(q.x, q.y, 18)) continue;
     if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 40)) continue;
+    if (enTurbera(q.x, q.y, 2)) continue;
     dibujos.push({ y: q.y, s: matojo(q.x, q.y, 0.7 + azar() * 0.5, azar) });
   }
   // Pintar de atrás hacia delante: lo de arriba queda detrás, como en un cuadro.
   dibujos.sort((a, b) => a.y - b.y);
 
-  // ── 6. Turbera: charcas alargadas en el curso bajo del río ──────────────────
-  const turba = [];
-  for (let k = 0; k < 7; k++) {
-    const t = 0.45 + (k / 7) * 0.5;
-    const idx = lim(Math.round(t * (cauce.length - 1)), 1, cauce.length - 1);
-    const base = cauce[idx];
-    const lado = k % 2 === 0 ? 1 : -1;
-    const bx = base.x + lado * (26 + azar() * 46);
-    const by = base.y + (azar() - 0.5) * 46;
-    if (!enTierra(bx, by, 0.88) || !lejosDeNodos(bx, by, 66)) continue;
-    turba.push(charca(bx, by, 34 + azar() * 30, 15 + azar() * 12, azar, sufijo));
-  }
-
-  // ── 7. Parches de color de la tierra (borrosos, para que parezca pintado) ────
+  // ── 10. Parches de color de la tierra (borrosos, para que parezca pintado) ──
   const parches = [];
-  for (let k = 0; k < 16; k++) {
+  for (let k = 0; k < 22; k++) {
     const a = azar() * TAU;
-    const r = radioEn(a) * (0.15 + azar() * 0.72);
+    const r = radioEn(a) * (0.12 + azar() * 0.76);
     const x = c.x + Math.cos(a) * r;
     const y = c.y + Math.sin(a) * r;
-    const rr = 46 + azar() * 92;
-    const col = [C.prado, C.paramo, C.tierraAlta, C.verde4, C.tierraBaja][Math.floor(azar() * 5)];
+    const rr = 52 + azar() * 96;
+    // Más verde que tierra: la comarca es de prado y páramo, no de arena.
+    const col = [C.prado, C.verde4, C.prado, C.paramo, C.verde1, C.tierraAlta][Math.floor(azar() * 6)];
     parches.push(
       `<ellipse cx="${r1(x)}" cy="${r1(y)}" rx="${r1(rr)}" ry="${r1(rr * (0.5 + azar() * 0.5))}"
-                fill="${col}" opacity="${r1(0.3 + azar() * 0.3)}"/>`,
+                fill="${col}" opacity="${r1(0.34 + azar() * 0.34)}"/>`,
     );
   }
 
-  // ── 8. Nodos: dibujo, rótulo colocado sin pisarse, y marca de "estáis aquí" ──
-  const cajasRotulo = [];
+  // ── 11. Nodos: dibujo, rótulo colocado sin pisarse, y marca de "estáis aquí" ─
+  // Las cajas de los dibujos se reservan antes: ningún rótulo tapa un edificio.
+  const cajasRotulo = P.map((p) => ({
+    x0: p.px - 40,
+    x1: p.px + 40,
+    y0: p.py - 56,
+    y1: p.py + 12,
+  }));
   const nodos = P.map((p) => {
     const tipo = tipoDe(p);
     const ico = ICONOS[tipo] || ICONOS.aldea;
@@ -873,15 +896,19 @@ export function pintarMapaEn(svg, localizaciones, estado) {
     ly = lim(ly, INT.y0 + 26, INT.y1 - 12);
     cajasRotulo.push({ x0: lx - anchoR / 2, x1: lx + anchoR / 2, y0: ly - 18, y1: ly + 6 });
 
+    // Estáis aquí: resplandor cálido, aro que late en el suelo y banderola.
     const marca =
       p.id === aqui
-        ? `<g transform="translate(${r1(p.px)} ${r1(p.py)}) scale(1 0.42)">
+        ? `<ellipse cx="${r1(p.px)}" cy="${r1(p.py - 20)}" rx="64" ry="54"
+                    fill="url(#${sufijo}-aqui)"/>
+           <g transform="translate(${r1(p.px)} ${r1(p.py + 2)}) scale(1 0.4)">
              <circle class="m-pulso" cx="0" cy="0" r="26"/>
-             <circle class="m-aro-aqui" cx="0" cy="0" r="34"/>
+             <circle class="m-aro-aqui" cx="0" cy="0" r="32"/>
            </g>
-           <path class="m-ink" stroke-width="2.2" fill="none" d="M${r1(p.px + 26)} ${r1(p.py - 6)} v-40"/>
+           <path class="m-ink" stroke-width="2.4" fill="none"
+                 d="M${r1(p.px + 30)} ${r1(p.py - 2)} v-52"/>
            <path class="m-ink" stroke-width="1.8" fill="${C.oroSuave}"
-                 d="M${r1(p.px + 26)} ${r1(p.py - 46)} l24 7 -24 7 Z"/>`
+                 d="M${r1(p.px + 30)} ${r1(p.py - 54)} l26 8 -26 8 Z"/>`
         : "";
 
     return `<g class="m-lugar ${estadoCls}" data-ir="${esc(p.id)}" role="button" tabindex="0"
