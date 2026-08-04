@@ -919,7 +919,31 @@ let E = cargar(claveEstado(A.aventura)) ?? porDefecto();
 // ya: sin esto la app arranca en blanco y no dice por qué.
 if (!CAMPANA.localizaciones.some((l) => l.id === E.local)) E = porDefecto();
 
-function guardarEstado() { localStorage.setItem(claveEstado(A.aventura), JSON.stringify(E)); }
+/**
+ * MODO TELE
+ *
+ * Se abre una SEGUNDA pestaña de la app con `?tele` y se duplica esa a la televisión, mientras el
+ * tablet se queda con la lateral del DJ y los mandos. La de la tele no lleva controles: solo la
+ * escena, los personajes, la ilustración, la tirada y la iniciativa — lo que hay que mirar.
+ *
+ * ¿Por qué dos pestañas y no un modo dentro de la misma? Porque si escondes los mandos para
+ * duplicar la pantalla, te quedas sin mandos. Las dos pestañas son del mismo origen, así que
+ * comparten `localStorage` y se avisan por `BroadcastChannel`: la del tablet manda, la de la tele
+ * relee el estado y se repinta. Ninguna toca la red por su cuenta.
+ *
+ * `docs/tele-firestick.md` explica por qué esto es lo que cuesta cero: el micrófono del mando de
+ * un Fire TV no está expuesto a aplicaciones de terceros, así que la voz tiene que salir del
+ * tablet de todas formas.
+ */
+const ES_TELE = new URLSearchParams(location.search).has("tele");
+const canal = "BroadcastChannel" in window ? new BroadcastChannel("corvalar") : null;
+
+function guardarEstado() {
+  localStorage.setItem(claveEstado(A.aventura), JSON.stringify(E));
+  // La pestaña de la tele no manda avisos: solo escucha. Si los mandara, las dos se repintarían
+  // en bucle la una a la otra.
+  if (!ES_TELE) canal?.postMessage({ que: "estado", aventura: A.aventura });
+}
 function guardarAjustes() { localStorage.setItem(CLAVE_AJUSTES, JSON.stringify(A)); }
 
 /** Cambia de aventura: carga su partida guardada (o la empieza) y repinta todo. */
@@ -1718,7 +1742,7 @@ function pintarCierre() {
 function pintarTodo() {
   pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarBanda();
   pintarMapa(); pintarGasto(); pintarArrancar(); pintarRegistro(); pintarCierre();
-  pintarResumen(); pintarTirada(); pintarIniciativa();
+  pintarResumen(); pintarTirada(); pintarIniciativa(); pintarDiario();
 }
 
 const esc = (s) =>
@@ -2814,6 +2838,13 @@ async function claudeStream(pregunta, alRecibir) {
             `Grupo: ${grupo}.`,
             `Suministros: ${Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(", ")}.`,
             `Localizaciones a las que puedes mover: ${CAMPANA.localizaciones.map((x) => x.id).join(", ")}.`,
+            // El «dónde lo dejamos», que es para lo que existe el diario. Solo la última entrada:
+            // son unos 200 tokens y ahorran que la mesa se lo cuente al DJ cada vez. El diario
+            // entero no cabe en cada turno.
+            (() => {
+              const u = leerDiario().at(-1);
+              return u ? `De la sesión anterior (${u.n}): ${u.texto}` : "";
+            })(),
           ]
     ).filter(Boolean).join("\n");
   };
@@ -3208,6 +3239,85 @@ $("#acc-sonido").addEventListener("click", () => {
 const ESTILO_ILUSTRACION =
   "estética folk horror, pintura al óleo sombría, paleta desaturada de verdes musgo y grises turba";
 
+/**
+ * El diario de la campaña: una entrada por sesión cerrada, en orden.
+ *
+ * Va en su propia clave y NO dentro del estado de la partida, por lo mismo que la ilustración: el
+ * estado se reescribe en cada golpe y no tiene sentido arrastrar diez resúmenes en cada escritura.
+ * Y por aventura, que la prueba y la campaña no comparten crónica.
+ */
+const claveDiario = (av) => `corvalar.diario.v1.${av}`;
+
+function leerDiario() {
+  try { return JSON.parse(localStorage.getItem(claveDiario(A.aventura))) ?? []; }
+  catch { return []; }
+}
+
+function guardarDiario(d) {
+  try { localStorage.setItem(claveDiario(A.aventura), JSON.stringify(d.slice(-40))); }
+  catch { avisar("No cabe más diario en el dispositivo. Descarga los audios y borra alguna entrada."); }
+}
+
+/**
+ * Cierra la sesión: mete el resumen en el diario y pone a cero lo que es de UNA sesión —el
+ * registro de acciones y la cuenta del gasto—, sin tocar el avance de la partida.
+ *
+ * Se pide confirmación porque no hay vuelta atrás para el registro, y porque cerrar la sesión sin
+ * querer en mitad de una partida sería un fastidio de los que no se perdonan.
+ */
+function cerrarSesion() {
+  if (!E.resumen) {
+    avisar("Antes de cerrar la sesión hay que escribir el resumen: es lo que va al diario.");
+    return;
+  }
+  const d = leerDiario();
+  const n = d.length + 1;
+  if (!confirm(
+    `¿Cerrar la sesión ${n} y guardarla en el diario?\n\n` +
+      `Se archiva el resumen y se vacía el registro de lo que ha pasado, para empezar la sesión ` +
+      `siguiente en limpio. El avance de la partida no se toca.`,
+  )) return;
+
+  d.push({
+    n,
+    // La fecha la pone el dispositivo: aquí no hay reloj de servidor y tampoco hace falta.
+    fecha: new Date().toISOString().slice(0, 10),
+    lugar: `${actual().id} · ${actual().nombre}`,
+    texto: E.resumen,
+    grupo: E.partida.map((p) => ({ pj: p.pj, pg: `${p.pg}/${p.pgMax}`, heridas: [...p.heridas] })),
+  });
+  guardarDiario(d);
+
+  E.registro = [];
+  E.resumen = null;
+  E.gasto = { sttSeg: 0, entrada: 0, salida: 0, ttsCar: 0, imagenes: 0 };
+  E.tirada = null;
+  E.iniciativa = null;
+  guardarEstado();
+  pintarTodo();
+  ponEstado(`Sesión ${n} guardada en el diario.`, "bien");
+}
+
+function pintarDiario() {
+  const d = leerDiario();
+  $("#diario").innerHTML = d.length
+    ? [...d].reverse().map((x) => `
+        <article class="entrada-diario">
+          <h3>Sesión ${x.n}<span>${esc(x.fecha)}${x.lugar ? ` · ${esc(x.lugar)}` : ""}</span></h3>
+          <p>${esc(x.texto)}</p>
+          ${x.grupo?.length
+            ? `<p class="salieron">Salieron: ${x.grupo.map((g) =>
+                 `${esc(g.pj)} ${esc(g.pg)}${g.heridas?.length ? ` (${esc(g.heridas.join(", "))})` : ""}`)
+                 .join(" · ")}</p>`
+            : ""}
+        </article>`).join("")
+    : `<p class="vacio">Todavía no hay sesiones cerradas. Al final de cada partida, escribe el
+         resumen y dale a «Cerrar la sesión»: se va guardando aquí y el DJ lo lee para saber dónde
+         lo dejasteis.</p>`;
+}
+
+$("#cerrar-sesion").addEventListener("click", cerrarSesion);
+
 /** La última ilustración de la sesión, para poder volver a ella y para que sobreviva a recargar. */
 const CLAVE_ILUSTRACION = "corvalar.ilustracion.v1";
 let ilustrando = false;
@@ -3543,6 +3653,29 @@ $("#cierre-copiar").addEventListener("click", async () => {
 });
 
 
+// ── Modo tele: la pestaña que se duplica a la televisión ─────────────────────
+if (ES_TELE) {
+  document.documentElement.dataset.tele = "si";
+  // Nada de capas ni de ficha en la tele: es una pantalla para mirar, no para tocar.
+  irA("escena");
+  canal?.addEventListener("message", (ev) => {
+    if (ev.data?.que !== "estado") return;
+    // Se relee del almacén en vez de recibir el estado por el mensaje: así la tele no puede
+    // quedarse con una versión distinta de la que hay guardada.
+    if (ev.data.aventura !== A.aventura && CAMPANAS[ev.data.aventura]) {
+      A.aventura = ev.data.aventura;
+      CAMPANA = CAMPANAS[A.aventura];
+    }
+    const nuevo = cargar(claveEstado(A.aventura));
+    if (nuevo) { E = nuevo; pintarTodo(); recuperarIlustracion(); }
+  });
+  // La ilustración vive en su propia clave, y esa sí avisa por `storage` entre pestañas.
+  addEventListener("storage", (ev) => {
+    if (ev.key === CLAVE_ILUSTRACION) recuperarIlustracion();
+  });
+}
+
+
 // ── Arranque ─────────────────────────────────────────────────────────────────
 pintarTodo();
 pintarBotonAmbiente();
@@ -3569,7 +3702,7 @@ irA(location.hash.slice(1) || "escena", false);
  * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
  * en mesa algo «no funciona».
  */
-const VERSION_APP = "corvalar-v14";
+const VERSION_APP = "corvalar-v15";
 $("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
 
 if ("serviceWorker" in navigator) {

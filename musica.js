@@ -34,8 +34,10 @@
  *
  *     opciones = {
  *       volumen:  number   — 0..1, volumen inicial. Por defecto 0.7. Al 100% ya es discreto.
- *       sucesos:  number   — multiplicador de densidad de los sucesos sueltos (gotas, crujidos,
- *                            campanas). 1 = normal, 0 = ninguno, 2 = el doble. Por defecto 1.
+ *       sucesos:  number   — multiplicador de densidad de los sucesos SUELTOS (gotas, crujidos,
+ *                            campanas). 1 = normal, 0 = ninguno, 2 = el doble. Por defecto 1. No
+ *                            toca el pulso de combate ni el de tensión: esos son el ambiente, no
+ *                            un adorno.
  *       semilla:  number   — semilla del azar interno. Si se omite se toma del reloj, así que dos
  *                            partidas no suenan igual. Fijándola, el render es reproducible: es
  *                            lo que usa el banco de pruebas.
@@ -69,7 +71,8 @@
  *   mando.parar(opciones?) → Promise<mando>
  *     Funde a silencio y LIBERA DE VERDAD: para los osciladores, desconecta los nodos, mata el
  *     planificador y (si `dormir`) suspende el contexto. Encender y apagar veinte veces no deja
- *     nada sonando ni acumula nodos ni temporizadores. Acepta `{ fundido }`.
+ *     nada sonando ni acumula nodos ni temporizadores. Acepta `{ fundido, en }`, con el mismo
+ *     significado que en `poner`.
  *     La promesa se resuelve cuando ya está todo liberado: `activo()` es false a partir de ahí.
  *
  *   mando.volumen(v?) → number
@@ -84,13 +87,16 @@
  *
  *   mando.suceso(tipo, opciones?) → Promise<mando>
  *     Dispara UN sonido suelto, al margen del ambiente: "campana" cuando alguien muere, "gota"
- *     al fallar una tirada, "cuerno" cuando algo lejano contesta. Tipos en SUCESOS.
- *     opciones = { en, nivel, pan }.
+ *     al fallar una tirada, "cuerno" cuando algo lejano contesta. Tipos en SUCESOS. El sitio en
+ *     el estéreo lo elige el propio suceso, al azar.
+ *     opciones = { en, nivel }. Funciona con o sin ambiente puesto.
  *
  *   mando.detalle() → objeto de diagnóstico { ambiente, volumen, activo, voces, contexto,
- *                     programado, sucesos }. Para depurar y para el banco de pruebas.
+ *                     programado, sucesos, temporizadores }. Para depurar y para las pruebas.
  *   mando.contexto() → BaseAudioContext | null   El contexto, si ya existe (para reutilizarlo).
  *   mando.destruir() → Promise<void>             Parar y CERRAR el contexto (si es nuestro).
+ *                     Después de esto el motor no vale para nada más: `poner` lanza excepción.
+ *                     Para apagar y volver a encender NO hace falta destruir; basta `parar`.
  *
  *   Constantes exportadas: AMBIENTES (clave, nombre, cuando), CLAVES, ALIAS, SUCESOS.
  *
@@ -302,7 +308,10 @@ export function crearAmbiente(opciones = {}) {
   const conf = {
     // Con `prefers-reduced-motion` se bajan los sucesos: menos sobresaltos, el fondo sigue.
     sucesos: (opciones.sucesos ?? 1) * (suave ? 0.55 : 1),
-    semilla: (opciones.semilla ?? Math.floor(Date.now() % 2147483647) ^ 0x5bf03635) >>> 0,
+    // Sin semilla dada, del reloj Y de Math.random(): así dos motores creados en el mismo
+    // milisegundo tampoco suenan igual. Es la ÚNICA llamada a Math.random() del fichero; todo lo
+    // demás sale del generador con semilla, para que un render se pueda repetir clavado.
+    semilla: (opciones.semilla ?? (Date.now() ^ (Math.random() * 0xffffffff))) >>> 0,
     dormir: opciones.dormir !== false,
     nivelSuceso: suave ? 0.75 : 1,
   };
@@ -1258,7 +1267,7 @@ export function crearAmbiente(opciones = {}) {
             golpeTono(v, tt, {
               hz: f0 * parciales[i],
               tipo: "sine",
-              nivel: 0.062 * niveles[i] * nivel,
+              nivel: 0.15 * niveles[i] * nivel,
               ataque: 0.008 + i * 0.003,
               caida: caidas[i],
               corte: 3000,
@@ -1271,7 +1280,7 @@ export function crearAmbiente(opciones = {}) {
             golpeTono(v, tt, {
               hz,
               tipo: "sawtooth",
-              nivel: 0.02 * nivel,
+              nivel: 0.042 * nivel,
               ataque: 0.35,
               caida: 10.5,
               corte: 190,
@@ -1284,7 +1293,7 @@ export function crearAmbiente(opciones = {}) {
             tipo: "lowpass",
             hz: 520,
             q: 0.7,
-            nivel: 0.008 * nivel,
+            nivel: 0.013 * nivel,
             ataque: 0.6,
             caida: 8.5,
             pan: 0,
@@ -1349,7 +1358,10 @@ export function crearAmbiente(opciones = {}) {
       return Promise.resolve(mando);
     }
     const dur = Math.max(FUNDIDO_MINIMO, opciones.fundido ?? FUNDIDO_PARAR);
-    const t = ctx.currentTime + (programado ? 0 : ADELANTO);
+    // `en` también aquí, y no por simetría: sin él, un `parar()` pedido antes de que llegue un
+    // `poner(..., { en })` futuro le cancela la rampa de entrada al otro (cancelAndHoldAtTime
+    // borra TODO lo programado después del instante que se le pasa) y esa voz se queda muda.
+    const t = Math.max(ctx.currentTime + (programado ? 0 : ADELANTO), opciones.en ?? -Infinity);
     const lista = [...voces];
     for (const v of lista) apagarVoz(v, t, dur);
     return espera(dur + COLA_VOZ + 0.1)

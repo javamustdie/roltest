@@ -214,6 +214,43 @@
   .desglose { margin:8px 0 0; font:500 .76rem/1.55 var(--mono); color:var(--tiza-baja); }
   .desglose b { color:var(--tiza); font-weight:500; }
 
+  /* ── Modo tele ──────────────────────────────────────────────────────
+     La pestaña que se duplica a la televisión: solo lo que hay que mirar. Los mandos se quedan en
+     el tablet, en su propia pestaña. Los retratos y el rótulo crecen, porque una tele se ve desde
+     el sofá y no desde treinta centímetros. */
+  :root[data-tele] .lateral,
+  :root[data-tele] .minimapa,
+  :root[data-tele] .capa,
+  :root[data-tele] .ficha,
+  :root[data-tele] .ilus-cerrar,
+  :root[data-tele] .tir-cerrar { display:none !important; }
+  :root[data-tele] { --marco: clamp(120px, 20vh, 240px); }
+  :root[data-tele] .rotulo h1 { font-size:1.9rem; }
+  :root[data-tele] .rotulo .lugar { font-size:.82rem; }
+  :root[data-tele] .pj-banda .nom { font-size:1.25rem; }
+  :root[data-tele] .pj-banda .oficio { font-size:.76rem; }
+  :root[data-tele] .pj-banda .pgnum { font-size:1rem; }
+  :root[data-tele] .turno-ini { min-height:44px; padding:0 18px; font-size:.98rem; }
+  :root[data-tele] .tirada-caja { width:min(80%, 620px); }
+  :root[data-tele] .tir-cab b { font-size:2rem; }
+  :root[data-tele] .tir-cifras b { font-size:2.2rem; }
+  :root[data-tele] .tir-veredicto { font-size:3.4rem; }
+  :root[data-tele] .ilus-pie { font-size:1.3rem; }
+  /* En la tele el recuadro de la tirada no pide dados: los canta la mesa en el tablet. */
+  :root[data-tele] .tir-dados { display:none; }
+
+  /* ── El diario de la campaña ───────────────────────────────────────── */
+  .diario { display:flex; flex-direction:column; gap:12px; }
+  .entrada-diario { padding:12px 14px; background:var(--musgo-alto);
+                    border:1px solid var(--liquen); border-left:2px solid var(--sebo); }
+  .entrada-diario h3 { margin:0 0 7px; font:400 1rem/1.2 var(--serif); display:flex;
+                       align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .entrada-diario h3 span { font:500 .62rem/1 var(--mono); letter-spacing:.1em;
+                            text-transform:uppercase; color:var(--tiza-baja); }
+  .entrada-diario p { margin:0; font-size:.94rem; line-height:1.6; }
+  .entrada-diario .salieron { margin-top:8px; font:500 .68rem/1.5 var(--mono);
+                              color:var(--tiza-baja); }
+
   /* ── Cierre de sesión ─────────────────────────────────────────────── */
   .cierre { display:flex; flex-direction:column; gap:7px; }
   .fila-cierre { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;
@@ -856,6 +893,15 @@
         El resumen sale de lo que el DJ ha ido anotando durante la partida, así que no se inventa
         nada. Repásalo antes de mandarlo.
         </p>
+        <button id="cerrar-sesion"><span class="icono">📖</span>
+          <span>Cerrar la sesión y guardarla en el diario</span></button>
+        </section>
+
+        <!-- El diario: la crónica de la campaña, una entrada por sesión cerrada. El DJ lee la
+             última al empezar, y con eso sabe dónde lo dejasteis sin que se lo contéis. -->
+        <section>
+          <h2>El diario de la campaña</h2>
+          <div id="diario" class="diario"></div>
         </section>
       </div>
     </div>
@@ -885,6 +931,21 @@
             <button id="restaurar-pj"><span class="icono">⟲</span><span>Volver a los pregenerados</span></button>
           </div>
         </div>
+      </section>
+      <section>
+        <h2>Jugar en la tele</h2>
+        <p style="margin:0;font-size:.9rem">
+          Abre esta segunda pantalla y <b>duplícala a la tele</b>. Solo lleva la escena, los
+          personajes y las tiradas; los mandos se quedan aquí, en esta pestaña. Las dos se
+          sincronizan solas.
+        </p>
+        <a class="descargar" href="?tele" target="_blank" rel="noopener">
+          <span class="icono">📺</span><span>Abrir la pantalla de la tele</span>
+        </a>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
+          El micrófono del mando de un Fire TV no está disponible para aplicaciones de terceros, así
+          que hablar con el DJ sigue siendo cosa del tablet. Por eso son dos pantallas.
+        </p>
       </section>
       <section>
         <h2>Esta versión</h2>
