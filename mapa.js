@@ -563,7 +563,10 @@ export function pintarMapaEn(svg, localizaciones, estado) {
   const firma = L.map((l) => `${l.id}:${l.x},${l.y}`).join("|") || "mapa-vacio";
   const semilla = semillaDe(firma);
   const azar = generador(semilla);
-  const sufijo = `m${(semilla % 100000).toString(36)}`; // ids únicos por mapa
+  // Ids únicos por mapa Y por elemento: en la mesa hay dos mapas a la vez —la miniatura de la
+  // esquina y el grande de la capa— y con el mismo sufijo sus <defs> compartirían id, así que
+  // `url(#…)` de los dos resolvería al primero del documento.
+  const sufijo = `m${(semilla % 100000).toString(36)}${svg.id ? `-${svg.id}` : ""}`;
   const ruidoRelieve = campoRuido(azar);
   const ruidoBosque = campoRuido(azar);
   const ruidoCosta = campoRuido(azar);

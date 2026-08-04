@@ -21,9 +21,9 @@
     --herrumbre:#8D3524; --ambar:#D9A04A;
     --serif: Georgia,"Iowan Old Style",Palatino,"Book Antiqua",serif;
     --mono: ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
-    --barra: 68px;
     /* Tamaño del marco de retrato. Escala con la pantalla: en un móvil no puede comerse la
-       mitad, y en una tablet o una tele tiene que verse la cara de verdad. */
+       mitad, y en una tablet o una tele tiene que verse la cara de verdad. Lo usan también las
+       capas, para dejar sitio abajo a la banda de personajes. */
     --marco: clamp(80px, 14vh, 158px);
     color-scheme: dark;
   }
@@ -141,11 +141,6 @@
   .sumin [data-vacio="si"] b { color:var(--herrumbre); }
   .sumin button { min-height:32px; min-width:32px; padding:0 9px; font-size:1rem; }
 
-  /* El botón de hablar flotante: encima de la barra de pestañas, en las pantallas que no son
-     la mesa. Ancho completo y alto de dedo: se busca a ciegas mientras se mira la pantalla. */
-  .hablar-flota { width:100%; min-height:56px; border-radius:0; border-left:0; border-right:0;
-                  font-size:1.04rem; }
-
   /* Desglose de la armadura y de con qué pega. Si el DJ suma dos veces la misma coraza, se ve. */
   .desglose { margin:8px 0 0; font:500 .76rem/1.55 var(--mono); color:var(--tiza-baja); }
   .desglose b { color:var(--tiza); font-weight:500; }
@@ -182,12 +177,11 @@
   svg.mapa { width:100%; max-width:760px; height:auto; margin:0 auto; display:block; }
 
   /* ── Panel de mesa: lo que está siempre abajo ─────────────────────── */
-  .panel { flex:none; background:var(--turba); border-top:1px solid var(--liquen);
-           padding-bottom:env(safe-area-inset-bottom); }
-
-  .aviso { width:100%; min-height:0; padding:9px 14px; text-align:left; justify-content:flex-start;
-           background:#2A1512; color:#F0C4B4; border:none; border-bottom:1px solid #8D3524;
-           font:400 .84rem/1.4 var(--serif); }
+  /* El aviso, al pie de la lateral. Siempre a la vista: durante la partida nadie mira Ajustes,
+     así que un error escrito allí es un error invisible. */
+  .aviso { flex:none; width:100%; min-height:0; padding:9px 12px; text-align:left;
+           justify-content:flex-start; background:#2A1512; color:#F0C4B4; border:none;
+           border-top:1px solid #8D3524; font:400 .82rem/1.4 var(--serif); }
   .aviso::after { content:" ✕"; color:#C4705C; margin-left:auto; padding-left:10px; }
 
   .hablar {
@@ -201,16 +195,52 @@
   }
   .hablar:disabled { background:var(--musgo); color:var(--tiza-baja); box-shadow:none; }
 
-  /* ── Barra de pestañas ────────────────────────────────────────────── */
-  nav {
-    display:grid; grid-template-columns:repeat(4,1fr);
-    background:var(--musgo); border-top:1px solid var(--liquen);
-  }
-  nav button { flex-direction:column; gap:3px; min-height:var(--barra);
-               border:none; background:none; font:400 .68rem/1 var(--mono);
-               letter-spacing:.06em; color:var(--tiza-baja); padding:8px 4px; }
-  nav button .g { font-size:1.15rem; line-height:1; }
-  nav button[data-activa] { color:var(--sebo); background:#1F2416; }
+  /* ── Atajos: lo que antes era la barra de pestañas de abajo ─────────
+     Ya no son pestañas. Abren una capa sobre la escena, y esta lateral se queda debajo, así que
+     se le puede hablar al DJ mientras se mira el mapa. */
+  .atajos { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-top:2px; }
+  .atajos button { flex-direction:column; gap:3px; min-height:52px; padding:7px 4px;
+                   font:400 .66rem/1 var(--mono); letter-spacing:.06em; color:var(--tiza-baja); }
+  .atajos button .g { font-size:1.1rem; line-height:1; color:var(--sebo); }
+  .atajos button[data-abierta] { color:var(--sebo); border-color:var(--sebo);
+                                 background:#2A2415; }
+
+  /* ── Capas: «otra escena» encima de la escena ───────────────────────
+     No son pantallas aparte. Se abren dentro del escenario, dejando arriba el rótulo del lugar
+     y abajo la banda de personajes, y con la lateral del DJ intacta al lado. */
+  .capa { position:absolute; inset:0; z-index:6; display:flex; flex-direction:column;
+          background:linear-gradient(#12140EF2,#0A0B07FA); }
+  .capa-cab { flex:none; display:flex; align-items:center; gap:12px;
+              padding:12px 16px; border-bottom:1px solid var(--liquen);
+              background:#1B1F14E8; }
+  .capa-cab h2 { flex:1; font:500 .72rem/1 var(--mono); letter-spacing:.2em;
+                 text-transform:uppercase; color:var(--sebo); }
+  .capa-cerrar { flex:none; min-height:40px; min-width:44px; padding:0 12px;
+                 font-size:1.1rem; color:var(--tiza-baja); }
+  /* El relleno de abajo deja sitio a la banda de personajes, que va por encima. La altura NO se
+     adivina: la mide app.js con un ResizeObserver y la deja en `--alto-banda`. Calcularla a ojo
+     dejaba los últimos botones de Ajustes debajo de los retratos. */
+  .capa-cuerpo { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+                 padding:14px 16px calc(var(--alto-banda, 200px) + 20px);
+                 display:flex; flex-direction:column; gap:14px; }
+
+  /* ── Miniatura del mapa, sobre la escena ────────────────────────────
+     Los rótulos, la escala y la rosa se esconden: a este tamaño no se leen y solo ensucian. Lo
+     que tiene que leerse aquí es la forma del terreno y dónde estáis. */
+  .minimapa { position:absolute; top:12px; right:12px; z-index:4;
+              width:clamp(96px, 13vw, 168px); padding:0; min-height:0;
+              flex-direction:column; gap:0; overflow:hidden;
+              border:1px solid var(--liquen); background:#0A0B07C0; }
+  .minimapa svg { width:100%; height:auto; display:block; pointer-events:none; }
+  .minimapa > span { width:100%; padding:3px 0 4px; font:500 .56rem/1 var(--mono);
+                     letter-spacing:.2em; text-transform:uppercase; color:var(--tiza-baja);
+                     border-top:1px solid var(--liquen); background:#12140E; }
+  .minimapa:hover, .minimapa:focus-visible { border-color:var(--sebo); }
+  /* Con una capa abierta la miniatura no pinta nada y además asomaba por detrás de la cabecera. */
+  .escenario:has(.capa:not([hidden])) .minimapa { display:none; }
+  .minimapa .m-rotulo, .minimapa .m-escala, .minimapa .m-escala-texto,
+  .minimapa .m-rosa, .minimapa .m-rosa-aro, .minimapa .m-rosa-letra,
+  .minimapa .m-rosa-punta, .minimapa .m-rosa-punta-b { display:none; }
 
   /* ── Banda de personajes ──────────────────────────────────────────────
      Los cuatro retratos siempre a la vista con la vida debajo, en la barra de abajo, como en
@@ -221,8 +251,10 @@
      Las caras «viven» con animación CSS sobre UNA sola imagen: respiran, parpadean y de vez en
      cuando hacen un tic. No son fotogramas generados. Cada hueco lleva duraciones distintas
      para que no respiren a la vez, que es lo que delata el truco. */
-  .banda { position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:center;
-           align-items:flex-end; gap:4px; padding:8px 6px 8px;
+  /* z-index por encima de las capas (6): con el mapa abierto los personajes se siguen viendo,
+     que es lo que se pidió. */
+  .banda { position:absolute; left:0; right:0; bottom:0; z-index:8; display:flex;
+           justify-content:center; align-items:flex-end; gap:4px; padding:8px 6px 8px;
            background:linear-gradient(#0000, #000000B8 55%, #000000E0);
            pointer-events:auto; }
   .banda:empty { display:none; }
@@ -234,7 +266,8 @@
   .pj-banda .oficio { display:flex; align-items:center; gap:4px; font:500 .6rem/1 var(--mono);
                       letter-spacing:.06em; text-transform:uppercase; color:var(--sebo);
                       text-shadow:0 1px 3px #000; }
-  .pj-banda .oficio i { font-style:normal; font-size:.78rem; }
+  /* Aquí no hay icono de clase: a 20 px un arco o un símbolo se quedan en una mancha. El nombre
+     hace el trabajo. El icono dibujado va en la ficha, donde el medallón le da sitio. */
   .pj-banda .px { font:500 .58rem/1 var(--mono); color:var(--tiza-baja);
                   text-shadow:0 1px 3px #000; }
   .pj-banda .pgnum { text-shadow:0 1px 3px #000; }
@@ -472,8 +505,10 @@
   .muneco .cuerpo { fill:none; stroke:#39412B; stroke-width:2.4; stroke-linecap:round; }
   .muneco .cuerpo ellipse { fill:#151910; }
   .muneco .ranura { cursor:pointer; }
-  .muneco .ranura circle { fill:#151910; stroke:#39412B; stroke-width:1.6; }
-  .muneco .ranura .ico { font-size:11px; text-anchor:middle; opacity:.45; }
+  .muneco .ranura circle { r:14px; fill:#151910; stroke:#39412B; stroke-width:1.6; }
+  /* El hueco vacío dibuja apagado el icono de lo que va ahí; puesto, a todo color. */
+  .muneco .ranura .ico-objeto { opacity:.42; filter:grayscale(.9); }
+  .muneco .ranura.puesta .ico-objeto { opacity:1; filter:none; }
   .muneco .ranura .etiq { font:400 8.4px var(--mono); fill:var(--tiza-baja); }
   /* El bonificador debajo del nombre de la pieza: se lee de un vistazo qué está sumando. */
   .muneco .ranura .bono { font:500 7.4px var(--mono); fill:var(--sebo); }
@@ -498,7 +533,7 @@
   .muneco .ranura[data-hueco="zurda"] .etiq { transform:translate(0,22px); }
   .muneco .ranura[data-hueco="anillo1"] .etiq,
   .muneco .ranura[data-hueco="anillo2"] .etiq { transform:translate(0,38px); }
-  .muneco .ranura.puesta circle { fill:#2A2415; stroke:var(--sebo); stroke-width:2; }
+  .muneco .ranura.puesta circle { fill:#14120A; stroke:var(--sebo); stroke-width:2; }
   .muneco .ranura.puesta .ico { opacity:1; }
   .muneco .ranura.puesta .etiq { fill:var(--tiza); }
   .muneco .ranura:hover circle, .muneco .ranura:focus circle { stroke:var(--ambar); }
@@ -506,7 +541,10 @@
 
   .mochila { display:flex; flex-direction:column; gap:8px; }
   .bolsa { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px; }
-  .bolsa li { display:flex; align-items:center; gap:8px; background:#0E100A;
+  .bolsa .ico-casilla { flex:1; width:100%; min-height:0; display:block; }
+  /* Icono dentro de un título de sección, a la altura de la letra. */
+  h2 .ico-tit { width:1.15rem; height:1.15rem; vertical-align:-.22rem; display:inline-block; }
+  .bolsa li { display:flex; flex-direction:column; align-items:center; gap:3px; background:#0E100A;
               border:1px solid var(--liquen); padding:5px 6px 5px 10px; font-size:.86rem; }
   .bolsa li span { flex:1; min-width:0; }
   .bolsa li button { min-height:26px; padding:0 8px; border:none; background:none;
@@ -560,15 +598,22 @@
     .muneco-caja { grid-template-columns:1fr; }
     .lateral { width:auto; flex:1; border-left:none; border-top:1px solid var(--liquen); }
     .pie-escena { display:none; }
+    /* Aquí la capa sí tapa toda la pantalla. Dentro del escenario se quedaría en el 44% de alto
+       que le toca en vertical, y el mapa o los ajustes no caben en eso. Se pierde de vista el
+       botón de hablar mientras está abierta —en una pantalla de móvil no hay sitio para las dos
+       cosas— y por eso la capa lleva su propia aspa bien grande. */
+    .capa { position:fixed; z-index:30; }
+    /* Aquí la capa tapa la banda entera, así que no hay que dejarle hueco. */
+    .capa-cuerpo { padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
+    .minimapa { width:96px; top:auto; bottom:calc(var(--marco) + 14px); }
   }
 
   @media (max-height: 700px) {
-    :root { --barra: 56px; }
     .pj-banda { padding:5px 5px 4px; gap:3px; }
     .pj-banda .pgnum { display:none; }
     .hablar { min-height:50px; font-size:.98rem; }
-    nav button { min-height:var(--barra); font-size:.62rem; padding:5px 4px; }
-    nav button .g { font-size:1rem; }
+    .atajos button { min-height:46px; font-size:.6rem; padding:5px 4px; }
+    .atajos button .g { font-size:1rem; }
   }
 
   @media (prefers-reduced-motion:reduce) {
@@ -594,9 +639,210 @@
       <div class="reloj" id="cab-reloj" data-urgente="no">Luna Muerta <b>3</b></div>
     </div>
 
+    <!-- El mapa, siempre a la vista y muy pequeño, como el minimapa de un juego. Se toca y se
+         abre grande en su capa. Los rótulos se esconden por CSS: a este tamaño no se leen y solo
+         ensucian; lo que tiene que leerse aquí es la forma del terreno y dónde estáis. -->
+    <button class="minimapa" id="minimapa-caja" title="Toca para ver el mapa grande">
+      <svg id="minimapa" aria-hidden="true"></svg>
+      <span>mapa</span>
+    </button>
+
     <div class="pie-escena" id="esc-pie"></div>
 
-    <!-- Los personajes, integrados sobre la ilustración. -->
+    <!-- Capa «Misión y mapa»: se abre SOBRE la escena, no en otra pantalla. La lateral con el
+         director de juego se queda debajo, así que se le puede hablar mientras se mira esto. -->
+    <div class="capa" id="capa-mapa" hidden>
+      <div class="capa-cab">
+        <h2>Misión y mapa</h2>
+        <button class="capa-cerrar" data-cerrarcapa title="Volver a la escena">✕</button>
+      </div>
+      <div class="capa-cuerpo">
+      <section>
+        <h2>Lo que sabéis</h2>
+        <ul class="sabeis" id="esc-sabeis"></ul>
+      </section>
+      <section>
+        <h2>Dónde estáis</h2>
+        <!-- El viewBox lo pone mapa.js al pintar (1000×800); aquí no se fija. -->
+        <svg class="mapa" id="mapa" role="img"
+             aria-label="Mapa de localizaciones de la aventura"></svg>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
+          Toca una localización para moveros allí. Las que no habéis visitado salen apagadas.
+        </p>
+      </section>
+      <section>
+        <h2>Lo que ha pasado</h2>
+        <ol class="registro" id="registro"></ol>
+      </section>
+      <!-- Cierre de sesión: los números del grupo y el resumen para mandar por WhatsApp. -->
+      <section>
+        <h2>Cierre de la sesión</h2>
+        <div id="cierre-tabla" class="cierre"></div>
+        <ul class="sabeis" id="cierre-resumen-datos"></ul>
+        <div class="fila">
+          <button id="cierre-hacer"><span class="icono">✒</span><span>Escribir el resumen</span></button>
+          <button id="cierre-audio" hidden><span class="icono">🔊</span><span>Grabar el audio</span></button>
+          <button id="cierre-copiar" hidden><span class="icono">⧉</span><span>Copiar el texto</span></button>
+        </div>
+        <blockquote id="cierre-texto" class="resumen" hidden></blockquote>
+        <audio id="cierre-reproductor" controls preload="metadata" hidden
+               style="width:100%"></audio>
+        <a id="cierre-descargar" class="descargar" hidden download>
+          <span class="icono">⤓</span><span>Descargar el MP3 para WhatsApp</span>
+        </a>
+        <p id="cierre-peso" style="margin:0;font:400 .76rem/1.4 var(--mono);color:var(--tiza-baja)"></p>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
+          El resumen sale de lo que el DJ ha ido anotando durante la partida, así que no se inventa
+          nada. Repásalo antes de mandarlo.
+        </p>
+      </section>
+      <section>
+        <h2 id="reloj-titulo">El reloj</h2>
+        <div class="fila" id="reloj-botones">
+          <button id="noche-mas"><span class="icono">☾</span><span>Cae la noche</span></button>
+          <button id="noche-menos"><span class="icono">↺</span><span>Deshacer</span></button>
+        </div>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="noche-nota"></p>
+      </section>
+      </div>
+    </div>
+
+    <!-- Capa «El grupo»: se abre SOBRE la escena, no en otra pantalla. La lateral con el
+         director de juego se queda debajo, así que se le puede hablar mientras se mira esto. -->
+    <div class="capa" id="capa-grupo" hidden>
+      <div class="capa-cab">
+        <h2>El grupo</h2>
+        <button class="capa-cerrar" data-cerrarcapa title="Volver a la escena">✕</button>
+      </div>
+      <div class="capa-cuerpo">
+      <div id="grupo-lista" style="display:flex;flex-direction:column;gap:12px"></div>
+      <section>
+        <h2>Suministros</h2>
+        <div class="sumin" id="sumin"></div>
+      </section>
+      <section>
+        <h2>El grupo</h2>
+        <button id="editar-grupo"><span class="icono">✎</span><span>Editar personajes</span></button>
+        <div id="editor" hidden>
+          <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)">
+            Pon aquí vuestros personajes de la sesión cero. Los nombres y los números salen de la ficha
+            que te dé el DJ. Se guarda en el dispositivo al escribir.
+          </p>
+          <div id="editor-lista" style="display:flex;flex-direction:column;gap:10px"></div>
+          <div class="fila">
+            <button id="anadir-pj"><span class="icono">＋</span><span>Añadir personaje</span></button>
+            <button id="restaurar-pj"><span class="icono">⟲</span><span>Volver a los pregenerados</span></button>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2>Reiniciar</h2>
+        <button id="reiniciar"><span class="icono">⟲</span><span>Empezar partida de cero</span></button>
+      </section>
+      </div>
+    </div>
+
+    <!-- Capa «Ajustes»: se abre SOBRE la escena, no en otra pantalla. La lateral con el
+         director de juego se queda debajo, así que se le puede hablar mientras se mira esto. -->
+    <div class="capa" id="capa-ajustes" hidden>
+      <div class="capa-cab">
+        <h2>Ajustes</h2>
+        <button class="capa-cerrar" data-cerrarcapa title="Volver a la escena">✕</button>
+      </div>
+      <div class="capa-cuerpo">
+      <section>
+        <h2>Qué estáis jugando</h2>
+        <label>
+          Aventura
+          <small>Cada una guarda su propia partida: cambiar no pierde el avance de la otra.</small>
+          <select id="aventura">
+            <option value="prueba">Prueba · El Pozo de Sarna — 30-45 min</option>
+            <option value="corvalar">El Diezmo de Corvalar — la campaña</option>
+          </select>
+        </label>
+        <p class="aviso-clave">
+          Empezad por <b>la prueba</b>. Está hecha para comprobar en mesa que el DJ aplica bien las
+          reglas, y trae una hoja de verificación para pillarle si se equivoca.
+        </p>
+        <label class="casilla">
+          <input type="checkbox" id="cachondeo">
+          <span>
+            <b>DJ cachondo</b>
+            <small>El DJ se pica con la mesa, entra a las coñas y vacila a quien saca un uno. El
+            horror no se rebaja: al describir la escena o hacer de aldeano sigue siendo serio.</small>
+          </span>
+        </label>
+        <label class="casilla">
+          <input type="checkbox" id="diarizar">
+          <span>
+            <b>Distinguir quién habla</b>
+            <small>Deja el micro para una conversación entre varios: separa las voces y le dice al DJ
+            quién ha dicho qué. Son voces anónimas («Voz 1», «Voz 2»), no sabe vuestros nombres — los
+            deduce por lo que decís. Encarece un poco la transcripción.</small>
+          </span>
+        </label>
+        <label class="casilla">
+          <input type="checkbox" id="sesion-cero">
+          <span>
+            <b>Modo sesión cero</b>
+            <small>Para la primera vez: el DJ os cuenta el mundo, os propone arquetipos, os hace las
+            preguntas de personaje y os guía las tiradas de características. Quítalo al empezar a jugar.</small>
+          </span>
+        </label>
+      </section>
+      <section>
+        <h2>Claves de API</h2>
+        <p class="aviso-clave">
+          Se guardan <b>solo en este dispositivo</b> y no se envían a ningún sitio salvo al servicio
+          al que pertenecen. Si prestas el tablet, bórralas.
+        </p>
+        <label>
+          ElevenLabs
+          <small>Para la voz del DJ y para transcribir lo que decís.</small>
+          <input type="password" id="clave-11" autocomplete="off" placeholder="sk_...">
+        </label>
+        <label>
+          Anthropic
+          <small>El cerebro del DJ. console.anthropic.com → API keys.</small>
+          <input type="password" id="clave-cl" autocomplete="off" placeholder="sk-ant-...">
+        </label>
+        <label>
+          Modelo
+          <small>Sonnet 5 es el equilibrio bueno entre latencia e inteligencia.</small>
+          <select id="modelo">
+            <option value="claude-sonnet-5">Sonnet 5 — rápido y listo (recomendado)</option>
+            <option value="claude-haiku-4-5">Haiku 4.5 — el más rápido y barato</option>
+            <option value="claude-opus-5">Opus 5 — el más listo, más lento</option>
+          </select>
+        </label>
+        <label>
+          Voz del DJ al improvisar
+          <small>Modelo rápido: la mitad de precio y apenas se nota al hablar.</small>
+          <select id="voz-modelo">
+            <option value="eleven_multilingual_v2">Calidad — 0,10 $/1k car. (recomendado)</option>
+            <option value="eleven_flash_v2_5">Rápido — 0,05 $/1k car., se nota peor</option>
+          </select>
+        </label>
+        <div class="fila">
+          <button id="guardar"><span class="icono">✓</span><span>Guardar</span></button>
+          <button id="probar"><span class="icono">⚡</span><span>Probar conexión</span></button>
+        </div>
+        <div class="estado-linea neutro" id="estado-claves">Sin comprobar.</div>
+      </section>
+      <section>
+        <h2>Conversación</h2>
+        <button id="charla-limpiar"><span class="icono">✕</span><span>Vaciar conversación</span></button>
+      </section>
+      <section>
+        <h2>Gasto de esta sesión</h2>
+        <div class="estado-linea neutro" id="gasto">Aún nada.</div>
+        <button id="gasto-reset"><span class="icono">⟲</span><span>Poner el contador a cero</span></button>
+      </section>
+      </div>
+    </div>
+
+    <!-- Los personajes, integrados sobre la ilustración. Van DESPUÉS de las capas para quedar
+         por encima: se pidió verlos siempre. -->
     <div class="banda" id="banda"></div>
   </div>
 
@@ -641,206 +887,29 @@
       </div>
       <audio id="esc-audio" preload="metadata"></audio>
       <p style="margin:0;font-size:.72rem;color:var(--tiza-baja)" id="esc-nota-audio"></p>
+
+      <!-- Lo que antes era la barra de pestañas de abajo. Ya no son pestañas: abren una capa
+           sobre la escena, y la lateral con el DJ sigue debajo, así que se le puede hablar
+           mientras se mira el mapa. -->
+      <div class="atajos">
+        <button data-capa="mapa" title="El mapa, la misión y el cierre de la sesión">
+          <span class="g">🗺</span><span>Misión</span>
+        </button>
+        <button data-capa="grupo" title="El grupo y los suministros">
+          <span class="g">🛡</span><span>Grupo</span>
+        </button>
+        <button data-capa="ajustes" title="Claves, aventura y modo sesión cero">
+          <span class="g">⚙</span><span>Ajustes</span>
+        </button>
+      </div>
     </div>
+
+    <!-- Los avisos, al pie de la lateral: siempre a la vista y en la misma zona que el DJ.
+         Antes vivían en la pestaña de Ajustes, y durante la partida nadie mira Ajustes. -->
+    <button class="aviso" id="aviso" hidden></button>
   </aside>
 </div>
 
-<main>
-  <!-- ══ MAPA ════════════════════════════════════════════════════════ -->
-  <div class="vista" id="v-mapa">
-    <section>
-      <h2>Lo que sabéis</h2>
-      <ul class="sabeis" id="esc-sabeis"></ul>
-    </section>
-    <section>
-      <h2>Dónde estáis</h2>
-      <!-- El viewBox lo pone mapa.js al pintar (1000×800); aquí no se fija. -->
-      <svg class="mapa" id="mapa" role="img"
-           aria-label="Mapa de localizaciones de la aventura"></svg>
-      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
-        Toca una localización para moveros allí. Las que no habéis visitado salen apagadas.
-      </p>
-    </section>
-    <section>
-      <h2>Lo que ha pasado</h2>
-      <ol class="registro" id="registro"></ol>
-    </section>
-    <!-- Cierre de sesión: los números del grupo y el resumen para mandar por WhatsApp. -->
-    <section>
-      <h2>Cierre de la sesión</h2>
-      <div id="cierre-tabla" class="cierre"></div>
-      <ul class="sabeis" id="cierre-resumen-datos"></ul>
-      <div class="fila">
-        <button id="cierre-hacer"><span class="icono">✒</span><span>Escribir el resumen</span></button>
-        <button id="cierre-audio" hidden><span class="icono">🔊</span><span>Grabar el audio</span></button>
-        <button id="cierre-copiar" hidden><span class="icono">⧉</span><span>Copiar el texto</span></button>
-      </div>
-      <blockquote id="cierre-texto" class="resumen" hidden></blockquote>
-      <audio id="cierre-reproductor" controls preload="metadata" hidden
-             style="width:100%"></audio>
-      <a id="cierre-descargar" class="descargar" hidden download>
-        <span class="icono">⤓</span><span>Descargar el MP3 para WhatsApp</span>
-      </a>
-      <p id="cierre-peso" style="margin:0;font:400 .76rem/1.4 var(--mono);color:var(--tiza-baja)"></p>
-      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
-        El resumen sale de lo que el DJ ha ido anotando durante la partida, así que no se inventa
-        nada. Repásalo antes de mandarlo.
-      </p>
-    </section>
-    <section>
-      <h2 id="reloj-titulo">El reloj</h2>
-      <div class="fila" id="reloj-botones">
-        <button id="noche-mas"><span class="icono">☾</span><span>Cae la noche</span></button>
-        <button id="noche-menos"><span class="icono">↺</span><span>Deshacer</span></button>
-      </div>
-      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="noche-nota"></p>
-    </section>
-  </div>
-
-  <!-- ══ GRUPO ═══════════════════════════════════════════════════════ -->
-  <div class="vista" id="v-grupo">
-    <div id="grupo-lista" style="display:flex;flex-direction:column;gap:12px"></div>
-    <section>
-      <h2>Suministros</h2>
-      <div class="sumin" id="sumin"></div>
-    </section>
-    <section>
-      <h2>El grupo</h2>
-      <button id="editar-grupo"><span class="icono">✎</span><span>Editar personajes</span></button>
-      <div id="editor" hidden>
-        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)">
-          Pon aquí vuestros personajes de la sesión cero. Los nombres y los números salen de la ficha
-          que te dé el DJ. Se guarda en el dispositivo al escribir.
-        </p>
-        <div id="editor-lista" style="display:flex;flex-direction:column;gap:10px"></div>
-        <div class="fila">
-          <button id="anadir-pj"><span class="icono">＋</span><span>Añadir personaje</span></button>
-          <button id="restaurar-pj"><span class="icono">⟲</span><span>Volver a los pregenerados</span></button>
-        </div>
-      </div>
-    </section>
-    <section>
-      <h2>Reiniciar</h2>
-      <button id="reiniciar"><span class="icono">⟲</span><span>Empezar partida de cero</span></button>
-    </section>
-  </div>
-
-  <!-- ══ AJUSTES ═════════════════════════════════════════════════════ -->
-  <div class="vista" id="v-ajustes">
-    <section>
-      <h2>Qué estáis jugando</h2>
-      <label>
-        Aventura
-        <small>Cada una guarda su propia partida: cambiar no pierde el avance de la otra.</small>
-        <select id="aventura">
-          <option value="prueba">Prueba · El Pozo de Sarna — 30-45 min</option>
-          <option value="corvalar">El Diezmo de Corvalar — la campaña</option>
-        </select>
-      </label>
-      <p class="aviso-clave">
-        Empezad por <b>la prueba</b>. Está hecha para comprobar en mesa que el DJ aplica bien las
-        reglas, y trae una hoja de verificación para pillarle si se equivoca.
-      </p>
-      <label class="casilla">
-        <input type="checkbox" id="cachondeo">
-        <span>
-          <b>DJ cachondo</b>
-          <small>El DJ se pica con la mesa, entra a las coñas y vacila a quien saca un uno. El
-          horror no se rebaja: al describir la escena o hacer de aldeano sigue siendo serio.</small>
-        </span>
-      </label>
-      <label class="casilla">
-        <input type="checkbox" id="diarizar">
-        <span>
-          <b>Distinguir quién habla</b>
-          <small>Deja el micro para una conversación entre varios: separa las voces y le dice al DJ
-          quién ha dicho qué. Son voces anónimas («Voz 1», «Voz 2»), no sabe vuestros nombres — los
-          deduce por lo que decís. Encarece un poco la transcripción.</small>
-        </span>
-      </label>
-      <label class="casilla">
-        <input type="checkbox" id="sesion-cero">
-        <span>
-          <b>Modo sesión cero</b>
-          <small>Para la primera vez: el DJ os cuenta el mundo, os propone arquetipos, os hace las
-          preguntas de personaje y os guía las tiradas de características. Quítalo al empezar a jugar.</small>
-        </span>
-      </label>
-    </section>
-    <section>
-      <h2>Claves de API</h2>
-      <p class="aviso-clave">
-        Se guardan <b>solo en este dispositivo</b> y no se envían a ningún sitio salvo al servicio
-        al que pertenecen. Si prestas el tablet, bórralas.
-      </p>
-      <label>
-        ElevenLabs
-        <small>Para la voz del DJ y para transcribir lo que decís.</small>
-        <input type="password" id="clave-11" autocomplete="off" placeholder="sk_...">
-      </label>
-      <label>
-        Anthropic
-        <small>El cerebro del DJ. console.anthropic.com → API keys.</small>
-        <input type="password" id="clave-cl" autocomplete="off" placeholder="sk-ant-...">
-      </label>
-      <label>
-        Modelo
-        <small>Sonnet 5 es el equilibrio bueno entre latencia e inteligencia.</small>
-        <select id="modelo">
-          <option value="claude-sonnet-5">Sonnet 5 — rápido y listo (recomendado)</option>
-          <option value="claude-haiku-4-5">Haiku 4.5 — el más rápido y barato</option>
-          <option value="claude-opus-5">Opus 5 — el más listo, más lento</option>
-        </select>
-      </label>
-      <label>
-        Voz del DJ al improvisar
-        <small>Modelo rápido: la mitad de precio y apenas se nota al hablar.</small>
-        <select id="voz-modelo">
-          <option value="eleven_multilingual_v2">Calidad — 0,10 $/1k car. (recomendado)</option>
-          <option value="eleven_flash_v2_5">Rápido — 0,05 $/1k car., se nota peor</option>
-        </select>
-      </label>
-      <div class="fila">
-        <button id="guardar"><span class="icono">✓</span><span>Guardar</span></button>
-        <button id="probar"><span class="icono">⚡</span><span>Probar conexión</span></button>
-      </div>
-      <div class="estado-linea neutro" id="estado-claves">Sin comprobar.</div>
-    </section>
-    <section>
-      <h2>Conversación</h2>
-      <button id="charla-limpiar"><span class="icono">✕</span><span>Vaciar conversación</span></button>
-    </section>
-    <section>
-      <h2>Gasto de esta sesión</h2>
-      <div class="estado-linea neutro" id="gasto">Aún nada.</div>
-      <button id="gasto-reset"><span class="icono">⟲</span><span>Poner el contador a cero</span></button>
-    </section>
-  </div>
-</main>
-
-<!-- Panel de mesa: los retratos, el botón de hablar y las pestañas. Siempre a la vista,
-     como la barra inferior de los Might and Magic. -->
-<div class="panel">
-  <!-- Los avisos van AQUÍ, siempre a la vista y no en la pestaña de Ajustes: durante la partida
-       nadie mira Ajustes, así que un error escrito allí es un error invisible. -->
-  <button class="aviso" id="aviso" hidden></button>
-  <!-- Hablar desde CUALQUIER pantalla.
-       El botón de verdad vive en la barra lateral de la mesa, y mientras esa era la única
-       pantalla desde la que se podía hablar daba igual. Pero ahora el DJ mueve la pantalla él
-       (herramienta `mostrar`): si saca el mapa, la mesa se queda mirándolo sin manera de
-       contestarle. Este no duplica la lógica —reenvía el toque al de la mesa— y solo se ve
-       cuando la mesa NO está delante. -->
-  <button class="hablar hablar-flota" id="hablar-flota" data-modo="listo" hidden>
-    <span class="icono">🎤</span><span id="hablar-flota-txt">Toca para hablar</span>
-  </button>
-
-  <nav>
-  <button data-va="escena" data-activa><span class="g">🕯</span><span>Mesa</span></button>
-  <button data-va="mapa"><span class="g">🗺</span><span>Misión</span></button>
-  <button data-va="grupo"><span class="g">🛡</span><span>Grupo</span></button>
-  <button data-va="ajustes"><span class="g">⚙</span><span>Ajustes</span></button>
-  </nav>
-</div>
 
 <!-- Ficha del personaje: capa sobre todo, se abre tocando un retrato. -->
 <div class="ficha" id="ficha" hidden>

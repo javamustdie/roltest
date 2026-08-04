@@ -12,6 +12,7 @@ import { CAMPANAS, CAMPANA_POR_DEFECTO } from "./campana.js";
 import { RETRATOS } from "./retratos.js";
 import { rasgosDe } from "./rasgos.js";
 import { pintarMapaEn } from "./mapa.js";
+import { iconoObjeto } from "./objetos.js";
 
 /**
  * Muñeco de equipo. Una silueta humana en SVG con los huecos colocados donde van en el cuerpo,
@@ -118,8 +119,8 @@ function pintarMuneco(p, i) {
       libre ? " destino" : ""}" data-hueco="${h.k}" data-i="${i}"
                role="button" tabindex="0"
                aria-label="${h.n}: ${puesto ? esc(o.n) + bonoTexto(o) : "vacío"}">
-      <circle cx="${m.x}" cy="${m.y}" r="11"/>
-      <text class="ico" x="${m.x}" y="${m.y + 4}">${h.i}</text>
+      <circle cx="${m.x}" cy="${m.y}" r="14"/>
+      ${iconoEn(puesto ? o.n : h.ej, m.x, m.y, 25, `p${i}-${h.k}`)}
       <text class="etiq" x="${m.x + dx}" y="${m.y + dy}" text-anchor="${anclaje}">${
         puesto ? esc(recortar(o.n, 22)) : h.n.toLowerCase()
       }</text>
@@ -135,7 +136,8 @@ function pintarMuneco(p, i) {
         ${SILUETA}${puntos}
       </svg>
       <div class="mochila" data-soltar="${i}">
-        <h2>🎒 Mochila</h2>
+        <h2><svg class="ico-tit" viewBox="0 0 100 100" aria-hidden="true"
+              >${iconoObjeto("mochila", { sufijo: `tm${i}`, sombra: false })}</svg> Mochila</h2>
         ${cogido?.tipo === "hueco" && cogido.i === i
           ? `<p class="cogiendo">Llevas <b>${esc(cogido.obj.n)}</b> en la mano. Toca un hueco
                para ponerlo, o aquí para guardarlo.</p>`
@@ -148,7 +150,10 @@ function pintarMuneco(p, i) {
                 `<li data-bolsaobj data-i="${i}" data-j="${j}" tabindex="0"
                      class="${cogido?.tipo === "bolsa" && cogido.i === i && cogido.j === j
                               ? "enmano" : ""}"
-                     title="${esc(x.nota ?? x.n)}"><span>${esc(x.n)}</span>
+                     title="${esc(x.nota ?? x.n)}${esc(bonoTexto(x))}">
+                   <svg class="ico-casilla" viewBox="0 0 100 100" aria-hidden="true"
+                     >${iconoObjeto(x.n, { sufijo: `b${i}-${j}` })}</svg>
+                   <span>${esc(x.n)}</span>
                    <button data-quitarbolsa="${i}" data-j="${j}" title="Quitar">✕</button></li>`)
                 .join("")
             : `<li class="nada">Vacía.</li>`
@@ -168,21 +173,26 @@ const recortar = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1) + "
  * clase la escribe el DJ y no hay un campo aparte: pedirle uno más sería una forma de que se
  * desincronizaran.
  */
+// `ej` es el objeto de `objetos.js` que representa la clase: se dibuja en la banda en vez del
+// emoji que había. Un ✝ y un 🎵 al lado del nombre no dicen «clérigo» ni «bardo», dicen «emoji».
 const CLASES = [
-  { re: /guerrer/i, i: "⚔", n: "Guerrero" },
-  { re: /explorador|ranger|explorad/i, i: "🏹", n: "Explorador" },
-  { re: /pícar|picar|ladr/i, i: "🗝", n: "Pícaro" },
-  { re: /clérig|clerig|cléri|sacerd/i, i: "✝", n: "Clérigo" },
-  { re: /druid/i, i: "🍂", n: "Druida" },
-  { re: /mag[oa]|hechicer/i, i: "✶", n: "Mago" },
-  { re: /bárbar|barbar/i, i: "🪓", n: "Bárbaro" },
-  { re: /bard/i, i: "🎵", n: "Bardo" },
-  { re: /paladí|paladi/i, i: "🛡", n: "Paladín" },
-  { re: /monj/i, i: "☯", n: "Monje" },
-  { re: /bruj/i, i: "👁", n: "Brujo" },
+  { re: /guerrer/i, ej: "espada", n: "Guerrero" },
+  { re: /explorador|ranger|explorad/i, ej: "arco", n: "Explorador" },
+  { re: /pícar|picar|ladr/i, ej: "ganzuas", n: "Pícaro" },
+  { re: /clérig|clerig|cléri|sacerd/i, ej: "simbolo", n: "Clérigo" },
+  { re: /druid/i, ej: "hierbas", n: "Druida" },
+  { re: /mag[oa]|hechicer/i, ej: "pergamino", n: "Mago" },
+  { re: /bárbar|barbar/i, ej: "hacha", n: "Bárbaro" },
+  { re: /bard/i, ej: "campana", n: "Bardo" },
+  { re: /paladí|paladi/i, ej: "escudo", n: "Paladín" },
+  { re: /monj/i, ej: "baston", n: "Monje" },
+  { re: /bruj/i, ej: "libro", n: "Brujo" },
 ];
 const claseDe = (t) => CLASES.find((c) => c.re.test(String(t ?? "")));
-const ICONO_CLASE = (t) => claseDe(t)?.i ?? "◇";
+/** El icono de la clase, ya dentro de su <svg>. `fardo` es la red para una clase inventada. */
+const ICONO_CLASE = (t, sufijo) =>
+  `<svg class="ico-clase" viewBox="0 0 100 100" aria-hidden="true"
+    >${iconoObjeto(claseDe(t)?.ej ?? "fardo", { sufijo, sombra: false })}</svg>`;
 /**
  * El nombre sin el nivel: en un marco de 100 px no cabe «Exploradora 2».
  *
@@ -217,19 +227,34 @@ const faltaPara = (px) => {
  * lleva la ficha y la ajusta el DJ, así que un hueco que sumara solo sería una segunda fuente de
  * verdad discrepando con la primera.
  */
+/**
+ * Los once huecos de equipo. `ej` es lo que se dibuja cuando el hueco está VACÍO: el icono de lo
+ * que va ahí, apagado. Antes había un emoji, y un emoji a todo color dentro de una ranura de
+ * piedra se ve como lo que es. Los nombres de `ej` son claves de `objetos.js`.
+ */
 const HUECOS = [
-  { k: "cabeza", n: "Cabeza", i: "⛑" },
-  { k: "pecho", n: "Pecho", i: "🛡" },
-  { k: "manos", n: "Manos", i: "🧤" },
-  { k: "piernas", n: "Piernas", i: "👖" },
-  { k: "pies", n: "Pies", i: "🥾" },
-  { k: "capa", n: "Capa", i: "🧣" },
-  { k: "diestra", n: "Diestra", i: "🗡" },
-  { k: "zurda", n: "Zurda", i: "🪓" },
-  { k: "anillo1", n: "Anillo", i: "💍" },
-  { k: "anillo2", n: "Anillo", i: "💍" },
-  { k: "amuleto", n: "Amuleto", i: "🔮" },
+  { k: "cabeza", n: "Cabeza", ej: "casco" },
+  { k: "pecho", n: "Pecho", ej: "coraza" },
+  { k: "manos", n: "Manos", ej: "guantes" },
+  { k: "piernas", n: "Piernas", ej: "pantalones" },
+  { k: "pies", n: "Pies", ej: "botas" },
+  { k: "capa", n: "Capa", ej: "capa" },
+  { k: "diestra", n: "Diestra", ej: "espada" },
+  { k: "zurda", n: "Zurda", ej: "escudo" },
+  { k: "anillo1", n: "Anillo", ej: "anillo" },
+  { k: "anillo2", n: "Anillo", ej: "anillo" },
+  { k: "amuleto", n: "Amuleto", ej: "amuleto" },
 ];
+
+/**
+ * Encaja un icono de `objetos.js` —que se dibuja en un lienzo de 100×100— dentro de otro SVG,
+ * centrado en (cx,cy) y con el lado que se pida. Se usa en las ranuras del muñeco.
+ */
+const iconoEn = (nombre, cx, cy, lado, sufijo) => {
+  const k = lado / 100;
+  return `<g transform="translate(${(cx - lado / 2).toFixed(2)} ${(cy - lado / 2).toFixed(2)}) ` +
+    `scale(${k.toFixed(4)})">${iconoObjeto(nombre, { sufijo, sombra: false })}</g>`;
+};
 
 /** Las seis preguntas de la sesión cero, en el mismo orden en que se hacen. */
 const ENTREVISTA = [
@@ -801,32 +826,47 @@ const loc = (id) => CAMPANA.localizaciones.find((l) => l.id === id);
 const actual = () => loc(E.local);
 
 // ── Pestañas ─────────────────────────────────────────────────────────────────
-const PESTANAS = ["escena", "mapa", "grupo", "ajustes"];
+/**
+ * La mesa es la ÚNICA pantalla. Todo lo demás se abre como una capa encima de la escena.
+ *
+ * Antes esto era una barra de pestañas: tocar «Misión» escondía el tablero entero y con él el
+ * director de juego y el botón de hablar. Eso convertía cada consulta en un viaje de ida y
+ * vuelta, y en mesa lo que se quiere es mirar el mapa SIN dejar de hablar con el DJ.
+ *
+ * Ahora las capas se abren dentro del escenario: la lateral del DJ se queda al lado, la banda de
+ * personajes por encima, y el rótulo del lugar sigue arriba. `irA` mantiene su nombre y sus
+ * argumentos porque la llaman `moverA`, la herramienta `mostrar` y el arranque por hash.
+ */
+const CAPAS = ["mapa", "grupo", "ajustes"];
 
 function irA(nombre, tocarHash = true) {
-  if (!PESTANAS.includes(nombre)) nombre = "escena";
-  for (const o of document.querySelectorAll("nav button")) o.removeAttribute("data-activa");
-  for (const v of document.querySelectorAll(".vista")) v.removeAttribute("data-activa");
-  document.querySelector(`nav button[data-va="${nombre}"]`).setAttribute("data-activa", "");
-
-  // La mesa es un tablero a pantalla completa, hermano de main, no una vista dentro de él:
-  // la ilustración tiene que poder ocupar todo el hueco sin el relleno de las otras pestañas.
-  const enMesa = nombre === "escena";
-  $("#v-tablero").hidden = !enMesa;
-  document.querySelector("main").hidden = enMesa;
-  if (!enMesa) {
-    $(`#v-${nombre}`).setAttribute("data-activa", "");
-    document.querySelector("main").scrollTop = 0;
+  const capa = CAPAS.includes(nombre) ? nombre : null; // cualquier otra cosa es «la escena»
+  for (const c of CAPAS) $(`#capa-${c}`).hidden = c !== capa;
+  for (const b of document.querySelectorAll(".atajos button")) {
+    b.toggleAttribute("data-abierta", b.dataset.capa === capa);
   }
-  // El botón de hablar de la mesa se va con el tablero, así que en las demás pantallas sale el
-  // flotante. Sin esto, el DJ saca el mapa y la mesa no puede contestarle.
-  $("#hablar-flota").hidden = enMesa;
-  if (tocarHash && location.hash.slice(1) !== nombre) history.replaceState(null, "", `#${nombre}`);
+  if (capa) $(`#capa-${capa} .capa-cuerpo`).scrollTop = 0;
+  const destino = capa ?? "escena";
+  if (tocarHash && location.hash.slice(1) !== destino) {
+    history.replaceState(null, "", `#${destino}`);
+  }
 }
 
-for (const b of document.querySelectorAll("nav button")) {
-  b.addEventListener("click", () => irA(b.dataset.va));
+for (const b of document.querySelectorAll(".atajos button")) {
+  // Tocar el atajo de una capa abierta la cierra: es el gesto que se espera de un botón que
+  // se queda marcado.
+  b.addEventListener("click", () =>
+    irA(b.hasAttribute("data-abierta") ? "escena" : b.dataset.capa));
 }
+for (const b of document.querySelectorAll("[data-cerrarcapa]")) {
+  b.addEventListener("click", () => irA("escena"));
+}
+// Escape cierra lo que haya abierto encima de la escena, capa o ficha.
+addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  if (!$("#ficha").hidden) cerrarFicha();
+  else irA("escena");
+});
 addEventListener("hashchange", () => irA(location.hash.slice(1), false));
 
 // ── Pintar ───────────────────────────────────────────────────────────────────
@@ -977,7 +1017,11 @@ function pintarBanda() {
           ${p.retrato ? capaCara(p.retrato) : ""}
           <span class="vidrio"></span></span>
         <span class="nom">${esc(p.pj)}</span>
-        <span class="oficio"><i>${ICONO_CLASE(p.clase)}</i>${esc(claseCorta(p.clase))}</span>
+        <!-- Sin icono de clase aquí, y es una decisión: los iconos de objetos.js están dibujados
+             para leerse desde 40 px y en la banda no caben más de 20, donde un arco o un símbolo
+             se quedan en una mancha. El nombre de la clase ya dice qué es cada uno, que es lo que
+             se pedía; un emoji tampoco valía. En la ficha sí hay sitio y ahí va dibujado. -->
+        <span class="oficio">${esc(claseCorta(p.clase))}</span>
         <span class="medidor">
           <span class="pgbar"><i style="width:${pct}%"></i></span>
           <span class="agotbar"><i style="width:${(agot / 6) * 100}%"></i></span>
@@ -1079,7 +1123,7 @@ function abrirFicha(i) {
           <div><i>🌙</i><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
           <div><i>🩸</i><span>heridas</span><b>${p.heridas.length}</b></div>
           <div><i>✶</i><span>experiencia</span><b>${p.px ?? 0}</b></div>
-          <div><i>${ICONO_CLASE(p.clase)}</i><span>nivel</span><b>${nivelDe(p.px ?? 0)}</b></div>
+          <div>${ICONO_CLASE(p.clase, `fn${i}`)}<span>nivel</span><b>${nivelDe(p.px ?? 0)}</b></div>
         </div>
         ${(() => {
           const px = p.px ?? 0, falta = faltaPara(px), n = nivelDe(px);
@@ -1166,10 +1210,6 @@ function editarEntrevista(i) {
     </div>`;
   $("#ficha-caja").scrollTop = 0;
 }
-
-// El botón flotante no graba: reenvía el toque al de la mesa, que es el que tiene toda la
-// máquina de estados. Duplicar esa lógica en dos botones es cómo se acaba con dos grabadoras.
-$("#hablar-flota").addEventListener("click", () => bHablar.click());
 
 /** Quita la capa de la ficha. La usan el aspa, el clic fuera, y la herramienta `mostrar`. */
 function cerrarFicha() { cogido = null; $("#ficha").hidden = true; }
@@ -1379,7 +1419,8 @@ function pintarMapa() {
   // marco y rosa de los vientos), no cuatro círculos sobre un pergamino. Aquí solo se le pasan
   // las localizaciones y el estado, y se enganchan los eventos por data-ir.
   const svg = $("#mapa");
-  pintarMapaEn(svg, CAMPANA.localizaciones, { local: E.local, visitadas: E.visitadas });
+  const estado = { local: E.local, visitadas: E.visitadas };
+  pintarMapaEn(svg, CAMPANA.localizaciones, estado);
 
   for (const g of svg.querySelectorAll("g[data-ir]")) {
     const ir = () => moverA(g.dataset.ir);
@@ -1388,6 +1429,28 @@ function pintarMapa() {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ir(); }
     });
   }
+
+  // La miniatura de la esquina de la escena: el mismo mapa, sin rótulos (los esconde el CSS) y
+  // sin nodos tocables. Toda ella es un botón que abre el grande, porque a 130 px acertar una
+  // localización con el dedo es imposible.
+  pintarMapaEn($("#minimapa"), CAMPANA.localizaciones, estado);
+}
+
+
+$("#minimapa-caja").addEventListener("click", () => irA("mapa"));
+
+// Cuánto ocupa la banda de personajes, para que las capas dejen ese hueco abajo y sus últimos
+// controles no acaben debajo de los retratos. Se mide, no se calcula: la altura depende del
+// tamaño del marco (que escala con la pantalla), de si alguien lleva heridas y de la tipografía.
+{
+  const banda = $("#banda");
+  const medir = () => {
+    const alto = banda.offsetHeight;
+    document.documentElement.style.setProperty("--alto-banda", `${alto}px`);
+  };
+  if ("ResizeObserver" in window) new ResizeObserver(medir).observe(banda);
+  else addEventListener("resize", medir);
+  medir();
 }
 
 function moverA(id) {
@@ -1832,9 +1895,6 @@ const TEXTO_DJ = {
 function modo(m, txt) {
   bHablar.dataset.modo = m;
   tHablar.textContent = txt;
-  // El flotante es un espejo del de la mesa: mismo estado, mismo texto.
-  $("#hablar-flota").dataset.modo = m;
-  $("#hablar-flota-txt").textContent = txt;
   // El retrato del DJ refleja el mismo estado: en mesa se mira la cara, no el botón.
   $("#dj").dataset.estado = m;
   $("#dj-estado").textContent = TEXTO_DJ[m] ?? m;

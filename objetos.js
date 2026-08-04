@@ -109,15 +109,15 @@ const FILO = "#EAEED6";   // luz de filo del hierro
 
 // Luces de canto por material, para tenerlas a mano al dibujar. Un filo de hierro es casi
 // blanco; el de la madera es miel, y el de la piedra apenas se levanta del gris.
-const L_MADERA = "#d8a863";
-const L_CUERO = "#c89858";
-const L_LINO = "#efe9c8";
-const L_LANA = "#c9ccae";
-const L_LATON = "#fff0c0";
-const L_HUESO = "#fff8dc";
-const L_PIEDRA = "#b8bea0";
-const L_PAPEL = "#f6edc6";
-const L_SEBO = "#fffbe4";
+const L_MADERA = "#D8A863";
+const L_CUERO = "#C89858";
+const L_LINO = "#EFE9C8";
+const L_LANA = "#C9CCAE";
+const L_LATON = "#FFF0C0";
+const L_HUESO = "#FFF8DC";
+const L_PIEDRA = "#B8BEA0";
+const L_PAPEL = "#F6EDC6";
+const L_SEBO = "#FFFBE4";
 
 // ── Utillaje de dibujo ────────────────────────────────────────────────────────────────────────
 
@@ -128,12 +128,39 @@ const forma = (d, relleno, w = 2) =>
 /**
  * Trazo con contorno: uno oscuro más gordo debajo y el material encima. Es como se dibujan los
  * astiles, las cuerdas y las cadenas sin tener que cerrar un contorno a mano.
+ *
+ * CUIDADO con las rectas perfectamente verticales u horizontales. Los degradados van en
+ * `objectBoundingBox`, y una caja de anchura o altura CERO no se pinta: el trazo del material
+ * desaparecía y solo quedaba el contorno negro (así se dibujaba el símbolo sagrado, con una
+ * barra negra en vez del palo). `enderezar` mete un desvío de 0,04 unidades para que la caja
+ * nunca sea degenerada; no se ve, y el degradado vuelve a pintar. Aun así, para una pieza plana
+ * y ancha es mejor un `forma()` con su rectángulo: se controla mejor la luz.
  */
-const trazo = (d, relleno, w, extra = "") =>
-  `<path d="${d}" fill="none" stroke="${T}" stroke-width="${w + 2.6}" stroke-linecap="round"
-     stroke-linejoin="round"/>` +
-  `<path d="${d}" fill="none" stroke="${relleno}" stroke-width="${w}" stroke-linecap="round"
+const trazo = (d, relleno, w, extra = "") => {
+  const dd = enderezar(d);
+  return `<path d="${dd}" fill="none" stroke="${T}" stroke-width="${w + 2.6}"
+     stroke-linecap="round" stroke-linejoin="round"/>` +
+  `<path d="${dd}" fill="none" stroke="${relleno}" stroke-width="${w}" stroke-linecap="round"
      stroke-linejoin="round" ${extra}/>`;
+};
+
+/**
+ * Rompe la degeneración de un path recto: si todas las x (o todas las y) son iguales, desvía la
+ * última coordenada de ese eje 0,04 unidades. Da por hecho que los números del path van en pares
+ * x/y, que es el caso de todo lo que se dibuja aquí (solo M, L y Q).
+ */
+function enderezar(d) {
+  const nums = d.match(/-?\d*\.?\d+/g);
+  if (!nums || nums.length < 4) return d;
+  const planos = (resto) =>
+    nums.every((v, i) => i % 2 !== resto || Number(v) === Number(nums[resto]));
+  const eje = planos(0) ? 0 : planos(1) ? 1 : -1;
+  if (eje < 0) return d;
+  let ultima = nums.length - 1;
+  while (ultima % 2 !== eje) ultima--;
+  let i = -1;
+  return d.replace(/-?\d*\.?\d+/g, (m) => (++i === ultima ? String(Number(m) + .04) : m));
+}
 
 /** Luz de canto: la línea clara del lado que mira a la luz. Es lo que da el volumen. */
 const luz = (d, c = FILO, w = 1.6, op = .92) =>
@@ -178,7 +205,7 @@ function hash32(s) {
 const normalizar = (t) =>
   String(t ?? "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036F]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9 ]+/g, " ")
     .replace(/\s+/g, " ")
@@ -258,13 +285,13 @@ const ICONOS = {
     ${forma("M46 8 L54 8 L56 92 L44 92 Z", a.g("madera", "h"), 1.9)}
     ${luz("M47.6 12 L49 90", L_MADERA, 1.6, .55)}
     ${sombra("M53 14 L54.6 90", 2, .5)}
-    ${forma("M50 14 L38 12 Q16 20 13 34 Q17 50 36 56 L50 54 Z", a.g("hierro"), 2.1)}
-    ${luz("M14.6 33 Q18 21 38 13.6", FILO, 2.4)}
-    ${luz("M14 36 Q18 48 34 54", FILO, 1.8, .6)}
-    ${sombra("M42 15 Q34 34 40 54", 2.4, .45)}
-    ${forma("M44 12 L54 12 L54 56 L44 54 Z", a.g("hierroviejo", "h"), 1.8)}
-    ${luz("M45.6 14 L45.6 53", L_PIEDRA, 1.4, .5)}
-    ${remache(49, 20, 2.2)}${remache(49, 48, 2.2)}
+    ${forma("M49 15 L25 9 Q6 30 29 60 Q42 50 42 35 Q42 24 49 21 Z", a.g("hierro"), 2.1)}
+    ${luz("M25 11 Q8 30 28 57", FILO, 3)}
+    ${sombra("M40 24 Q39 40 42 50", 2.4, .45)}
+    ${sombra("M31 20 Q26 36 34 52", 2, .3)}
+    ${forma("M45 14 L55 14 L55 32 L45 32 Z", a.g("hierroviejo", "h"), 1.8)}
+    ${luz("M46.4 16 L46.4 30", L_PIEDRA, 1.4, .55)}
+    ${remache(50, 18, 2.2)}${remache(50, 28, 2.2)}
     ${forma("M43 88 L57 88 L57.5 95 L42.5 95 Z", a.g("cuerooscuro", "h"), 1.7)}`),
 
   /** Maza de armas: cabeza con aletas, astil corto. Contundente, de herrero de pueblo. */
@@ -283,11 +310,12 @@ const ICONOS = {
   lanza: (a) => giro(-26, `
     ${forma("M47.5 26 L52.5 26 L53.5 94 L46.5 94 Z", a.g("madera", "h"), 1.8)}
     ${luz("M48.7 30 L49.4 92", L_MADERA, 1.4, .55)}
-    ${forma("M50 5 Q59 18 57 32 L43 32 Q41 18 50 5 Z", a.g("hierro", "h"), 1.9)}
-    ${luz("M43.6 30 Q42 18 49.6 6.4", FILO, 1.6)}
-    ${sombra("M55.4 30 Q57 19 51 8", 2.2, .45)}
-    ${forma("M44 30 L56 30 L55 38 L45 38 Z", a.g("hierroviejo", "h"), 1.7)}
-    ${trazo("M45 41 Q50 45 55 41", a.g("lino"), 3)}
+    ${forma("M50 3 Q62 18 59 34 L41 34 Q38 18 50 3 Z", a.g("hierro", "h"), 1.9)}
+    ${luz("M41.6 32 Q39 18 49.6 4.4", FILO, 2)}
+    ${luz("M46 12 L46 32", FILO, 1.4, .5)}
+    ${sombra("M57 32 Q59.6 19 51 6", 2.4, .45)}
+    ${forma("M43 32 L57 32 L55.5 40 L44.5 40 Z", a.g("hierroviejo", "h"), 1.7)}
+    ${trazo("M45 43 Q50 47 55 43", a.g("soga"), 3)}
     ${forma("M46 92 L54 92 L54.5 96 L45.5 96 Z", a.g("hierroviejo", "h"), 1.5)}`),
 
   /** Bastón nudoso: madera curva, nudos y un trapo liado en el agarre. */
@@ -325,10 +353,8 @@ const ICONOS = {
       return `<g transform="rotate(${ang} 50 88) translate(${dx} 0)">
         ${forma("M50 8 L55 22 L45 22 Z", a.g("hierro", "h"), 1.6)}
         ${luz("M49.6 9.6 L46 21", FILO, 1.4)}
-        <path d="M50 20 L50 90" stroke="${T}" stroke-width="5.4" stroke-linecap="round"/>
-        <path d="M50 20 L50 90" stroke="${a.g("madera", "h")}" stroke-width="3.2"
-              stroke-linecap="round"/>
-        ${luz("M48.8 24 L48.8 86", L_MADERA, 1, .45)}
+        ${forma("M47.7 20 L52.3 20 L52.3 90 L47.7 90 Z", a.g("madera", "h"), 1.8)}
+        ${luz("M49 24 L49 86", L_MADERA, 1, .45)}
         ${forma(`M50 62 Q42 66 ${41 + p} 78 Q46 76 50 72 Z`, a.g("lino"), 1.5)}
         ${forma(`M50 62 Q58 66 ${59 - p} 78 Q54 76 50 72 Z`, a.g("lana", "di"), 1.5)}
       </g>`;
@@ -483,9 +509,9 @@ const ICONOS = {
     ${luz("M36.4 51 Q33.6 58 34.6 65", "#8A6A28", 1.6, .6)}
     ${sombra("M68 48 Q72 58 69 70", 2.6, .5)}
     ${forma("M39 30 Q50 22 61 30 L57 40 Q50 35 43 40 Z", a.g("laton", "h"), 1.8)}
-    ${forma("M50 20 Q60 24 60 31 Q56 37 50 37 Q44 37 40 31 Q40 24 50 20 Z",
-            a.g("piedra"), 1.9)}
-    ${luz("M44 25 Q41.4 28.6 42 32.4", L_PIEDRA, 1.6, .7)}
+    ${forma("M50 16 L61 26 L57 38 L43 38 L39 26 Z", a.g("sangre"), 1.9)}
+    ${luz("M50 18.6 L41.4 26.4", "#D0724E", 2, .8)}
+    ${luz("M41 28 L44 36", "#D0724E", 1.5, .5)}
     ${remache(38, 36, 1.8)}${remache(62, 36, 1.8)}`,
 
   /**
@@ -518,22 +544,19 @@ const ICONOS = {
    * palos van anchos (13 unidades) porque a 40 px una cruz de línea fina desaparece.
    */
   simbolo: (a) => {
-    const t = a.rr(-5, 5);
-    const brazo = `M12 ${n(36 + t / 2)} L88 ${n(36 - t / 2)}`;
+    // El brazo va SIEMPRE torcido (nunca t = 0): es una cruz atada a mano, y además una caja de
+    // altura cero no pintaría el degradado.
+    const t = (a.r() < .5 ? -1 : 1) * a.rr(2.5, 6);
     return `
-      ${trazo("M50 6 L50 94", a.g("madera", "h"), 13)}
-      ${trazo(brazo, a.g("madera", "h"), 11)}
-      ${luz("M45.4 12 L45.4 90", L_MADERA, 2.2, .55)}
-      ${luz(`M15 ${n(32.4 + t / 2)} L85 ${n(32.4 - t / 2)}`, L_MADERA, 2, .5)}
-      ${sombra("M55 14 L55 90", 2.4, .45)}
-      <circle cx="14" cy="${n(36 + t / 2)}" r="5" fill="${a.g("maderaoscura")}" stroke="${T}"
-              stroke-width="1.6"/>
-      <circle cx="86" cy="${n(36 - t / 2)}" r="5" fill="${a.g("maderaoscura")}" stroke="${T}"
-              stroke-width="1.6"/>
-      ${forma("M39 26 L61 26 L61 48 L39 48 Z", a.g("lino", "h"), 1.9)}
-      ${sombra("M43 28 L43 46 M50 27 L50 47 M57 28 L57 46", 2, .55)}
-      ${luz("M40.6 28 L40.6 46", L_LINO, 1.4, .6)}
-      ${trazo("M59 46 Q68 56 62 66", a.g("lino"), 2.6)}`;
+      ${forma("M44 6 L56 6 L56 94 L44 94 Z", a.g("madera", "h"), 2)}
+      ${trazo(`M16 ${n(34 + t / 2)} L84 ${n(34 - t / 2)}`, a.g("madera", "h"), 9)}
+      ${luz("M45.8 12 L45.8 90", L_MADERA, 2.2, .55)}
+      ${luz(`M19 ${n(31 + t / 2)} L81 ${n(31 - t / 2)}`, L_MADERA, 1.8, .5)}
+      ${sombra("M54.6 14 L54.6 90", 2.4, .45)}
+      ${forma("M42 26 L58 26 L58 44 L42 44 Z", a.g("soga", "h"), 1.8)}
+      ${sombra("M45 28 L45 42 M50 27 L50 43 M55 28 L55 42", 2, .5)}
+      ${luz("M43.4 28 L43.4 42", "#EEDCA8", 1.4, .55)}
+      ${trazo("M56 42 Q64 52 58 62", a.g("soga"), 2.6)}`;
   },
 
   // ── Luz y fuego ────────────────────────────────────────────────────────────────────────────
@@ -590,8 +613,7 @@ const ICONOS = {
     <path d="M32 34 L68 34 L72 74 L28 74 Z" fill="none" stroke="${a.g("hierroviejo")}"
           stroke-width="3.4"/>
     <path d="M32 34 L68 34 L72 74 L28 74 Z" fill="none" stroke="${T}" stroke-width="1.3"/>
-    <path d="M50 34 L50 74" stroke="${T}" stroke-width="3.2"/>
-    <path d="M50 34 L50 74" stroke="${a.g("hierroviejo", "h")}" stroke-width="2"/>
+    ${forma("M48.4 34 L51.6 34 L51.6 74 L48.4 74 Z", a.g("hierroviejo", "h"), 1.6)}
     ${forma("M26 72 L74 72 L78 86 L22 86 Z", a.g("hierro", "h"), 2)}
     ${luz("M28 74.6 L72 74.6", FILO, 1.5, .6)}
     ${remache(30, 80)}${remache(70, 80)}`,
@@ -606,14 +628,15 @@ const ICONOS = {
     return `
       <circle cx="52" cy="24" r="22" fill="${a.g("resplandor")}"/>
       ${chispas}
-      ${forma("M14 52 L34 40 L52 46 L56 66 L38 80 L18 72 Z", a.g("piedra"), 2.2)}
-      ${luz("M16 52.6 L33.6 41.6 L51 47.4", L_PIEDRA, 2.2, .85)}
-      ${sombra("M54 50 L54.6 65 L38 77", 2.6, .5)}
-      ${sombra("M24 56 L40 50 L44 62 L30 70 Z", 1.8, .4)}
-      ${forma("M58 40 Q80 36 86 52 Q88 66 74 72 Q78 58 68 52 Q62 48 58 52 Z",
-              a.g("hierro"), 2.1)}
-      ${luz("M60 42.6 Q78 39 84 51", FILO, 2, .85)}
-      ${sombra("M74 69 Q76 58 68 51", 2.2, .5)}`;
+      ${forma("M12 54 L30 38 L50 44 L54 68 L34 82 L16 74 Z", a.g("piedra"), 2.3)}
+      ${luz("M14 54.6 L29.6 39.6 L49 45.4", L_PIEDRA, 2.4, .85)}
+      ${sombra("M52 48 L52.6 67 L34 79", 2.8, .5)}
+      ${sombra("M26 52 L40 62", 2, .35)}
+      ${forma("M52 34 L86 34 Q92 52 88 66 Q80 80 64 80 Q76 66 74 54 Q70 42 52 44 Z",
+              a.g("hierro"), 2.2)}
+      ${luz("M54 36 L84 36", FILO, 2.6, .9)}
+      ${luz("M54 42 Q71 41 74 54", FILO, 1.8, .6)}
+      ${sombra("M86 38 Q90 54 86 65 L66 78", 2.6, .5)}`;
   },
 
   // ── Consumibles ────────────────────────────────────────────────────────────────────────────
@@ -657,38 +680,42 @@ const ICONOS = {
    * con el color claro y la mancha vieja.
    */
   vendas: (a) => `
-    ${forma("M40 30 Q76 26 84 40 Q90 54 78 62 L52 74 L44 58 L66 48 Q74 44 68 40 Q60 36 44 42 Z",
+    ${forma("M44 18 Q80 14 88 32 Q94 52 74 60 L48 72 L38 52 L62 42 Q72 38 66 32 Q56 26 46 32 Z",
             a.g("lino", "v"), 2.1)}
-    ${luz("M42 32.6 Q74 29 82 41", L_LINO, 2, .7)}
-    ${sombra("M46 57 L66 49", 2, .45)}
-    <path d="M62 62 Q72 58 76 64 Q70 70 60 68 Z" fill="${a.g("sangre")}" opacity=".75"/>
-    ${forma("M14 48 Q14 24 40 24 Q66 24 66 48 Q66 72 40 72 Q14 72 14 48 Z", a.g("lino"), 2.3)}
-    ${luz("M18 44 Q19 28 38 27", L_LINO, 2.6, .9)}
-    ${sombra("M62 44 Q62 68 40 69.4", 2.8, .5)}
-    <ellipse cx="40" cy="48" rx="13" ry="13" fill="none" stroke="${SOM}" stroke-width="2.2"
+    ${luz("M46 20.6 Q78 17 86 33", L_LINO, 2.2, .8)}
+    ${sombra("M41 52 L62 43 M48 70 L74 58", 2.2, .45)}
+    <path d="M60 52 Q78 46 84 56 Q74 66 58 62 Z" fill="${a.g("sangre")}" opacity=".8"/>
+    <path d="M46 66 Q54 62 58 68 Q52 73 44 71 Z" fill="${a.g("sangre")}" opacity=".55"/>
+    ${forma("M8 60 Q8 34 34 34 Q60 34 60 60 Q60 86 34 86 Q8 86 8 60 Z", a.g("lino"), 2.3)}
+    ${luz("M12 56 Q13 39 32 38", L_LINO, 2.8, .9)}
+    ${sombra("M56 56 Q56 82 34 83.4", 2.8, .5)}
+    <ellipse cx="34" cy="60" rx="18" ry="18" fill="none" stroke="${SOM}" stroke-width="2.2"
+             opacity=".5"/>
+    <ellipse cx="34" cy="60" rx="11" ry="11" fill="none" stroke="${SOM}" stroke-width="2.2"
              opacity=".6"/>
-    <ellipse cx="40" cy="48" rx="6.4" ry="6.4" fill="${a.g("lino", "di")}" stroke="${T}"
+    <ellipse cx="34" cy="60" rx="5.4" ry="5.4" fill="${a.g("lino", "di")}" stroke="${T}"
              stroke-width="1.8"/>
-    ${sombra("M24 34 Q40 26 56 34", 2.2, .3)}`,
+    ${sombra("M16 44 Q34 36 52 44", 2.2, .3)}`,
 
   /**
    * Hierbas: manojo atado, seco. Cuatro tallos GORDOS con hojas grandes; con seis finos era un
    * arañazo verde. La inclinación de cada tallo sale de la semilla.
    */
   hierbas: (a) => {
-    const tallos = [0, 1, 2, 3].map((i) => {
-      const x = 16 + i * 22 + a.rr(-3, 3), y = a.rr(8, 22);
-      const mx = n((50 + x) / 2 + (x < 50 ? -6 : 6));
-      const hoja = (lado) => {
-        const sx = n(x + (50 - x) * .3), sy = n(y + 20);
-        return `<path d="M${sx} ${sy} q${lado * 13} -3 ${lado * 15} 9
-                         q${lado * -12} 3 ${lado * -15} -9 Z" fill="${a.g("hoja")}"
-                  stroke="${T}" stroke-width="1.4"/>`;
-      };
-      return trazo(`M50 68 Q${mx} ${n(y + 26)} ${n(x)} ${n(y)}`, a.g("hoja", "v"), 5)
-        + hoja(i % 2 ? 1 : -1)
-        + `<ellipse cx="${n(x)}" cy="${n(y)}" rx="4" ry="5.4" fill="${a.g("hoja")}"
-             stroke="${T}" stroke-width="1.4"/>`;
+    const tallos = [0, 1, 2].map((i) => {
+      const x = 20 + i * 30 + a.rr(-4, 4), y = a.rr(8, 18);
+      const mx = n((50 + x) / 2 + (x < 50 ? -8 : 8));
+      const lado = i === 1 ? 1 : x < 50 ? -1 : 1;
+      // Hoja grande a media altura y capullo en la punta: a 40 px las hojas pequeñas se borran.
+      const sx = n(x + (50 - x) * .34), sy = n(y + 22);
+      const hoja = `<path d="M${sx} ${sy} q${n(lado * 20)} -6 ${n(lado * 23)} 12
+                             q${n(lado * -19)} 5 ${n(lado * -23)} -12 Z"
+                      fill="${a.g("hoja")}" stroke="${T}" stroke-width="1.6"/>`;
+      return trazo(`M50 66 Q${mx} ${n(y + 28)} ${n(x)} ${n(y)}`, a.g("hoja", "v"), 6.5)
+        + hoja
+        + `<ellipse cx="${n(x)}" cy="${n(y)}" rx="6" ry="8" fill="${a.g("hoja")}"
+             stroke="${T}" stroke-width="1.6"/>`
+        + luz(`M${n(x - 3.4)} ${n(y + 2)} q1 6 2 9`, "#C4D48A", 1.6, .6);
     }).join("");
     return `
       ${tallos}
@@ -839,8 +866,7 @@ const ICONOS = {
     ${forma("M54 46 L60 46 L60 66 L54 66 Z", a.g("cuero", "h"), 1.7)}
     ${forma("M38 58 L48 58 L48 66 L38 66 Z", a.g("laton", "h"), 1.6)}
     ${forma("M52 58 L62 58 L62 66 L52 66 Z", a.g("laton", "h"), 1.6)}
-    ${trazo("M30 26 Q20 14 34 10", a.g("cuerooscuro"), 3.4)}
-    ${trazo("M70 26 Q80 14 66 10", a.g("cuerooscuro"), 3.4)}
+    ${trazo("M40 20 Q50 8 60 20", a.g("cuerooscuro"), 4)}
     ${sombra("M32 70 Q50 78 68 70", 2, .4)}`,
 
   /** Saco: costal de lino atado por el cuello. Sal, harina, grano. */
@@ -854,14 +880,19 @@ const ICONOS = {
     ${trazo("M32 30 Q50 38 68 30", a.g("cuerooscuro"), 3.4)}
     ${trazo("M66 32 Q76 36 72 44", a.g("cuerooscuro"), 2.6)}`,
 
-  /** Manta enrollada, atada con dos correas. */
+  /**
+   * Manta enrollada, atada con dos correas. Lleva dos franjas tejidas: sin ellas el rollo se leía
+   * como un tubo de metal, porque el degradado fuerte hace de reflejo.
+   */
   manta: (a) => `
-    ${forma("M18 32 L82 32 Q90 50 82 68 L18 68 Q10 50 18 32 Z", a.g("lana", "v"), 2.2)}
-    ${luz("M20 36 L80 36", L_LANA, 2.4, .8)}
-    ${sombra("M20 63 L80 63", 2.6, .5)}
-    <ellipse cx="18" cy="50" rx="9" ry="18" fill="${a.g("lana")}" stroke="${T}"
+    ${forma("M18 30 L82 30 Q90 50 82 70 L18 70 Q10 50 18 30 Z", a.g("lana", "v"), 2.2)}
+    ${luz("M20 34 L80 34", L_LANA, 2.4, .8)}
+    ${sombra("M20 65 L80 65", 2.6, .5)}
+    <path d="M22 40 L84 40" stroke="#3E4030" stroke-width="3.4" opacity=".8"/>
+    <path d="M22 58 L84 58" stroke="#3E4030" stroke-width="2.4" opacity=".7"/>
+    <ellipse cx="18" cy="50" rx="9" ry="20" fill="${a.g("lana")}" stroke="${T}"
              stroke-width="2.2"/>
-    <ellipse cx="18" cy="50" rx="5" ry="11" fill="none" stroke="${SOM}" stroke-width="1.8"
+    <ellipse cx="18" cy="50" rx="5" ry="11.6" fill="none" stroke="${SOM}" stroke-width="1.8"
              opacity=".55"/>
     <ellipse cx="18" cy="50" rx="1.8" ry="4" fill="${SOM}" opacity=".6"/>
     ${luz("M13 42 Q10.6 50 12.4 58", L_LANA, 1.8, .6)}
@@ -989,11 +1020,11 @@ const ICONOS = {
     ${sombra("M36 40 Q32 62 38 84 M64 40 Q68 62 62 84", 2, .35)}
     ${trazo("M24 52 Q50 60 76 52", a.g("cuerooscuro"), 3.6)}
     ${trazo("M50 30 Q44 58 50 88", a.g("cuerooscuro"), 3.6)}
-    ${forma("M43 24 Q50 32 57 24 Q62 28 57 34 Q50 39 43 34 Q38 28 43 24 Z",
-            a.g("lino", "hi"), 1.9)}
-    ${trazo("M45 25 Q41 19 35 21", a.g("cuerooscuro"), 2.4)}
-    ${trazo("M55 25 Q59 19 65 21", a.g("cuerooscuro"), 2.4)}
-    ${luz("M44.6 26 Q42 23 37.6 22", L_CUERO, 1.3, .5)}`,
+    ${forma("M50 30 Q38 18 31 26 Q37 34 50 32 Z", a.g("lino", "h"), 1.8)}
+    ${forma("M50 30 Q62 18 69 26 Q63 34 50 32 Z", a.g("lino", "hi"), 1.8)}
+    ${forma("M50 24 Q57 27 56 33 Q50 37 44 33 Q43 27 50 24 Z", a.g("lino"), 1.8)}
+    ${luz("M46 25.6 Q43.6 29 44.6 33", L_LINO, 1.4, .6)}
+    ${luz("M34 25 Q40 22 47 28", L_LINO, 1.3, .5)}`,
 };
 
 // ── Categorías ────────────────────────────────────────────────────────────────────────────────
@@ -1083,8 +1114,10 @@ const REGLAS = [
   [/\bescudo|\brodela|\bpavesa|\badarga|\bbroquel/, "escudo"],
   [/\bsimbolo|\bicono sagrado|\brelicario|\bcruz\b|\bcrucifijo/, "simbolo"],
   [/\bcapucha|\bcapuz|\bcaperuza|\bembozo/, "capucha"],
-  [/\bcasco|\byelmo|\bcapacete|\bbacinete|\bmorrion|\bgorro|\bsombrero|\bdiadema|\bcorona/, "casco"],
-  [/\bespada|\bestoque|\bsable|\bmandoble|\bcimitarra|\bflorete|\bespadon|\bacero\b/, "espada"],
+  [/\bcasco|\byelmo|\bcapacete|\bbacinete|\bmorrion/, "casco"],
+  [/\bgorro|\bsombrero|\bdiadema|\bcorona|\bcofia/, "casco"],
+  // Sin «acero» a secas: «cota de acero» tiene que caer en coraza, y esta regla va antes.
+  [/\bespada|\bestoque|\bsable|\bmandoble|\bcimitarra|\bflorete|\bespadon/, "espada"],
   [/\bdaga|\bpunal|\bcuchillo|\bnavaja|\bestilete/, "daga"],
   [/\bhacha|\bhachuela|\bsegur\b|\bdestral/, "hacha"],
   [/\bmaza\b|\bmazas\b|\bgarrote|\bporra\b|\bmangual|\bclava\b/, "maza"],
@@ -1099,7 +1132,8 @@ const REGLAS = [
   [/\bcota\b|\bcamisote|\bmalla\b|\bcoraza|\bpeto\b|\bbrigantina|\bloriga/, "coraza"],
   [/\bjubon|\bchaleco|\barmadura|\bcuero\b|\bpechera|\btachonad/, "coraza"],
   [/\banillo|\bsortija|\balianza\b/, "anillo"],
-  [/\bamuleto|\bcolgante|\btalisman|\bmedallon|\bdije\b|\bcamafeo|\bgema\b|\bpiedra de/, "amuleto"],
+  // Aquí NO va «piedra de …»: «piedra de afilar» es una piedra, no un colgante.
+  [/\bamuleto|\bcolgante|\btalisman|\bmedallon|\bdije\b|\bcamafeo|\bgema\b/, "amuleto"],
   [/\bantorcha|\btea\b|\bteas\b|\bhachon/, "antorcha"],
   [/\bvelas?\b|\bcirio|\bcandela|\bpabilo/, "vela"],
   [/\bfarol|\blinterna|\bcandil|\blampara|\bquinque/, "farol"],
@@ -1156,13 +1190,13 @@ export const CATEGORIAS = Object.keys(CAT);
  */
 export function iconoObjeto(nombre, opciones = {}) {
   const { clave } = categoriaDe(nombre);
-  const t = normalizar(nombre);
-  const semilla = opciones.semilla != null ? opciones.semilla >>> 0 : hash32(t || clave);
+  const huella = hash32(normalizar(nombre) || clave);
+  const semilla = opciones.semilla != null ? opciones.semilla >>> 0 : huella;
 
   // Prefijo de los ids: categoría + hash del nombre. Determinista a propósito (ver regla 3 de la
   // cabecera). `sufijo` se limpia porque va dentro de un id y lo pone quien llama.
   const extra = String(opciones.sufijo ?? "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
-  const pref = `ob-${clave}-${hash32(t || clave).toString(36)}${extra ? `-${extra}` : ""}`;
+  const pref = `ob-${clave}-${huella.toString(36)}${extra ? `-${extra}` : ""}`;
 
   const cuerpo = (ICONOS[clave] ?? ICONOS.fardo)(pincel(pref, semilla));
 
