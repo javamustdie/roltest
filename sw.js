@@ -7,13 +7,14 @@
  *
  * Sube VERSION al cambiar cualquier fichero de app/ para forzar la actualización.
  */
-const VERSION = "corvalar-v2";
+const VERSION = "corvalar-v3";
 
 const BASE = [
   "./",
   "./index.html",
   "./app.js",
   "./campana.js",
+  "./retratos.js",
   "./manifest.webmanifest",
   "./icono.svg",
 ];

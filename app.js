@@ -9,6 +9,7 @@
  */
 
 import { CAMPANAS, CAMPANA_POR_DEFECTO } from "./campana.js";
+import { RETRATOS } from "./retratos.js";
 
 // ── Voces (mismos ids que scripts/lib.mjs) ───────────────────────────────────
 const VOZ = {
@@ -40,6 +41,8 @@ REGLAS DE VOZ (manda esto sobre todo lo demás):
 - Anuncia la dificultad ANTES de que tiren, en la misma frase.
 - Cuando canten un resultado, narra la consecuencia, no la mecánica.
 - Las descripciones ambientales largas ya están grabadas: tú improvisas y adjudicas.
+- TERMINA SIEMPRE LAS FRASES. Antes que dejar una a medias, di menos. Si un tema no cabe,
+  cierra lo que estás diciendo y ofrécete a seguir en el turno siguiente.
 
 SISTEMA: 5e simplificado, niveles 1-4, competencia +2.
 d20 + modificador + competencia contra dificultad: fácil 10, media 13, difícil 16,
@@ -69,7 +72,12 @@ Fallar una prueba social significa NO obtener información, nunca obtener inform
  */
 const GUIA_CERO = `
 ESTÁS EN SESIÓN CERO: no se juega ninguna escena todavía, se monta la mesa. Sigue este orden
-y NO te lo salgas. Una cosa por turno de voz, y espera respuesta antes de seguir.
+y NO te lo salgas. UNA COSA POR TURNO, y espera respuesta antes de seguir.
+
+AQUÍ SE LEVANTA EL LÍMITE DE TRES FRASES: los pasos 2, 3 y 4 son explicaciones y pueden
+ocupar un párrafo. Pero sigue mandando lo de terminar las frases, y sobre todo NO ENCADENES
+DOS PASOS EN EL MISMO TURNO. Haz el paso, pregunta si hay dudas, y para. Si notas que se te
+está haciendo largo, corta y di que sigues cuando te digan.
 
 1. SEGURIDAD, ANTES DE DESCRIBIR NADA. Avisa de que hay folk horror con niños en peligro y
    cosas duras. Explica líneas (no aparecen), velos (fuera de cámara) y que cualquiera puede
@@ -539,9 +547,13 @@ function pintarEditor() {
         <label>Nombre<input data-e="pj" data-i="${i}" value="${esc(p.pj)}" autocomplete="off"></label>
         <label>Clase y nivel<input data-e="clase" data-i="${i}" value="${esc(p.clase)}" autocomplete="off"></label>
       </div>
-      <label>Retrato <small>— el id que te diga el DJ; vacío deja las iniciales</small>
-        <input data-e="retrato" data-i="${i}" value="${esc(p.retrato ?? "")}" autocomplete="off"
-               placeholder="p. ej. javamustdie"></label>
+      <label>Retrato${RETRATOS.length ? "" : " <small>— aún no hay ninguno generado</small>"}
+        <select data-e="retrato" data-i="${i}">
+          <option value=""${p.retrato ? "" : " selected"}>— sin retrato, con iniciales —</option>
+          ${RETRATOS.map(
+            (r) => `<option value="${esc(r)}"${p.retrato === r ? " selected" : ""}>${esc(r)}</option>`,
+          ).join("")}
+        </select></label>
       <div class="numeros">
         <label>PG máx<input data-e="pgMax" data-i="${i}" type="number" inputmode="numeric" min="1" max="200" value="${p.pgMax}"></label>
         <label>PG ahora<input data-e="pg" data-i="${i}" type="number" inputmode="numeric" min="0" max="200" value="${p.pg}"></label>
@@ -559,8 +571,8 @@ $("#editar-grupo").addEventListener("click", () => {
   if (!ed.hidden) pintarEditor();
 });
 
-$("#editor-lista").addEventListener("input", (ev) => {
-  const c = ev.target.closest("input[data-e]");
+const cambioEditor = (ev) => {
+  const c = ev.target.closest("[data-e]");
   if (!c) return;
   const p = E.partida[+c.dataset.i];
   if (!p) return;
@@ -568,8 +580,9 @@ $("#editor-lista").addEventListener("input", (ev) => {
   if (c.dataset.e === "pj" || c.dataset.e === "clase") {
     p[c.dataset.e] = c.value;
   } else if (c.dataset.e === "retrato") {
-    // El valor va a una ruta de fichero, así que se limpia a lo que puede ser un nombre.
-    p.retrato = c.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    // El valor sale del desplegable, que se genera de los ficheros que existen de verdad; se
+    // valida igualmente contra la lista para que un estado guardado raro no cuele una ruta.
+    p.retrato = RETRATOS.includes(c.value) ? c.value : "";
   } else {
     // Un campo numérico vacío llega como "" y `Number("")` es 0: sin este guardado se
     // pondría el personaje a 0 PG máximos en cuanto alguien borra el número para reescribirlo.
@@ -580,7 +593,10 @@ $("#editor-lista").addEventListener("input", (ev) => {
   }
   guardarEstado();
   pintarGrupo(); pintarBanda(); // el editor no se repinta: reescribirlo perdería el foco al teclear
-});
+};
+// «input» para los campos de texto y número, «change» para el desplegable del retrato.
+$("#editor-lista").addEventListener("input", cambioEditor);
+$("#editor-lista").addEventListener("change", cambioEditor);
 
 $("#editor-lista").addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-borrar]");
@@ -952,7 +968,7 @@ async function turno(blob, segundos, textoEscrito) {
     let respuesta = "";
     let pendiente = "";
 
-    await claudeStream(dicho, (t) => {
+    const cortado = await claudeStream(dicho, (t) => {
       respuesta += t;
       pendiente += t;
       const corte = pendiente.search(/[.!?…]["»]?\s/);
@@ -967,6 +983,9 @@ async function turno(blob, segundos, textoEscrito) {
 
     E.charla.push({ de: "dj", texto: respuesta.trim() || "(silencio)" });
     guardarEstado(); pintarCharla(); pintarGasto();
+    if (cortado) {
+      avisar('El DJ se ha quedado a media frase por el límite de longitud. Dile «sigue» y remata.');
+    }
 
     modo("hablando", "Hablando… · toca para cancelar");
     await cola.terminar();
@@ -981,8 +1000,12 @@ async function turno(blob, segundos, textoEscrito) {
   }
 }
 
-/** Llama a Claude en streaming y va entregando el texto por trozos. */
+/**
+ * Llama a Claude en streaming y va entregando el texto por trozos.
+ * Devuelve true si la respuesta se cortó por el límite de longitud.
+ */
 async function claudeStream(pregunta, alRecibir) {
+  let cortado = false;
   const l = actual();
   const grupo = E.partida
     .map((p) => `${p.pj} (${p.clase}, ${p.pg}/${p.pgMax} PG${p.heridas.length ? ", herido: " + p.heridas.join(" y ") : ""})`)
@@ -1014,7 +1037,7 @@ async function claudeStream(pregunta, alRecibir) {
 
   const cuerpo = {
     model: A.modelo,
-    max_tokens: 400,
+    max_tokens: A.sesionCero ? 1400 : 700,
     stream: true,
     system: [
       // Las dos partes estables van cacheadas; el contexto de escena cambia cada turno.
@@ -1070,12 +1093,14 @@ async function claudeStream(pregunta, alRecibir) {
         E.gasto.entrada += ev.message?.usage?.input_tokens ?? 0;
       } else if (ev.type === "message_delta") {
         E.gasto.salida += ev.usage?.output_tokens ?? 0;
+        if (ev.delta?.stop_reason === "max_tokens") cortado = true;
       }
     }
   }
   } finally {
     lim.listo();
   }
+  return cortado;
 }
 
 /** Convierte frases en voz y las reproduce en orden, sin solaparse. */
