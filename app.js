@@ -752,6 +752,17 @@ let A = cargar(CLAVE_AJUSTES) ?? {
 };
 if (!CAMPANAS[A.aventura]) A.aventura = CAMPANA_POR_DEFECTO;
 
+// Migración de una sola vez: el modelo de voz rápido era el de por defecto, y en mesa se dijo
+// que la voz sonaba mal. Cambiar el valor por defecto no arregla un dispositivo que ya tiene
+// «rápido» guardado, así que se sube al de calidad —el mismo que usa la narración pregenerada—
+// y se marca. La marca es lo que hace que esto pase UNA vez: si después se elige «rápido» a
+// mano, se respeta y no se vuelve a tocar.
+if (!A.vozTocada) {
+  A.vozModelo = "eleven_multilingual_v2";
+  A.vozTocada = true;
+  localStorage.setItem(CLAVE_AJUSTES, JSON.stringify(A));
+}
+
 let CAMPANA = CAMPANAS[A.aventura];
 
 const porDefecto = () => ({
@@ -1702,6 +1713,7 @@ $("#guardar").addEventListener("click", () => {
   A.claveCl = $("#clave-cl").value.trim();
   A.modelo = $("#modelo").value;
   A.vozModelo = $("#voz-modelo").value;
+  A.vozTocada = true;
   A.sesionCero = $("#sesion-cero").checked;
   A.cachondeo = $("#cachondeo").checked;
   A.diarizar = $("#diarizar").checked;
