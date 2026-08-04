@@ -69,6 +69,9 @@ const MAT = {
   cuero:      { paradas: [["#A2763F", 0], ["#7B542B", .36], ["#50361B", .72], ["#2A1B0D", 1]] },
   cuerooscuro:{ paradas: [["#7A5530", 0], ["#523818", .42], ["#33200D", .78], ["#1A1007", 1]] },
   lino:       { paradas: [["#CDC8A6", 0], ["#948F70", .4], ["#605C45", .74], ["#37341F", 1]] },
+  // El cáñamo va más tostado que el lino a propósito: el rollo de cuerda y el rollo de vendas
+  // tienen la misma forma, y a 40 px lo único que los separa es el color.
+  soga:       { paradas: [["#D6BE86", 0], ["#A28C54", .38], ["#6C5C30", .74], ["#3A3018", 1]] },
   lana:       { paradas: [["#9EA184", 0], ["#6C6F56", .4], ["#454833", .76], ["#22241A", 1]] },
   laton:      { paradas: [["#F0DCA8", 0], ["#C79A3E", .3], ["#8A6A28", .62], ["#4A3714", 1]] },
   sebo:       { paradas: [["#F2EBC8", 0], ["#D2C99C", .36], ["#9C946F", .72], ["#5E5940", 1]] },
@@ -246,17 +249,22 @@ const ICONOS = {
     ${forma("M42 87 L58 87 L58.5 92.5 L41.5 92.5 Z", a.g("hierroviejo", "h"), 1.7)}
     ${luz("M43.5 88.5 L43.2 91.5", L_PIEDRA, 1.3, .6)}`),
 
-  /** Hacha de leñador: cabeza de hierro a un lado, astil de madera con vetas. */
-  hacha: (a) => giro(16, `
-    ${forma("M47 12 L53 12 L54.5 90 L45.5 90 Z", a.g("madera", "h"), 1.8)}
-    ${luz("M48.4 16 L49.4 88", L_MADERA, 1.4, .55)}
-    ${sombra("M52.4 18 L53.4 88", 1.8, .5)}
-    ${forma("M48 14 Q26 16 15 32 Q22 43 30 46 Q40 50 49 48 Z", a.g("hierro"), 2)}
-    ${luz("M47 15.6 Q28 18 17.6 32.4", FILO, 1.8)}
-    ${sombra("M30 45 Q40 48.6 48 46.6", 2.2, .55)}
-    ${forma("M44 12 L52 12 L52 50 L44 48 Z", a.g("hierroviejo", "h"), 1.6)}
-    ${remache(48, 20, 2.2)}${remache(48, 42, 2.2)}
-    ${forma("M45 88 L55 88 L55.5 94 L44.5 94 Z", a.g("cuerooscuro", "h"), 1.6)}`),
+  /**
+   * Hacha de leñador: cabeza de hierro a un lado, astil de madera. La cabeza tiene que ser
+   * grande y con la barba marcada, o a 40 px se lee como una pala.
+   */
+  hacha: (a) => giro(18, `
+    ${forma("M46 8 L54 8 L56 92 L44 92 Z", a.g("madera", "h"), 1.9)}
+    ${luz("M47.6 12 L49 90", L_MADERA, 1.6, .55)}
+    ${sombra("M53 14 L54.6 90", 2, .5)}
+    ${forma("M50 14 L38 12 Q16 20 13 34 Q17 50 36 56 L50 54 Z", a.g("hierro"), 2.1)}
+    ${luz("M14.6 33 Q18 21 38 13.6", FILO, 2.4)}
+    ${luz("M14 36 Q18 48 34 54", FILO, 1.8, .6)}
+    ${sombra("M42 15 Q34 34 40 54", 2.4, .45)}
+    ${forma("M44 12 L54 12 L54 56 L44 54 Z", a.g("hierroviejo", "h"), 1.8)}
+    ${luz("M45.6 14 L45.6 53", L_PIEDRA, 1.4, .5)}
+    ${remache(49, 20, 2.2)}${remache(49, 48, 2.2)}
+    ${forma("M43 88 L57 88 L57.5 95 L42.5 95 Z", a.g("cuerooscuro", "h"), 1.7)}`),
 
   /** Maza de armas: cabeza con aletas, astil corto. Contundente, de herrero de pueblo. */
   maza: (a) => giro(-14, `
@@ -343,32 +351,42 @@ const ICONOS = {
     ${luz("M42 40.6 Q39.6 46 40 52", FILO, 1.6, .8)}
     ${remache(26, 20)}${remache(74, 20)}${remache(50, 78)}`,
 
-  /** Casco de nasal: bacinete tosco con banda de cejas y protector de nariz. */
+  /**
+   * Casco cerrado: bacinete con banda de cejas, dos ranuras de visión y nasal. El casco abierto
+   * (solo la cúpula) se leía como una seta: hace falta la cara entera para que se entienda.
+   */
   casco: (a) => `
-    ${forma("M20 54 Q20 16 50 14 Q80 16 80 54 Z", a.g("hierro"), 2.2)}
-    ${luz("M24 50 Q24 20 47 17", FILO, 2.2, .85)}
-    ${sombra("M74 30 Q76 44 75.4 53", 2.6, .5)}
-    ${forma("M18 52 L82 52 L82 62 L18 62 Z", a.g("hierroviejo", "h"), 2)}
-    ${luz("M20 54 L80 54", L_PIEDRA, 1.4, .5)}
-    ${forma("M43 61 L57 61 L55 82 Q50 86 45 82 Z", a.g("hierro", "h"), 1.9)}
-    ${luz("M44.6 63 L46.4 81", FILO, 1.5, .8)}
-    <path d="M23 63.5 L41 63.5 L41 71 L25 71 Z" fill="#070804"/>
-    <path d="M77 63.5 L59 63.5 L59 71 L75 71 Z" fill="#070804"/>
-    ${luz("M23 63.4 L41 63.4", "#8E9377", 1.2, .5)}
-    ${luz("M59 63.4 L77 63.4", "#8E9377", 1.2, .5)}
-    ${remache(28, 57)}${remache(72, 57)}${remache(50, 20)}`,
+    ${forma("M18 52 Q18 12 50 10 Q82 12 82 52 L80 68 Q72 82 50 84 Q28 82 20 68 Z",
+            a.g("hierro"), 2.2)}
+    ${luz("M22 50 Q22 17 47 13", FILO, 2.6, .9)}
+    ${luz("M22 58 Q23 70 32 78", FILO, 1.8, .55)}
+    ${sombra("M78 30 Q79 62 70 76", 2.8, .5)}
+    ${forma("M16 46 L84 46 L84 58 L16 58 Z", a.g("hierroviejo", "h"), 2)}
+    ${luz("M18 48.4 L82 48.4", L_PIEDRA, 1.6, .6)}
+    <path d="M24 62 L44 62 L44 71 L27 71 Z" fill="#070804" stroke="${T}" stroke-width="1.4"/>
+    <path d="M76 62 L56 62 L56 71 L73 71 Z" fill="#070804" stroke="${T}" stroke-width="1.4"/>
+    ${luz("M25 62.4 L43.4 62.4", L_PIEDRA, 1.4, .55)}
+    ${luz("M57 62.4 L75 62.4", L_PIEDRA, 1.4, .55)}
+    ${forma("M44 57 L56 57 L54 80 Q50 84 46 80 Z", a.g("hierro", "h"), 1.9)}
+    ${luz("M45.6 60 L47.4 79", FILO, 1.6, .85)}
+    ${remache(26, 52)}${remache(74, 52)}${remache(50, 18)}`,
 
-  /** Capucha de cuero: la que se lleva en la turbera. El hueco de la cara es negro. */
+  /**
+   * Capucha de cuero, la que se lleva en la turbera. Lleva pico arriba y esclavina abajo: sin
+   * esas dos cosas era un huevo con un agujero. El hueco de la cara va negro del todo.
+   */
   capucha: (a) => `
-    ${forma("M50 10 Q78 16 82 52 Q84 74 74 88 L26 88 Q16 74 18 52 Q22 16 50 10 Z",
+    ${forma("M12 92 Q16 66 34 56 L66 56 Q84 66 88 92 Z", a.g("cuerooscuro"), 2.1)}
+    ${forma("M62 6 Q80 20 80 48 Q80 70 66 80 L34 80 Q20 70 20 48 Q22 18 62 6 Z",
             a.g("cuero"), 2.2)}
-    ${luz("M22 50 Q25 20 48 13", L_CUERO, 2.2, .75)}
-    ${sombra("M78 48 Q79 70 71 85", 2.6, .5)}
-    <path d="M50 26 Q66 34 63 60 Q59 78 50 82 Q41 78 37 60 Q34 34 50 26 Z" fill="#070804"
-          stroke="${T}" stroke-width="1.6"/>
-    ${luz("M38.4 52 Q36.4 34 49 27.4", "#8A6636", 1.8, .6)}
-    ${forma("M26 86 Q50 94 74 86 L76 92 Q50 99 24 92 Z", a.g("cuerooscuro", "h"), 1.8)}
-    ${trazo("M31 58 Q28 74 32 86", a.g("cuerooscuro"), 2.4)}`,
+    ${luz("M23 48 Q25 22 59 9", L_CUERO, 2.6, .85)}
+    ${sombra("M76 44 Q77 66 64 77", 2.8, .5)}
+    <path d="M50 28 Q66 36 63 58 Q58 74 50 78 Q42 74 37 58 Q34 36 50 28 Z" fill="#070804"
+          stroke="${T}" stroke-width="1.8"/>
+    ${luz("M38.4 52 Q36.4 36 49 29.4", "#8A6636", 2, .65)}
+    ${trazo("M26 62 Q22 78 26 90", a.g("cuerooscuro"), 2.6)}
+    ${trazo("M74 62 Q78 78 74 90", a.g("cuerooscuro"), 2.6)}
+    ${luz("M17 90 Q20 70 34 59", L_CUERO, 1.8, .5)}`,
 
   /** Cota de malla: torso con anillas. Las anillas son ruido a 40 px, así que van suaves. */
   coraza: (a) => {
@@ -478,21 +496,27 @@ const ICONOS = {
       ${trazo("M43 22 Q50 18 57 22", a.g("cuero"), 2.6)}`;
     },
 
-  /** Símbolo sagrado de pueblo: dos ramas atadas con cordel, no una cruz de orfebre. */
+  /**
+   * Símbolo sagrado de pueblo: dos ramas gordas atadas con cordel, no una cruz de orfebre. Los
+   * palos van anchos (13 unidades) porque a 40 px una cruz de línea fina desaparece.
+   */
   simbolo: (a) => {
-    const t = a.rr(-4, 4);
+    const t = a.rr(-5, 5);
+    const brazo = `M12 ${n(36 + t / 2)} L88 ${n(36 - t / 2)}`;
     return `
-      ${trazo("M50 8 L50 92", a.g("madera", "h"), 8)}
-      ${trazo(`M22 ${38 + t / 2} L78 ${38 - t / 2}`, a.g("madera", "h"), 7)}
-      ${luz("M47.2 12 L47.2 90", L_MADERA, 1.6, .5)}
-      ${luz(`M24 ${36 + t / 2} L76 ${36 - t / 2}`, L_MADERA, 1.5, .45)}
-      <circle cx="24" cy="${n(38 + t / 2)}" r="3" fill="${a.g("maderaoscura")}" stroke="${T}"
-              stroke-width="1.3"/>
-      <circle cx="76" cy="${n(38 - t / 2)}" r="3" fill="${a.g("maderaoscura")}" stroke="${T}"
-              stroke-width="1.3"/>
-      ${forma("M40 30 L60 30 L60 46 L40 46 Z", a.g("lino", "h"), 1.8)}
-      ${sombra("M43 32 L43 44 M50 31 L50 45 M57 32 L57 44", 1.6, .55)}
-      ${trazo("M58 44 Q64 52 60 60", a.g("lino"), 2.2)}`;
+      ${trazo("M50 6 L50 94", a.g("madera", "h"), 13)}
+      ${trazo(brazo, a.g("madera", "h"), 11)}
+      ${luz("M45.4 12 L45.4 90", L_MADERA, 2.2, .55)}
+      ${luz(`M15 ${n(32.4 + t / 2)} L85 ${n(32.4 - t / 2)}`, L_MADERA, 2, .5)}
+      ${sombra("M55 14 L55 90", 2.4, .45)}
+      <circle cx="14" cy="${n(36 + t / 2)}" r="5" fill="${a.g("maderaoscura")}" stroke="${T}"
+              stroke-width="1.6"/>
+      <circle cx="86" cy="${n(36 - t / 2)}" r="5" fill="${a.g("maderaoscura")}" stroke="${T}"
+              stroke-width="1.6"/>
+      ${forma("M39 26 L61 26 L61 48 L39 48 Z", a.g("lino", "h"), 1.9)}
+      ${sombra("M43 28 L43 46 M50 27 L50 47 M57 28 L57 46", 2, .55)}
+      ${luz("M40.6 28 L40.6 46", L_LINO, 1.4, .6)}
+      ${trazo("M59 46 Q68 56 62 66", a.g("lino"), 2.6)}`;
   },
 
   // ── Luz y fuego ────────────────────────────────────────────────────────────────────────────
@@ -637,30 +661,35 @@ const ICONOS = {
   },
 
   // ── Utensilios ─────────────────────────────────────────────────────────────────────────────
-  /** Cuerda: rollo de cáñamo con el chicote suelto y el trenzado marcado. */
+  /**
+   * Cuerda: rollo de cáñamo con el chicote suelto. Dos vueltas gordas y el trenzado bien marcado;
+   * con tres vueltas finas parecía un caracol.
+   */
   cuerda: (a) => {
-    const grosor = 8.4;
-    const vueltas = [26, 19, 12].map((r, i) =>
-      `<ellipse cx="48" cy="${52 + i * 2}" rx="${r}" ry="${n(r * .82)}" fill="none"
-         stroke="${T}" stroke-width="${grosor + 2.4}"/>` +
-      `<ellipse cx="48" cy="${52 + i * 2}" rx="${r}" ry="${n(r * .82)}" fill="none"
-         stroke="${a.g("lino", i % 2 ? "hi" : "h")}" stroke-width="${grosor}"/>`).join("");
-    // Trenzado: marcas cortas sobre la vuelta de fuera, con la fase de la semilla.
-    const fase = a.rr(0, 6);
-    const trenza = Array.from({ length: 14 }, (_, i) => {
-      const ang = ((i * 360) / 14 + fase) * Math.PI / 180;
-      const x = 48 + Math.cos(ang) * 26, y = 52 + Math.sin(ang) * 21.3;
-      const dx = Math.cos(ang) * 3.4, dy = Math.sin(ang) * 3.4;
-      return `<path d="M${n(x - dx - dy * .5)} ${n(y - dy + dx * .5)} L${n(x + dx + dy * .5)} ${n(y + dy - dx * .5)}"
-                stroke="${SOM}" stroke-width="1.6" opacity=".5"/>`;
+    // Trenzado: marcas cruzadas sobre la vuelta de fuera, con la fase de la semilla.
+    const fase = a.rr(0, 8);
+    const trenza = Array.from({ length: 13 }, (_, i) => {
+      const ang = ((i * 360) / 13 + fase) * Math.PI / 180;
+      const x = 46 + Math.cos(ang) * 30, y = 48 + Math.sin(ang) * 25;
+      const dx = Math.cos(ang) * 4.6, dy = Math.sin(ang) * 4.6;
+      return `<path d="M${n(x - dx * .3 - dy * .8)} ${n(y - dy * .3 + dx * .8)}
+                       L${n(x + dx * .9 + dy * .6)} ${n(y + dy * .9 - dx * .6)}"
+                stroke="${SOM}" stroke-width="2" opacity=".55" stroke-linecap="round"/>`;
     }).join("");
+    const vuelta = (r, dir) =>
+      `<ellipse cx="46" cy="48" rx="${r}" ry="${n(r * .84)}" fill="none" stroke="${T}"
+         stroke-width="14"/>` +
+      `<ellipse cx="46" cy="48" rx="${r}" ry="${n(r * .84)}" fill="none"
+         stroke="${a.g("soga", dir)}" stroke-width="11"/>`;
     return `
-      ${vueltas}
+      ${trazo("M60 56 Q86 62 80 84 L76 92", a.g("soga", "v"), 11)}
+      ${vuelta(30, "h")}
+      ${vuelta(15, "hi")}
       ${trenza}
-      ${luz("M26 40 Q22 48 23 58", L_LINO, 2, .55)}
-      ${trazo("M70 62 Q84 70 78 86", a.g("lino", "v"), 7)}
-      ${forma("M74 84 L84 84 L86 92 L72 92 Z", a.g("lino", "h"), 1.6)}
-      ${sombra("M75 86 L75 91 M79 86 L79 91 M83 86 L83 91", 1.4, .6)}`;
+      ${luz("M22 38 Q16 48 18 58", "#EEDCA8", 2.4, .6)}
+      ${luz("M35 40 Q31 48 32.6 55", "#EEDCA8", 1.8, .45)}
+      ${forma("M70 86 L84 84 L86 96 L68 96 Z", a.g("soga", "h"), 1.8)}
+      ${sombra("M72 88 L71 95 M77 87 L77 95 M82 87 L83 95", 1.6, .6)}`;
   },
 
   /** Llave de hierro forjada: paletón de rombo, caña y dientes. */

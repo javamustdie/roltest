@@ -1622,6 +1622,26 @@ $("#gasto-reset").addEventListener("click", () => {
 });
 
 // ── Narración pregenerada ────────────────────────────────────────────────────
+/**
+ * Cuando el DJ mueve al grupo, la narración grabada del sitio nuevo suena sola. Antes había que
+ * acordarse de darle a un botón, y en mesa eso significa que casi nunca sonaba.
+ *
+ * Se encola en vez de sonar en el momento en que el DJ llama a `mover_escena`, porque en ese
+ * instante el DJ está hablando por la voz en vivo y las dos se pisarían.
+ */
+let narracionPendiente = false;
+
+function sonarNarracionSiToca() {
+  if (!narracionPendiente) return;
+  narracionPendiente = false;
+  const a = $("#esc-audio");
+  if (!a.getAttribute("src") || $("#acc-narracion").disabled) return;
+  a.currentTime = 0;
+  // Si no se puede reproducir no se avisa: no lo ha pedido nadie, y un aviso rojo por algo que
+  // pasa solo asusta más de lo que informa. El botón sigue ahí para intentarlo a mano.
+  a.play().catch(() => {});
+}
+
 {
   const a = $("#esc-audio"), b = $("#acc-narracion");
   b.addEventListener("click", () => {
@@ -2108,6 +2128,7 @@ async function turno(blob, segundos, textoEscrito) {
     modo("hablando", "Hablando… · toca para cancelar");
     await cola.terminar();
     if (cola.fallo) avisar(cola.fallo);
+    sonarNarracionSiToca();
   } catch (e) {
     const m = e?.name === "AbortError" ? (e.message || "cancelado") : e.message;
     avisar(`No ha salido: ${m}`);
@@ -2207,7 +2228,13 @@ function ejecutarHerramienta(nombre, e) {
     E.local = l.id;
     if (!E.visitadas.includes(l.id)) E.visitadas.push(l.id);
     registrar("otro", `El grupo se mueve a ${l.id} · ${l.nombre}`);
-    return nota(`La pantalla ya muestra ${l.id} · ${l.nombre}.`);
+    // La narración grabada del sitio nuevo suena SOLA, pero al acabar el turno: si arrancara
+    // aquí se pisaría con lo que el DJ está diciendo en ese momento por la voz en vivo.
+    narracionPendiente = !!l.audio;
+    return nota(
+      `La pantalla ya muestra ${l.id} · ${l.nombre}.` +
+        (l.audio ? " Su narración grabada suena en cuanto acabes de hablar, no la repitas." : ""),
+    );
   }
 
   if (nombre === "avanzar_noche") {
