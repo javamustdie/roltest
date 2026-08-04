@@ -1149,6 +1149,13 @@
   </div>
 
   <aside class="lateral">
+    <!-- El botón de hablar, ENCIMA del avatar. Estaba abajo, en la fila de acciones, y era el
+         botón que más se toca de toda la app: va donde está la cara a la que se le habla. -->
+    <button class="hablar" id="hablar" data-modo="listo">
+      <span class="icono">🎤</span><span id="hablar-txt">Toca para hablar</span>
+    </button>
+    <button id="cancelar" hidden><span class="icono">■</span><span>Cancelar</span></button>
+
     <!-- El narrador. Se ilumina cuando habla. -->
     <div class="dj" id="dj" data-estado="listo">
       <span class="cara-dj"><img id="dj-cara" alt="" src="retratos/dj.webp"></span>
@@ -1164,13 +1171,6 @@
       <button id="arrancar" class="grande">
         <span class="icono">▸</span><span id="arrancar-txt">Empezar la sesión cero</span>
       </button>
-
-      <!-- Hablar y cantar la tirada: lo que se toca en cada turno. El botón de hablar era de 60px
-           de alto y se comía la lateral; a 46 sigue siendo un objetivo de dedo de sobra. -->
-      <button class="hablar" id="hablar" data-modo="listo">
-        <span class="icono">🎤</span><span id="hablar-txt">Toca para hablar</span>
-      </button>
-      <button id="cancelar" hidden><span class="icono">■</span><span>Cancelar</span></button>
 
       <!-- Escribir y cantar comparten forma: campo con el botón dentro, a la derecha. Antes eran
            dos filas con el botón al lado, y el «Enviar» de texto ocupaba un tercio del ancho. -->

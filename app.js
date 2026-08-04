@@ -3069,27 +3069,54 @@ class ColaVoz {
     });
   }
 
-  /** Reproduce y se guarda el audio en curso, para poder callar al cancelar. */
+  /**
+   * Reproduce y se guarda el audio en curso, para poder callar al cancelar.
+   *
+   * Se guarda TAMBIÉN el `res` de la promesa, en `cerrarActual`. Es lo que arregla el fallo por el
+   * que había que recargar la página: ver el comentario de `cortar()`.
+   */
   reproducir(url) {
     return new Promise((res) => {
       const a = new Audio(url);
       a.volume = A.volVoz;
       this.suena = a;
-      const fin = () => { URL.revokeObjectURL(url); if (this.suena === a) this.suena = null; res(); };
+      const fin = () => {
+        URL.revokeObjectURL(url);
+        if (this.suena === a) this.suena = null;
+        this.cerrarActual = null;
+        res();
+      };
+      this.cerrarActual = fin;
       a.onended = fin; a.onerror = fin;
       a.play().catch(fin);
     });
   }
 
-  /** Callar ya: para lo que suena y descarta lo que quedaba en la cola. */
+  /**
+   * Callar ya: para lo que suena y descarta lo que quedaba en la cola.
+   *
+   * **Y resuelve a mano la promesa de la frase que estaba sonando.** Sin eso, cancelar mientras el
+   * DJ hablaba dejaba la app MUERTA hasta recargar la página, y así se dijo en mesa: `pause()` no
+   * dispara `ended` ni `error`, así que la promesa de `reproducir` no se resolvía nunca, el
+   * `await cola.terminar()` de `turno()` se quedaba colgado para siempre, su `finally` no llegaba a
+   * correr y `ocupado` se quedaba en `true`. Con `ocupado` en true el botón solo cancela: no se
+   * podía ni hablar ni escribir.
+   *
+   * Y se abortan las síntesis en vuelo, o cancelar tardaba hasta 25 segundos en surtir efecto
+   * mientras esperaba a que contestara ElevenLabs para tirar el resultado a la basura.
+   */
   cortar() {
     this.cortada = true;
     if (this.suena) { this.suena.pause(); this.suena = null; }
+    this.cerrarActual?.();
+    for (const l of this.enVuelo ?? []) l.ac.abort(new Error("cancelado por la mesa"));
+    this.enVuelo = [];
   }
   async sintetizar(texto) {
     // Con límite, y si falla se devuelve null: la frase se queda sin voz pero el texto ya está
     // en la conversación, así que la partida sigue. Una frase muda es mucho mejor que colgarse.
     const lim = conLimite(25_000, "la voz");
+    (this.enVuelo ??= []).push(lim);
     try {
       const r = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${this.voz}?output_format=mp3_44100_128`,
@@ -3114,6 +3141,7 @@ class ColaVoz {
       return null;
     } finally {
       lim.listo();
+      this.enVuelo = (this.enVuelo ?? []).filter((x) => x !== lim);
     }
   }
   terminar() { return this.cadena; }
@@ -3791,7 +3819,7 @@ irA(location.hash.slice(1) || "escena", false);
  * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
  * en mesa algo «no funciona».
  */
-const VERSION_APP = "corvalar-v17";
+const VERSION_APP = "corvalar-v18";
 $("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
 
 if ("serviceWorker" in navigator) {
