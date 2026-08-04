@@ -537,6 +537,18 @@
 .ficha .muneco .ico-hueco { opacity: .34; filter: grayscale(.9) brightness(.9); }
 .ficha .muneco .ranura.puesta .ico-hueco { opacity: 1; filter: none; }
 
+/* ── Cartas de acción ─────────────────────────────────────────────────────────────────────── */
+.ficha .carta {
+  background: linear-gradient(#252A18, #171B10);
+  border: 1px solid var(--tinta);
+  border-top: 2px solid var(--oro-bajo, #8A6A28);
+  box-shadow: inset 0 1px 0 #6E7A4E50, 0 1px 0 #00000090;
+}
+.ficha .carta header b { color: #EFE7CC; }
+.ficha .carta .ojo { border-top-color: #C79A3E28; color: #E8C67E; }
+.ficha .mas-cartas summary { color: var(--oro); }
+.ficha .tit-cartas { color: var(--oro); }
+
 /* Lo que lleva puesto, en lista debajo del muñeco. Los nombres NO van sobre la figura: con los
    marcos pegados a los cantos, un rótulo centrado se sale por un lado y choca con el marco de
    abajo por el otro. Y así se leen. */
@@ -884,6 +896,9 @@
   /* El equipo a la derecha, y ocupando lo que necesite: es el bloque alto. Los demás se colocan
      solos en la columna izquierda porque tienen `grid-column: 1` fijado abajo. */
   .ficha [data-bloque="equipo"] { grid-column: 2; grid-row: 2 / span 40; }
+  /* Las cartas de acción ocupan las DOS columnas y van al final: son 19 y en media columna la
+     rejilla se queda en una sola, con lo que el bloque medía 5.495 px de alto. */
+  .ficha [data-bloque="acciones"] { grid-column: 1 / -1; grid-row: 42; }
   .ficha [data-bloque="pg"],
   .ficha [data-bloque="heridas"],
   .ficha [data-bloque="quien"],

@@ -14,6 +14,7 @@ import { rasgosDe } from "./rasgos.js";
 import { pintarMapaEn } from "./mapa.js";
 import { iconoObjeto } from "./objetos.js";
 import { figura, HUECOS_FIGURA, LIENZO, marcoHueco, interiorHueco } from "./figura.js";
+import { accionesDe, COMUNES, COSTES } from "./acciones.js";
 
 /**
  * El muñeco de equipo lo dibuja `app/figura.js`: un cuerpo con volumen y **marcos cuadrados**
@@ -1337,6 +1338,14 @@ function abrirFicha(i) {
       </div>
     </div>
 
+    <div data-bloque="acciones"><h2>Qué puedes hacer</h2>
+      ${pintarCartas(accionesDe(p.clase), `Como ${esc(claseCorta(p.clase).toLowerCase())}`)}
+      <details class="mas-cartas">
+        <summary>Y lo que puede hacer cualquiera (${COMUNES.length})</summary>
+        ${pintarCartas(COMUNES)}
+      </details>
+    </div>
+
     <div data-bloque="equipo"><h2>Equipo</h2>
       <p class="vacio">Toca una ranura del muñeco para poner o cambiar lo que lleva ahí.</p>
       ${pintarMuneco(p, i)}
@@ -1626,6 +1635,34 @@ function pintarGrupo() {
       </div>`,
     )
     .join("");
+}
+
+/**
+ * Las cartas de acción, para que un novato sepa qué puede hacer sin buscarlo en una hoja.
+ *
+ * El contenido sale de `app/acciones.js`, contrastado contra `reglas.md`: los números que no están
+ * en las reglas no se inventan, se remiten a la ficha. El `aviso` de cada carta es el error típico
+ * del que no ha jugado nunca, y es lo que más vale de todo esto.
+ */
+function pintarCartas(lista, titulo) {
+  if (!lista?.length) return `<p class="vacio">Esta clase no tiene cartas todavía.</p>`;
+  return (titulo ? `<h3 class="tit-cartas">${titulo}</h3>` : "") +
+    `<div class="cartas">${lista.map((a) => `
+      <article class="carta">
+        <header>
+          ${a.icono ? iconoChapa(a.icono, `ac-${a.id}`) : ""}
+          <b>${esc(a.nombre)}</b>
+          <span class="coste">${esc(COSTES[a.coste] ?? a.coste)}</span>
+        </header>
+        <p class="que">${esc(a.que)}</p>
+        ${a.tirada
+          ? `<p class="tira"><span>Tiras</span> ${esc(a.tirada)}${
+              a.contra ? ` <span>contra</span> ${esc(a.contra)}` : ""}</p>`
+          : `<p class="tira"><span>Sin tirada</span></p>`}
+        ${a.efecto ? `<p class="efecto">${esc(a.efecto)}</p>` : ""}
+        ${a.gasta ? `<p class="gasta">Gasta: ${esc(a.gasta)}</p>` : ""}
+        ${a.aviso ? `<p class="ojo">${esc(a.aviso)}</p>` : ""}
+      </article>`).join("")}</div>`;
 }
 
 /** Un icono de objeto del tamaño de una letra, para meterlo en una chapa o un rótulo. */
@@ -2504,6 +2541,7 @@ function ejecutarHerramienta(nombre, e) {
     // a un golpe de caer— se avisan EN PANTALLA, no solo en la narración. Que la mesa lo vea venir
     // es la diferencia entre una muerte que duele y una que sienta mal.
     if (cae) {
+      sonarSuceso("campana");
       alarma(
         `${p.pj} cae a 0 PG. Inconsciente y agonizante: salvación de muerte cada turno, 10 o más. ` +
           `Dos éxitos estabilizan, dos fallos matan. Y toca tirar herida persistente.`,
@@ -3141,6 +3179,7 @@ async function resolverTirada() {
   t.total = usado + t.mod;
   t.pasa = t.total >= t.cd;
   guardarEstado(); pintarTirada();
+  sonarSuceso(t.pasa ? "golpe" : "gota");
 
   const linea =
     `${t.pj}, ${t.que}: ${t.dados.join(" y ")}${t.dados.length > 1 ? ` (${t.ventaja})` : ""}` +
@@ -3228,6 +3267,18 @@ async function encenderAmbiente(si) {
 function pintarBotonAmbiente() {
   $("#acc-ambiente").dataset.on = A.ambiente ? "si" : "no";
   $("#acc-ambiente-txt").textContent = A.ambiente ? "Ambiente ♪" : "Ambiente";
+}
+
+/**
+ * Un sonido suelto: la campana cuando alguien cae, la gota cuando una tirada falla.
+ *
+ * Solo suena si el ambiente ya está encendido. NO arranca el motor por su cuenta: un golpe de
+ * tambor saliendo de la nada porque alguien falló una tirada sería una sorpresa desagradable, y
+ * además el navegador exige un gesto para arrancar el audio.
+ */
+function sonarSuceso(tipo) {
+  if (!A.ambiente || !amb) return;
+  try { amb.suceso(tipo); } catch { /* el ambiente no es crítico: si falla, silencio */ }
 }
 
 /** Cambia de ambiente. Si está apagado se recuerda, y al encender suena el que toca. */
@@ -3740,7 +3791,7 @@ irA(location.hash.slice(1) || "escena", false);
  * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
  * en mesa algo «no funciona».
  */
-const VERSION_APP = "corvalar-v16";
+const VERSION_APP = "corvalar-v17";
 $("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
 
 if ("serviceWorker" in navigator) {

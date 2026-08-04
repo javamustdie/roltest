@@ -214,6 +214,31 @@
   .desglose { margin:8px 0 0; font:500 .76rem/1.55 var(--mono); color:var(--tiza-baja); }
   .desglose b { color:var(--tiza); font-weight:500; }
 
+  /* ── Cartas de acción ───────────────────────────────────────────────
+     Para que un novato sepa qué puede hacer sin buscarlo en una hoja impresa que en mitad de un
+     combate nadie lee. El `ojo` de cada carta es el error típico del que no ha jugado nunca. */
+  .tit-cartas { margin:8px 0 0; font:500 .66rem/1 var(--mono); letter-spacing:.14em;
+                text-transform:uppercase; color:var(--sebo); }
+  .cartas { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:9px;
+            margin-top:8px; }
+  .carta { padding:10px 12px; background:var(--musgo-alto); border:1px solid var(--liquen);
+           border-top:2px solid var(--sebo); display:flex; flex-direction:column; gap:5px; }
+  .carta header { display:flex; align-items:center; gap:6px; }
+  .carta header b { flex:1; font:400 .96rem/1.2 var(--serif); font-weight:400; }
+  .carta .coste { font:500 .54rem/1.3 var(--mono); letter-spacing:.08em; text-transform:uppercase;
+                  color:var(--tiza-baja); text-align:right; }
+  .carta p { margin:0; font-size:.86rem; line-height:1.5; }
+  .carta .tira { font:500 .74rem/1.4 var(--mono); color:var(--tiza); }
+  .carta .tira span { color:var(--tiza-baja); }
+  .carta .efecto { color:var(--tiza-baja); }
+  .carta .gasta { font:500 .68rem/1.3 var(--mono); color:var(--herrumbre); }
+  .carta .ojo { padding-top:5px; border-top:1px solid var(--liquen);
+                font-size:.8rem; font-style:italic; color:var(--ambar); }
+  .mas-cartas { margin-top:12px; }
+  .mas-cartas summary { cursor:pointer; font:500 .66rem/1 var(--mono); letter-spacing:.12em;
+                        text-transform:uppercase; color:var(--tiza-baja); padding:8px 0; }
+  .mas-cartas summary:hover { color:var(--sebo); }
+
   /* Las heridas, dibujadas en la cara. No se curan nunca en este sistema, así que se ven en el
      retrato que la mesa tiene delante toda la partida, no solo en una etiqueta de la ficha. */
   .capacara .heridas-cara { pointer-events:none; }

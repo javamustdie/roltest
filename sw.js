@@ -7,7 +7,7 @@
  *
  * Sube VERSION al cambiar cualquier fichero de app/ para forzar la actualización.
  */
-const VERSION = "corvalar-v16";
+const VERSION = "corvalar-v17";
 
 const BASE = [
   "./",
@@ -20,6 +20,7 @@ const BASE = [
   "./objetos.js",
   "./musica.js",
   "./figura.js",
+  "./acciones.js",
   "./ornado.css",
   "./manifest.webmanifest",
   "./icono.svg",
