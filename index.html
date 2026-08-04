@@ -337,6 +337,12 @@
   .aviso[data-tipo="peligro"] { background:#2A1A08; color:#F0D79A; border-top-color:var(--sebo);
                                 font-weight:400; }
   .aviso[data-tipo="peligro"]::after { color:var(--sebo); }
+  /* Atascada: el aviso deja de ser un «✕ para cerrar» y pasa a ser el botón que la desatasca.
+     La cruz mentiría —cerrar el aviso no arregla nada— así que se cambia por el rótulo real. */
+  .aviso[data-tipo="atasco"] { background:#241A2C; color:#DFC8F0; border-top-color:#7E5C9C; }
+  .aviso[data-tipo="atasco"]::after { content:" DESATASCAR"; color:#C6A2E0;
+                                      font:500 .7rem/1 var(--mono); letter-spacing:.08em;
+                                      align-self:center; }
 
   /* 46px de alto en vez de 60: era el elemento más grande de la lateral y se comía el sitio de
      la conversación. Sigue estando muy por encima del objetivo táctil recomendado. */
@@ -1099,6 +1105,15 @@
         <h2>Gasto de esta sesión</h2>
         <div class="estado-linea neutro" id="gasto">Aún nada.</div>
         <button id="gasto-reset"><span class="icono">⟲</span><span>Poner el contador a cero</span></button>
+      </section>
+      <!-- La salida de emergencia. Si el DJ se queda mudo o el botón de hablar no responde, esto
+           suelta todo sin recargar la página: recargar en medio de una escena corta el ritmo. -->
+      <section>
+        <h2>Si se queda colgado</h2>
+        <small>Suelta el micrófono, la petición en curso y la voz, y devuelve el botón de hablar a
+          su sitio. No toca la partida: los puntos de golpe, el inventario y la escena siguen donde
+          estaban.</small>
+        <button id="desatascar"><span class="icono">⛑</span><span>Desatascar</span></button>
       </section>
       </div>
     </div>

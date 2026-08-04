@@ -2130,6 +2130,36 @@ function avisar(txt) {
 function limpiarAviso() { $("#aviso").hidden = true; $("#aviso").dataset.tipo = "error"; }
 
 /**
+ * El vigilante: si el turno se queda sin dar señales de vida, ofrece la salida ahí mismo.
+ *
+ * `desatascar()` está en Ajustes, pero en mesa nadie va a Ajustes cuando la app «no hace nada»:
+ * se recarga la página, que corta la escena. Así que el aviso —que está al pie de la lateral,
+ * mirando a la mesa— se convierte en el botón de desatascar cuando detecta el atasco.
+ *
+ * Se vigila el LATIDO, no el tiempo total: un turno largo del DJ puede tardar minuto y medio
+ * legítimamente, hablando. Cada cambio de estado y cada frase que empieza a sonar dan un latido;
+ * lo que no es normal es un minuto y medio entero sin ninguno.
+ */
+let ultimoLatido = 0, vigilante = null;
+const latir = () => { ultimoLatido = Date.now(); };
+const SIN_LATIR = 90_000;
+
+function vigilar() {
+  latir();
+  clearInterval(vigilante);
+  vigilante = setInterval(() => {
+    if (!ocupado) return dejarDeVigilar();
+    if (Date.now() - ultimoLatido < SIN_LATIR) return;
+    const a = $("#aviso");
+    a.dataset.tipo = "atasco";
+    a.textContent = "Minuto y medio sin novedades: parece atascada. Toca aquí y sigue la partida " +
+      "sin recargar; no se pierde nada de lo guardado.";
+    a.hidden = false;
+  }, 5_000);
+}
+function dejarDeVigilar() { clearInterval(vigilante); vigilante = null; }
+
+/**
  * Un aviso de PELIGRO, no de error: alguien está a punto de morir. Se distingue en color del
  * aviso de fallo técnico a propósito — en mesa no se pueden confundir «la app tiene un problema»
  * y «vuestro amigo se muere».
@@ -2140,7 +2170,11 @@ function alarma(txt) {
   a.textContent = txt;
   a.hidden = false;
 }
-$("#aviso").addEventListener("click", limpiarAviso);
+// Con la app atascada el aviso ES el botón de desatascar: cerrarlo no arreglaría nada.
+$("#aviso").addEventListener("click", () => {
+  if ($("#aviso").dataset.tipo === "atasco") { limpiarAviso(); desatascar(); return; }
+  limpiarAviso();
+});
 
 function cabecerasClaude() {
   return {
@@ -2179,6 +2213,7 @@ const TEXTO_DJ = {
   hablando: "hablando",
 };
 function modo(m, txt) {
+  latir();   // cada cambio de estado cuenta como señal de vida para el vigilante
   bHablar.dataset.modo = m;
   tHablar.textContent = txt;
   // El retrato del DJ refleja el mismo estado: en mesa se mira la cara, no el botón.
@@ -2306,6 +2341,37 @@ $("#cancelar").addEventListener("click", () => {
   enCurso?.ac.abort(new Error("cancelado por la mesa"));
 });
 
+/**
+ * Desatascar: la salida de emergencia cuando la app se queda muerta en mesa.
+ *
+ * Existe porque un cuelgue ya pasó de verdad —cortar al DJ mientras hablaba dejaba `ocupado` en
+ * true para siempre— y la única salida fue recargar. Ese fallo está arreglado, pero el patrón
+ * («algo no resuelve su promesa y el estado se queda pillado») puede repetirse por otro sitio, y
+ * en mesa nadie va a diagnosticarlo: se recarga, y recargar en medio de una escena corta el ritmo
+ * y se lleva lo que no estuviera guardado.
+ *
+ * Suelta TODO lo que puede tener algo cogido, en vez de intentar adivinar qué está atascado:
+ * la grabación, la petición en vuelo, las dos colas de voz, el cronómetro, la narración y el
+ * gesto de mover objetos. No toca el estado de la partida —PG, inventario, escena—: eso está
+ * guardado y no es lo que se atasca.
+ */
+function desatascar() {
+  try { if (grabadora?.state === "recording") grabadora.stop(); } catch { /* da igual */ }
+  grabadora = null; trozos = [];
+  if (cronometro) { clearInterval(cronometro); cronometro = null; }
+  try { enCurso?.ac.abort(new Error("desatascado a mano")); } catch { /* da igual */ }
+  enCurso = null;
+  cola?.cortar(); cola = null;
+  pararRepeticion();
+  try { $("#esc-audio").pause(); } catch { /* da igual */ }
+  cogido = null;
+  ocupado = false;
+  actualizarBotonHablar();
+  pintarTodo();
+  avisar("Desatascado. Si ha hecho falta esto, dímelo: es un fallo que hay que arreglar.");
+}
+$("#desatascar").addEventListener("click", desatascar);
+
 // ── Cantar una tirada ────────────────────────────────────────────────────────
 // Es lo que más se hace en mesa, y dictar números por voz es justo lo que peor transcribe.
 $("#tirada-forma").addEventListener("submit", async (ev) => {
@@ -2422,6 +2488,7 @@ function porHablantes(tr) {
 async function turno(blob, segundos, textoEscrito) {
   limpiarAviso();
   ocupado = true;
+  vigilar();
   modo("pensando", (textoEscrito ? "Pensando…" : "Transcribiendo…") + " · toca para cancelar");
   actualizarBotonHablar();
   try {
@@ -2494,6 +2561,7 @@ async function turno(blob, segundos, textoEscrito) {
     ocupado = false;
     enCurso = null;
     cola = null;
+    dejarDeVigilar();
     actualizarBotonHablar();
   }
 }
@@ -3088,6 +3156,9 @@ class ColaVoz {
       };
       this.cerrarActual = fin;
       a.onended = fin; a.onerror = fin;
+      // Cada frase que arranca es una señal de vida: un turno largo del DJ tarda minuto y medio
+      // hablando y no está atascado. Ver `vigilar()`.
+      a.onplaying = latir;
       a.play().catch(fin);
     });
   }
@@ -3819,7 +3890,7 @@ irA(location.hash.slice(1) || "escena", false);
  * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
  * en mesa algo «no funciona».
  */
-const VERSION_APP = "corvalar-v18";
+const VERSION_APP = "corvalar-v19";
 $("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
 
 if ("serviceWorker" in navigator) {
