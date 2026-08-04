@@ -538,8 +538,8 @@ export function crearAmbiente(opciones = {}) {
       quitarVoz(v);
       v.muerta = true;
     } else {
-      const espera = Math.max(0, tFin - ctx.currentTime) + 0.05;
-      v.temporizador = luegoDe(espera, () => liberarVoz(v));
+      const margen = Math.max(0, tFin - ctx.currentTime) + 0.05;
+      v.temporizador = luegoDe(margen, () => liberarVoz(v));
     }
   }
 
@@ -579,8 +579,12 @@ export function crearAmbiente(opciones = {}) {
   }
 
   // ── Ladrillos de síntesis ───────────────────────────────────────────────────────────────────
-  // Todos apuntan lo que crean en la voz. Los que llevan `t` son de un disparo y traen su
-  // `stop()` puesto: se limpian solos aunque la voz muera antes.
+  // Todo lo que se crea queda apuntado en la voz, y de dos formas distintas: las capas continuas
+  // (`osc`, `ruido`, `lfo`) van a `v.fuentes` y se paran al apagar la voz; los sonidos de un
+  // disparo (`golpeRuido`, `golpeTono`) van a `v.efimeras`, traen su `stop()` puesto y se borran
+  // del conjunto en cuanto terminan.
+  // Todas las funciones reciben `t`: el instante del reloj de audio en el que empieza la cosa.
+  // Ninguna asigna `.value` a un parámetro; siempre `setValueAtTime` o rampas.
 
   function gan(v, valor, t) {
     const g = ctx.createGain();
