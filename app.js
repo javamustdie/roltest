@@ -11,6 +11,38 @@
 import { CAMPANAS, CAMPANA_POR_DEFECTO } from "./campana.js";
 import { RETRATOS } from "./retratos.js";
 
+/**
+ * Huecos de equipo, como en cualquier CRPG. El orden es el de la ficha, no alfabético: se lee
+ * de la cabeza a los pies y luego los complementos.
+ *
+ * Son SOLO texto: lo que hay equipado no da bonificadores automáticos. En este sistema la CA la
+ * lleva la ficha y la ajusta el DJ, así que un hueco que sumara solo sería una segunda fuente de
+ * verdad discrepando con la primera.
+ */
+const HUECOS = [
+  { k: "cabeza", n: "Cabeza", i: "⛑" },
+  { k: "pecho", n: "Pecho", i: "🛡" },
+  { k: "manos", n: "Manos", i: "🧤" },
+  { k: "piernas", n: "Piernas", i: "👖" },
+  { k: "pies", n: "Pies", i: "🥾" },
+  { k: "capa", n: "Capa", i: "🧣" },
+  { k: "diestra", n: "Diestra", i: "🗡" },
+  { k: "zurda", n: "Zurda", i: "🪓" },
+  { k: "anillo1", n: "Anillo", i: "💍" },
+  { k: "anillo2", n: "Anillo", i: "💍" },
+  { k: "amuleto", n: "Amuleto", i: "🔮" },
+];
+
+/** Las seis preguntas de la sesión cero, en el mismo orden en que se hacen. */
+const ENTREVISTA = [
+  { k: "jugador", n: "Lo lleva" },
+  { k: "aspecto", n: "Qué se le nota" },
+  { k: "oficio", n: "De qué vivía" },
+  { k: "empuja", n: "Lo que no deja pasar" },
+  { k: "dejo", n: "A quién dejó atrás" },
+  { k: "miedo", n: "Qué le da miedo" },
+];
+
 // ── Herramientas del DJ ──────────────────────────────────────────────────────
 /**
  * Lo que el DJ puede HACER, no solo decir.
@@ -124,6 +156,47 @@ const HERRAMIENTAS = [
         },
       },
       required: ["pj", "clase", "pgMax", "ca"],
+    },
+  },
+  {
+    name: "equipar",
+    description:
+      "Pone o quita algo de un hueco de equipo. Úsalo cuando encuentren algo y se lo pongan, y " +
+      "al montar la ficha en la sesión cero para repartir el equipo inicial. Es texto, no da " +
+      "bonificadores: si algo cambia la armadura, cámbiala tú con escribir_ficha.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string" },
+        hueco: {
+          type: "string",
+          enum: ["cabeza", "pecho", "manos", "piernas", "pies", "capa", "diestra", "zurda",
+                 "anillo1", "anillo2", "amuleto"],
+        },
+        objeto: { type: "string", description: "Qué se pone. Vacío para dejar el hueco libre." },
+      },
+      required: ["pj", "hueco"],
+    },
+  },
+  {
+    name: "escribir_entrevista",
+    description:
+      "Guarda las respuestas de la sesión cero en la ficha del personaje. Llámalo en cuanto un " +
+      "jugador conteste las seis preguntas: es lo que hace que su personaje sea suyo y no un " +
+      "pregenerado con otro nombre. La `pulla` es una línea burlona tuya sobre el personaje.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string" },
+        jugador: { type: "string", description: "Nombre real de quien lo lleva." },
+        aspecto: { type: "string", description: "Edad y qué se le nota a primera vista." },
+        oficio: { type: "string", description: "De qué vivía antes. El oficio, no la clase." },
+        empuja: { type: "string", description: "Lo que no puede dejar pasar." },
+        dejo: { type: "string", description: "A quién dejó atrás y qué le debe." },
+        miedo: { type: "string", description: "Qué le da miedo de verdad. Se usa en el pavor." },
+        pulla: { type: "string", description: "Una línea burlona sobre el personaje, cariñosa." },
+      },
+      required: ["pj"],
     },
   },
   {
@@ -287,6 +360,12 @@ TIENES HERRAMIENTAS Y LLEVAS EL ESTADO TÚ. No pidas a la mesa que apunte nada.
   decisión, una muerte, un hallazgo, una tirada que cambió algo.
 - En sesión cero, cuando tengas nombre, clase y características de alguien, llama a
   escribir_ficha. Tú escribes la ficha; la mesa solo contesta preguntas y canta dados.
+- En cuanto un jugador conteste las seis preguntas de personaje, llama a escribir_entrevista con
+  lo que haya dicho, y añade una PULLA: una línea burlona y cariñosa sobre el personaje. Va en su
+  ficha y es lo que hace que se sienta suyo.
+- Reparte el equipo inicial con equipar, hueco por hueco, y equipa lo que encuentren cuando se lo
+  pongan. Los huecos son cabeza, pecho, manos, piernas, pies, capa, diestra, zurda, dos anillos y
+  amuleto.
 
 Puedes llamar a varias en el mismo turno. Después de usarlas, di en una o dos frases lo que ha
 pasado en la ficción — no leas los números como un contable, ya se ven en pantalla.
@@ -577,32 +656,33 @@ function abrirFicha(i) {
   const p = E.partida[i];
   if (!p) return;
   const l = actual();
-  const sum = Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(" · ");
+  p.equipo ??= {};
+  p.ficha ??= {};
+
   const cara = p.retrato
-    ? `<img class="retrato" alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp">`
-    : `<span class="retrato" style="display:flex;align-items:center;justify-content:center;
-         font:500 1.6rem/1 var(--serif);color:#4A5236">${esc(iniciales(p.pj))}</span>`;
+    ? `<img class="retrato-grande" alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp">`
+    : `<div class="retrato-grande sin-foto">${esc(iniciales(p.pj))}
+         <small>sin foto todavía</small></div>`;
+
+  // Las respuestas de la sesión cero. Solo se muestran las que existen: una lista de seis
+  // huecos vacíos no informa de nada y ocupa media ficha.
+  const entrevista = ENTREVISTA.filter((c) => p.ficha[c.k]?.trim());
 
   $("#ficha-caja").innerHTML = `
-    <div class="cab">
+    <div class="ficha-cab">
       ${cara}
-      <div>
+      <div class="ficha-quien">
         <h3>${esc(p.pj)}</h3>
-        <div class="sub">${esc(p.clase)}${p.retrato ? "" : " · sin retrato todavía"}</div>
+        <div class="sub">${esc(p.clase)}</div>
+        ${p.pulla ? `<p class="pulla">«${esc(p.pulla)}»<span>— el director de juego</span></p>` : ""}
+        <div class="ficha-rejilla">
+          <div><span>vida</span><b>${p.pg} / ${p.pgMax}</b></div>
+          <div><span>armadura</span><b>${p.ca}</b></div>
+          <div><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
+          <div><span>heridas</span><b>${p.heridas.length}</b></div>
+        </div>
       </div>
     </div>
-
-    <div class="ficha-rejilla">
-      <div><span>puntos de golpe</span><b>${p.pg} / ${p.pgMax}</b></div>
-      <div><span>clase de armadura</span><b>${p.ca}</b></div>
-      <div><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
-      <div><span>heridas</span><b>${p.heridas.length}</b></div>
-    </div>
-
-    ${p.heridas.length
-      ? `<div><h2>Heridas persistentes</h2><div class="marcas" style="margin-top:8px">${p.heridas
-          .map((h) => `<span class="marca">${esc(h)}</span>`).join("")}</div></div>`
-      : `<p style="margin:0;font-size:.84rem;color:var(--tiza-baja)">Sin heridas persistentes.</p>`}
 
     <div><h2>Puntos de golpe</h2>
       <div class="pg-fila" style="margin-top:8px">
@@ -614,14 +694,42 @@ function abrirFicha(i) {
       </div>
     </div>
 
-    <div><h2>Dónde estáis</h2>
-      <p style="margin:6px 0 0;font-size:.9rem">${esc(l.id)} · ${esc(l.nombre)}</p>
-      <ul class="sabeis" style="margin-top:8px">${(l.sabeis ?? [])
-        .map((x) => `<li>${esc(x)}</li>`).join("") || "<li>Nada todavía.</li>"}</ul>
+    <div><h2>Equipo</h2>
+      <div class="huecos">${HUECOS.map((h) => {
+        const v = p.equipo[h.k] ?? "";
+        return `<label class="hueco${v ? " puesto" : ""}">
+          <span class="etq"><i>${h.i}</i>${h.n}</span>
+          <input data-eq="${h.k}" data-i="${i}" value="${esc(v)}" autocomplete="off"
+                 placeholder="vacío">
+        </label>`;
+      }).join("")}</div>
     </div>
 
-    <div><h2>Suministros del grupo</h2>
-      <p style="margin:6px 0 0;font:500 .82rem/1.5 var(--mono);color:var(--tiza-baja)">${esc(sum)}</p>
+    ${p.heridas.length
+      ? `<div><h2>Heridas persistentes</h2><div class="marcas" style="margin-top:8px">${p.heridas
+          .map((h, j) => `<button class="marca" data-fherida="${i}" data-h="${j}">${esc(h)} ✕</button>`)
+          .join("")}</div></div>`
+      : ""}
+
+    <div><h2>Quién es</h2>
+      ${entrevista.length
+        ? `<dl class="entrevista">${entrevista
+            .map((c) => `<dt>${c.n}</dt><dd>${esc(p.ficha[c.k])}</dd>`).join("")}</dl>`
+        : `<p class="vacio">Todavía sin entrevista. En la sesión cero el DJ hace seis preguntas
+             —qué se te nota, de qué vivías, qué no puedes dejar pasar, a quién dejaste atrás y
+             qué te da miedo— y las escribe aquí él.</p>`}
+      <div class="fila" style="margin-top:10px">
+        <button data-entrevista="${i}"><span class="icono">✎</span><span>Editar a mano</span></button>
+      </div>
+    </div>
+
+    ${p.notas ? `<div><h2>De la ficha</h2><p class="notas">${esc(p.notas)}</p></div>` : ""}
+
+    <div><h2>Dónde estáis</h2>
+      <p style="margin:6px 0 0;font-size:.9rem">${esc(l.id)} · ${esc(l.nombre)}</p>
+      <p style="margin:4px 0 0;font:500 .8rem/1.5 var(--mono);color:var(--tiza-baja)">${
+        Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(" · ")
+      }</p>
     </div>
 
     <div class="fila">
@@ -629,6 +737,25 @@ function abrirFicha(i) {
       <button id="ficha-cerrar"><span class="icono">✕</span><span>Cerrar</span></button>
     </div>`;
   $("#ficha").hidden = false;
+  $("#ficha-caja").scrollTop = 0;
+}
+
+/** Editar la entrevista a mano, por si no se hizo en la sesión cero. */
+function editarEntrevista(i) {
+  const p = E.partida[i];
+  p.ficha ??= {};
+  $("#ficha-caja").innerHTML = `
+    <h3 style="margin:0">Quién es ${esc(p.pj)}</h3>
+    <p class="vacio">Las seis preguntas de la sesión cero. Se guardan al escribir.</p>
+    ${ENTREVISTA.map((c) => `<label>${c.n}
+       <input data-en="${c.k}" data-i="${i}" value="${esc(p.ficha[c.k] ?? "")}"
+              autocomplete="off"></label>`).join("")}
+    <label>Pulla del DJ <small>— una línea burlona, la escribe él o tú</small>
+      <input data-pulla="${i}" value="${esc(p.pulla ?? "")}" autocomplete="off"></label>
+    <div class="fila">
+      <button data-volver="${i}"><span class="icono">←</span><span>Volver a la ficha</span></button>
+    </div>`;
+  $("#ficha-caja").scrollTop = 0;
 }
 
 $("#ficha").addEventListener("click", (ev) => {
@@ -645,12 +772,42 @@ $("#ficha").addEventListener("click", (ev) => {
     abrirFicha(+pg.dataset.fpg);
     return;
   }
+  const quitar = ev.target.closest("button[data-fherida]");
+  if (quitar) {
+    E.partida[+quitar.dataset.fherida].heridas.splice(+quitar.dataset.h, 1);
+    guardarEstado(); pintarGrupo(); pintarBanda();
+    abrirFicha(+quitar.dataset.fherida);
+    return;
+  }
+  const entr = ev.target.closest("button[data-entrevista]");
+  if (entr) { editarEntrevista(+entr.dataset.entrevista); return; }
+  const volver = ev.target.closest("button[data-volver]");
+  if (volver) { abrirFicha(+volver.dataset.volver); return; }
   const ir = ev.target.closest("button[data-ir-grupo]");
   if (ir) {
     $("#ficha").hidden = true;
     irA("grupo");
     if ($("#editor").hidden) $("#editar-grupo").click();
   }
+});
+
+// El equipo y la entrevista se guardan al teclear. La ficha NO se repinta: reescribirla
+// perdería el foco a cada letra, que es el fallo clásico de un formulario que se autoguarda.
+$("#ficha-caja").addEventListener("input", (ev) => {
+  const c = ev.target;
+  const p = E.partida[+c.dataset.i];
+  if (!p) return;
+  if (c.dataset.eq !== undefined) {
+    p.equipo ??= {};
+    p.equipo[c.dataset.eq] = c.value;
+    c.closest(".hueco")?.classList.toggle("puesto", !!c.value.trim());
+  } else if (c.dataset.en !== undefined) {
+    p.ficha ??= {};
+    p.ficha[c.dataset.en] = c.value;
+  } else if (c.dataset.pulla !== undefined) {
+    p.pulla = c.value;
+  } else return;
+  guardarEstado();
 });
 
 function pintarGrupo() {
@@ -1481,6 +1638,37 @@ function ejecutarHerramienta(nombre, e) {
       `${p.pj} entra en el grupo: ${p.clase}, ${pgMax} PG, CA ${ca}.` +
         (retrato ? "" : ` Sin retrato todavía — los disponibles son: ${RETRATOS.join(", ") || "ninguno"}.`),
     );
+  }
+
+  if (nombre === "equipar") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
+    if (!HUECOS.some((h) => h.k === e.hueco)) {
+      return `"${e.hueco}" no es un hueco. Son: ${HUECOS.map((h) => h.k).join(", ")}.`;
+    }
+    p.equipo ??= {};
+    const antes = p.equipo[e.hueco];
+    p.equipo[e.hueco] = (e.objeto ?? "").trim();
+    const h = HUECOS.find((x) => x.k === e.hueco).n.toLowerCase();
+    registrar("otro", `${p.pj}: ${h} → ${p.equipo[e.hueco] || "(vacío)"}`, p.pj);
+    return nota(
+      p.equipo[e.hueco]
+        ? `${p.pj} lleva ${p.equipo[e.hueco]} en ${h}${antes ? ` (antes: ${antes})` : ""}.`
+        : `${p.pj} se queda con ${h} libre.`,
+    );
+  }
+
+  if (nombre === "escribir_entrevista") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
+    p.ficha ??= {};
+    let n = 0;
+    for (const c of ENTREVISTA) {
+      if (e[c.k]?.trim()) { p.ficha[c.k] = e[c.k].trim(); n++; }
+    }
+    if (e.pulla?.trim()) p.pulla = e.pulla.trim();
+    registrar("otro", `Entrevista de ${p.pj} apuntada`, p.pj);
+    return nota(`Ficha de ${p.pj}: ${n} respuesta(s) guardadas${e.pulla ? " y la pulla" : ""}.`);
   }
 
   if (nombre === "registrar_accion") {
