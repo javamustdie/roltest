@@ -117,9 +117,15 @@ const CLASES = [
 ];
 const claseDe = (t) => CLASES.find((c) => c.re.test(String(t ?? "")));
 const ICONO_CLASE = (t) => claseDe(t)?.i ?? "◇";
-/** El nombre sin el nivel: en un marco de 100 px no cabe «Exploradora 2». */
+/**
+ * El nombre sin el nivel: en un marco de 100 px no cabe «Exploradora 2».
+ *
+ * Se recorta el texto DE LA FICHA en vez de devolver el nombre canónico de `CLASES`, porque ese
+ * está en masculino para poder buscar el icono con una sola entrada por clase, y en la banda se
+ * leía «Elara · EXPLORADOR». El canónico queda solo como red por si la ficha no trae nada usable.
+ */
 const claseCorta = (t) =>
-  claseDe(t)?.n ?? (String(t ?? "").replace(/\s*\d+\s*$/, "").trim() || "—");
+  String(t ?? "").replace(/\s*\d+\s*$/, "").trim() || claseDe(t)?.n || "—";
 
 /**
  * Nivel por puntos de experiencia, con los umbrales del SRD recortados a 1-4. No se pasa de 4:
