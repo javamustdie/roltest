@@ -62,6 +62,71 @@ NUNCA tires los dados de los jugadores: los tira la mesa y te cantan el resultad
 Fallar una prueba social significa NO obtener información, nunca obtener información falsa.
 `.trim();
 
+/**
+ * Modo sesión cero. Sustituye a TRAMA mientras se crean los personajes: manda sobre la
+ * aventura porque en la sesión cero no se juega ninguna, se monta la mesa.
+ * Condensado de campana/sesion-cero.md — si cambias allí el procedimiento, cámbialo aquí.
+ */
+const GUIA_CERO = `
+ESTÁS EN SESIÓN CERO: no se juega ninguna escena todavía, se monta la mesa. Sigue este orden
+y NO te lo salgas. Una cosa por turno de voz, y espera respuesta antes de seguir.
+
+1. SEGURIDAD, ANTES DE DESCRIBIR NADA. Avisa de que hay folk horror con niños en peligro y
+   cosas duras. Explica líneas (no aparecen), velos (fuera de cámara) y que cualquiera puede
+   decir "Corta" en cualquier momento sin justificarse. Pregunta si hay alguna. Apunta lo que
+   digan y respétalo el resto de la campaña.
+
+2. EL MUNDO, minuto y medio. Un valle sin mapas buenos: turba, piedra, lluvia y un bosque de
+   abedules que baja hasta donde acaban las casas. No es un mundo de héroes, es un mundo donde
+   la gente aguanta. Hay fe de verdad, pero negocia. Hay magia de verdad, y por eso da miedo:
+   quien la usa llama la atención de algo. Ellos no son elegidos ni herederos: son cuatro
+   personas capaces que han llegado a una aldea llamada Corvalar por caminos distintos, y
+   Corvalar tiene un problema del que no habla. NO CUENTES MÁS ARGUMENTO. Si preguntan, di que
+   eso lo descubren jugando.
+
+3. CÓMO SE JUEGA, cuatro frases. Dado de veinte más lo de la ficha contra un número que tú das
+   ANTES de tirar: fácil diez, normal trece, difícil dieciséis. Sin riesgo no se tira. Ventaja
+   son dos dados y te quedas el mejor. Los dados los tiran ellos y te cantan el número. Y la
+   muerte es definitiva, las heridas se quedan, y no hay resurrección.
+
+4. LOS SEIS ARQUETIPOS, una frase cada uno, y que no hace falta saberse las reglas porque la
+   ficha la montas tú: Guerrero, el que se pone delante. Explorador, lee el terreno y tira con
+   arco. Pícaro, abre lo cerrado y oye lo que no debía. Clérigo, tiene fe de verdad y aquí eso
+   complica las cosas. Druida, habla con lo que no habla y le teme menos al bosque. Mago, sabe
+   cosas que en un pueblo así es mejor no saber. Empiezan en NIVEL 2 y no se pasa del 4.
+   Sugiere que no lleven dos lo mismo y que alguien pueda curar.
+
+5. RONDA DE PRESENTACIÓN, uno por uno, seis preguntas cortas: cómo se llama el jugador y cómo
+   se llama el personaje; qué aspecto tiene con una cosa que se le note a primera vista; de qué
+   vivía antes (oficio, no clase); qué es lo que no puede dejar pasar; a quién dejó atrás y qué
+   le debe; y qué le da miedo de verdad. Avísale de que el miedo lo usarás en las salvaciones de
+   pavor, y que si prefiere que algo no aparezca eso es una línea, no un miedo. Si alguien se
+   queda en blanco, dale dos opciones para que elija; que nadie se atasque.
+
+6. CARACTERÍSTICAS. Que cada uno tire un dado de veinte SEIS veces y te cante los seis números.
+   Conviértelos tú con esta tabla: 1 es 8; 2 y 3 son 9; de 4 a 6 es 10; de 7 a 9 es 11; de 10 a
+   12 es 12; 13 y 14 son 13; 15 y 16 son 14; 17 y 18 son 15; 19 es 16; 20 es 17. Los seis se
+   reparten libremente y tú le dices dónde le conviene el más alto según la clase. Si la suma de
+   los seis baja de 63, que repita la tanda entera. Si su valor más alto no llega a 14, súbelo a
+   14. Puede intercambiar dos valores una vez. LAS CUENTAS LAS HACES TÚ: modificadores, clase de
+   armadura, puntos de golpe de nivel 2, ataques con su bonificador y su daño, salvaciones,
+   habilidades competentes y equipo con antorchas y raciones contadas. Competencia +2 siempre.
+   Dales la ficha dicha en voz alta y despacio para que la copien.
+
+7. LA FOTO. Explica que NO hay modelado 3D y que NO hacen falta varios ángulos: basta UNA foto
+   frontal con luz decente, mandada por el chat. Tú la miras, escribes una descripción de rasgos
+   en TEXTO, y solo ese texto va al generador. La foto no sale de la conversación ni se sube a
+   ninguna API. El parecido es de familia, no de gemelo. Si alguien no quiere, se le hace el
+   retrato sin foto y no se nota.
+
+8. POR QUÉ ESTÁN JUNTOS, en grupo. Ofrece tres: van de camino y Corvalar es la parada; los han
+   contratado a los cuatro a la vez y no saben quién paga; o uno tiene un motivo y los otros le
+   acompañan (la mejor). Y pregunta a los pares de qué se conocen.
+
+Al acabar, di que apunten los personajes en la pestaña Grupo con «Editar personajes», y que
+quiten el modo sesión cero de Ajustes para empezar a jugar.
+`.trim();
+
 /** Lo específico de cada aventura. Se añade a GUIA según la que esté elegida. */
 const TRAMA = {
   corvalar: `
@@ -407,6 +472,76 @@ $("#reiniciar").addEventListener("click", () => {
   E = porDefecto(); guardarEstado(); pintarTodo();
 });
 
+// ── Editor del grupo ─────────────────────────────────────────────────────────
+// Sin esto, tras la sesión cero la app seguiría mostrando a los cuatro pregenerados mientras
+// la mesa juega con sus propios personajes: los PG que se tocan en mesa serían de otra gente.
+function pintarEditor() {
+  $("#editor-lista").innerHTML = E.partida
+    .map(
+      (p, i) => `
+    <div class="pj-edit">
+      <div class="campos">
+        <label>Nombre<input data-e="pj" data-i="${i}" value="${esc(p.pj)}" autocomplete="off"></label>
+        <label>Clase y nivel<input data-e="clase" data-i="${i}" value="${esc(p.clase)}" autocomplete="off"></label>
+      </div>
+      <div class="numeros">
+        <label>PG máx<input data-e="pgMax" data-i="${i}" type="number" inputmode="numeric" min="1" max="200" value="${p.pgMax}"></label>
+        <label>PG ahora<input data-e="pg" data-i="${i}" type="number" inputmode="numeric" min="0" max="200" value="${p.pg}"></label>
+        <label>CA<input data-e="ca" data-i="${i}" type="number" inputmode="numeric" min="1" max="30" value="${p.ca}"></label>
+      </div>
+      <button data-borrar="${i}"><span class="icono">✕</span><span>Quitar a ${esc(p.pj)}</span></button>
+    </div>`,
+    )
+    .join("");
+}
+
+$("#editar-grupo").addEventListener("click", () => {
+  const ed = $("#editor");
+  ed.hidden = !ed.hidden;
+  if (!ed.hidden) pintarEditor();
+});
+
+$("#editor-lista").addEventListener("input", (ev) => {
+  const c = ev.target.closest("input[data-e]");
+  if (!c) return;
+  const p = E.partida[+c.dataset.i];
+  if (!p) return;
+
+  if (c.dataset.e === "pj" || c.dataset.e === "clase") {
+    p[c.dataset.e] = c.value;
+  } else {
+    // Un campo numérico vacío llega como "" y `Number("")` es 0: sin este guardado se
+    // pondría el personaje a 0 PG máximos en cuanto alguien borra el número para reescribirlo.
+    if (c.value === "") return;
+    const n = Math.max(c.dataset.e === "pg" ? 0 : 1, Math.min(200, Math.round(+c.value) || 0));
+    p[c.dataset.e] = n;
+    if (c.dataset.e === "pgMax" && p.pg > n) p.pg = n;
+  }
+  guardarEstado();
+  pintarGrupo(); // el editor no se repinta: reescribirlo perdería el foco al teclear
+});
+
+$("#editor-lista").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-borrar]");
+  if (!b) return;
+  const i = +b.dataset.borrar;
+  if (!confirm(`¿Quitar a ${E.partida[i]?.pj} del grupo?`)) return;
+  E.partida.splice(i, 1);
+  guardarEstado(); pintarEditor(); pintarGrupo();
+});
+
+$("#anadir-pj").addEventListener("click", () => {
+  E.partida.push({ pj: "Nuevo", clase: "Clase 2", pg: 18, pgMax: 18, ca: 14, heridas: [], agotamiento: 0 });
+  guardarEstado(); pintarEditor(); pintarGrupo();
+  $("#editor-lista").lastElementChild?.querySelector("input")?.focus();
+});
+
+$("#restaurar-pj").addEventListener("click", () => {
+  if (!confirm("¿Volver a los cuatro personajes pregenerados? Se pierden los que hay ahora.")) return;
+  E.partida = structuredClone(CAMPANA.partidaInicial);
+  guardarEstado(); pintarEditor(); pintarGrupo();
+});
+
 $("#charla-limpiar").addEventListener("click", () => {
   E.charla = []; guardarEstado(); pintarCharla();
 });
@@ -446,10 +581,22 @@ $("#clave-cl").value = A.claveCl;
 $("#modelo").value = A.modelo;
 $("#voz-modelo").value = A.vozModelo;
 $("#aventura").value = A.aventura;
+$("#sesion-cero").checked = !!A.sesionCero;
 
 // Cambiar de aventura tiene efecto inmediato, sin pasar por «Guardar»: es lo que se espera
 // de un selector que reescribe la escena, el mapa y el grupo enteros.
 $("#aventura").addEventListener("change", (ev) => cambiarAventura(ev.target.value));
+
+$("#sesion-cero").addEventListener("change", (ev) => {
+  A.sesionCero = ev.target.checked;
+  guardarAjustes();
+  ponEstado(
+    A.sesionCero
+      ? "Modo sesión cero. Aprieta el botón de hablar y el DJ empieza por las líneas y velos."
+      : "Modo de juego normal.",
+    "ok",
+  );
+});
 
 $("#guardar").addEventListener("click", () => {
   // Se asignan campo a campo en vez de reemplazar A: si se reconstruye el objeto entero se
@@ -458,6 +605,7 @@ $("#guardar").addEventListener("click", () => {
   A.claveCl = $("#clave-cl").value.trim();
   A.modelo = $("#modelo").value;
   A.vozModelo = $("#voz-modelo").value;
+  A.sesionCero = $("#sesion-cero").checked;
   guardarAjustes();
   ponEstado("Guardado en este dispositivo.", "ok");
   actualizarBotonHablar();
@@ -634,15 +782,28 @@ async function procesar(blob) {
 /** Llama a Claude en streaming y va entregando el texto por trozos. */
 async function claudeStream(pregunta, alRecibir) {
   const l = actual();
-  const contexto = [
-    `Escena actual: ${l.id} · ${l.nombre}.`,
-    l.sabeis?.length ? `Lo que la mesa ya sabe: ${l.sabeis.join(" ")}` : "",
-    CAMPANA.reloj
-      ? `Noche ${E.noche} de ${CAMPANA.reloj.noches} hasta ${CAMPANA.reloj.etiqueta}.`
-      : "",
-    `Grupo: ${E.partida.map((p) => `${p.pj} (${p.clase}, ${p.pg}/${p.pgMax} PG${p.heridas.length ? ", herido: " + p.heridas.join(" y ") : ""})`).join("; ")}.`,
-    `Suministros: ${Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(", ")}.`,
-  ].filter(Boolean).join("\n");
+  const grupo = E.partida
+    .map((p) => `${p.pj} (${p.clase}, ${p.pg}/${p.pgMax} PG${p.heridas.length ? ", herido: " + p.heridas.join(" y ") : ""})`)
+    .join("; ");
+
+  // En sesión cero no se manda escena ni reloj: si se manda, el DJ empieza a describir la
+  // localización en vez de crear personajes, por muy claro que sea el resto del prompt.
+  const contexto = (
+    A.sesionCero
+      ? [
+          "Aún no ha empezado la partida: estás en sesión cero.",
+          `En la pestaña Grupo hay de momento estos personajes, que son los pregenerados y se van a sustituir: ${grupo}.`,
+        ]
+      : [
+          `Escena actual: ${l.id} · ${l.nombre}.`,
+          l.sabeis?.length ? `Lo que la mesa ya sabe: ${l.sabeis.join(" ")}` : "",
+          CAMPANA.reloj
+            ? `Noche ${E.noche} de ${CAMPANA.reloj.noches} hasta ${CAMPANA.reloj.etiqueta}.`
+            : "",
+          `Grupo: ${grupo}.`,
+          `Suministros: ${Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(", ")}.`,
+        ]
+  ).filter(Boolean).join("\n");
 
   const historial = E.charla.slice(-8).map((t) => ({
     role: t.de === "mesa" ? "user" : "assistant",
@@ -655,7 +816,13 @@ async function claudeStream(pregunta, alRecibir) {
     stream: true,
     system: [
       // Las dos partes estables van cacheadas; el contexto de escena cambia cada turno.
-      { type: "text", text: `${GUIA}\n\n${TRAMA[A.aventura]}`, cache_control: { type: "ephemeral" } },
+      // En sesión cero manda GUIA_CERO y NO se manda la trama: aún no se juega ninguna escena,
+      // y colar la trama aquí hace que el DJ empiece a narrar en vez de crear personajes.
+      {
+        type: "text",
+        text: A.sesionCero ? `${GUIA}\n\n${GUIA_CERO}` : `${GUIA}\n\n${TRAMA[A.aventura]}`,
+        cache_control: { type: "ephemeral" },
+      },
       { type: "text", text: contexto },
     ],
     messages: [...historial, { role: "user", content: pregunta }],

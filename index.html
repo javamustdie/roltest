@@ -149,6 +149,19 @@
   input, select { font:400 .92rem/1 var(--mono); background:#0E100A; color:var(--tiza);
                   border:1px solid var(--liquen); padding:11px 12px; min-height:46px; width:100%; }
   input:focus, select:focus { outline:2px solid var(--sebo); outline-offset:1px; }
+  /* Casilla de verificación: en fila, y con área de toque cómoda para una mesa con poca luz. */
+  label.casilla { flex-direction:row; align-items:flex-start; gap:11px; }
+  label.casilla input { width:26px; min-height:26px; height:26px; flex:none; margin-top:2px;
+                        accent-color:var(--sebo); }
+  label.casilla small { display:block; margin-top:3px; }
+  /* Editor del grupo: campos pequeños en cuadrícula, para caber en una fila por personaje. */
+  #editor { display:flex; flex-direction:column; gap:12px; }
+  .pj-edit { border:1px solid var(--liquen); background:#0E100A; padding:10px; display:flex;
+             flex-direction:column; gap:8px; }
+  .pj-edit .campos { display:grid; grid-template-columns:2fr 2fr; gap:8px; }
+  .pj-edit .numeros { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .pj-edit label { font-size:.72rem; color:var(--tiza-baja); gap:3px; }
+  .pj-edit input { min-height:42px; padding:8px 10px; }
   .aviso-clave { font-size:.8rem; color:var(--tiza-baja); line-height:1.5;
                  border-left:2px solid var(--sebo); padding-left:10px; }
   .estado-linea { font:400 .82rem/1.4 var(--mono); }
@@ -261,6 +274,21 @@
       <div class="sumin" id="sumin"></div>
     </section>
     <section>
+      <h2>El grupo</h2>
+      <button id="editar-grupo"><span class="icono">✎</span><span>Editar personajes</span></button>
+      <div id="editor" hidden>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)">
+          Pon aquí vuestros personajes de la sesión cero. Los nombres y los números salen de la ficha
+          que te dé el DJ. Se guarda en el dispositivo al escribir.
+        </p>
+        <div id="editor-lista" style="display:flex;flex-direction:column;gap:10px"></div>
+        <div class="fila">
+          <button id="anadir-pj"><span class="icono">＋</span><span>Añadir personaje</span></button>
+          <button id="restaurar-pj"><span class="icono">⟲</span><span>Volver a los pregenerados</span></button>
+        </div>
+      </div>
+    </section>
+    <section>
       <h2>Reiniciar</h2>
       <button id="reiniciar"><span class="icono">⟲</span><span>Empezar partida de cero</span></button>
     </section>
@@ -282,6 +310,14 @@
         Empezad por <b>la prueba</b>. Está hecha para comprobar en mesa que el DJ aplica bien las
         reglas, y trae una hoja de verificación para pillarle si se equivoca.
       </p>
+      <label class="casilla">
+        <input type="checkbox" id="sesion-cero">
+        <span>
+          <b>Modo sesión cero</b>
+          <small>Para la primera vez: el DJ os cuenta el mundo, os propone arquetipos, os hace las
+          preguntas de personaje y os guía las tiradas de características. Quítalo al empezar a jugar.</small>
+        </span>
+      </label>
     </section>
     <section>
       <h2>Claves de API</h2>
