@@ -141,6 +141,15 @@
   .sumin [data-vacio="si"] b { color:var(--herrumbre); }
   .sumin button { min-height:32px; min-width:32px; padding:0 9px; font-size:1rem; }
 
+  /* El botón de hablar flotante: encima de la barra de pestañas, en las pantallas que no son
+     la mesa. Ancho completo y alto de dedo: se busca a ciegas mientras se mira la pantalla. */
+  .hablar-flota { width:100%; min-height:56px; border-radius:0; border-left:0; border-right:0;
+                  font-size:1.04rem; }
+
+  /* Desglose de la armadura y de con qué pega. Si el DJ suma dos veces la misma coraza, se ve. */
+  .desglose { margin:8px 0 0; font:500 .76rem/1.55 var(--mono); color:var(--tiza-baja); }
+  .desglose b { color:var(--tiza); font-weight:500; }
+
   /* ── Cierre de sesión ─────────────────────────────────────────────── */
   .cierre { display:flex; flex-direction:column; gap:7px; }
   .fila-cierre { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;
@@ -466,6 +475,8 @@
   .muneco .ranura circle { fill:#151910; stroke:#39412B; stroke-width:1.6; }
   .muneco .ranura .ico { font-size:11px; text-anchor:middle; opacity:.45; }
   .muneco .ranura .etiq { font:400 8.4px var(--mono); fill:var(--tiza-baja); }
+  /* El bonificador debajo del nombre de la pieza: se lee de un vistazo qué está sumando. */
+  .muneco .ranura .bono { font:500 7.4px var(--mono); fill:var(--sebo); }
   /* Las seis ranuras de los lados: app.js las ancla hacia fuera, y un nombre largo se salía del
      viewBox cortado a media palabra. Centrarlas reparte el texto a los dos lados del ancla, y el
      desplazamiento vertical las quita de encima de su propio aro. `text-anchor` es propiedad CSS,
@@ -779,8 +790,8 @@
         Voz del DJ al improvisar
         <small>Modelo rápido: la mitad de precio y apenas se nota al hablar.</small>
         <select id="voz-modelo">
-          <option value="eleven_flash_v2_5">Rápido — 0,05 $/1k car. (recomendado)</option>
-          <option value="eleven_multilingual_v2">Calidad — 0,10 $/1k car.</option>
+          <option value="eleven_multilingual_v2">Calidad — 0,10 $/1k car. (recomendado)</option>
+          <option value="eleven_flash_v2_5">Rápido — 0,05 $/1k car., se nota peor</option>
         </select>
       </label>
       <div class="fila">
@@ -807,6 +818,16 @@
   <!-- Los avisos van AQUÍ, siempre a la vista y no en la pestaña de Ajustes: durante la partida
        nadie mira Ajustes, así que un error escrito allí es un error invisible. -->
   <button class="aviso" id="aviso" hidden></button>
+  <!-- Hablar desde CUALQUIER pantalla.
+       El botón de verdad vive en la barra lateral de la mesa, y mientras esa era la única
+       pantalla desde la que se podía hablar daba igual. Pero ahora el DJ mueve la pantalla él
+       (herramienta `mostrar`): si saca el mapa, la mesa se queda mirándolo sin manera de
+       contestarle. Este no duplica la lógica —reenvía el toque al de la mesa— y solo se ve
+       cuando la mesa NO está delante. -->
+  <button class="hablar hablar-flota" id="hablar-flota" data-modo="listo" hidden>
+    <span class="icono">🎤</span><span id="hablar-flota-txt">Toca para hablar</span>
+  </button>
+
   <nav>
   <button data-va="escena" data-activa><span class="g">🕯</span><span>Mesa</span></button>
   <button data-va="mapa"><span class="g">🗺</span><span>Misión</span></button>

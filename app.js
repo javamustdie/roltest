@@ -50,29 +50,74 @@ const SILUETA = `
     <path d="M116 278 L140 278"/>
   </g>`;
 
+/**
+ * Un objeto de equipo es `{n, ca, dano, nota}`, pero también puede ser **texto pelado**: así se
+ * guardaba antes, y hay partidas por ahí con esa forma. Todo el que lea equipo pasa por aquí en
+ * vez de mirar el valor a pelo, o una partida vieja peta al abrir la ficha.
+ *
+ * Devuelve `null` para un hueco vacío, para poder escribir `if (!objDe(v))`.
+ */
+const objDe = (v) => {
+  if (typeof v === "string") return v.trim() ? { n: v.trim() } : null;
+  return v?.n?.trim() ? v : null;
+};
+const nombreObj = (v) => objDe(v)?.n ?? "";
+
+/**
+ * La CA es **derivada**: base de la ficha más lo que sume lo que lleva puesto.
+ *
+ * Se calcula cada vez en vez de acumularse en `p.ca`, porque acumular al equipar significa que
+ * ponerse y quitarse la misma coraza tres veces deja la CA distinta de donde empezó. Y el desglose
+ * se muestra en la ficha, así que si el DJ suma dos veces la misma armadura se ve en pantalla.
+ *
+ * `caBase` es la CA sin equipo. Si no está —fichas de antes— se usa `p.ca`, así que una partida
+ * guardada abre con la misma CA que tenía y solo cambia cuando el DJ equipa algo con bonificador.
+ */
+const bonosCa = (p) =>
+  Object.values(p.equipo ?? {}).reduce((t, v) => t + (Number(objDe(v)?.ca) || 0), 0);
+const caBaseDe = (p) => Number(p.caBase ?? p.ca) || 10;
+const caDe = (p) => caBaseDe(p) + bonosCa(p);
+
+/** «+2 CA · 1d8+2», para pintarlo junto al objeto. Cadena vacía si el objeto no bonifica nada. */
+const bonoTexto = (o) => {
+  const t = [];
+  if (Number(o?.ca)) t.push(`${Number(o.ca) > 0 ? "+" : ""}${Number(o.ca)} CA`);
+  if (o?.dano?.trim()) t.push(o.dano.trim());
+  return t.length ? ` ${t.join(" · ")}` : "";
+};
+
+/** Lo que hace daño de lo que lleva encima, para tenerlo a mano en la ficha. */
+const armasDe = (p) =>
+  Object.entries(p.equipo ?? {})
+    .map(([k, v]) => ({ hueco: k, ...objDe(v) }))
+    .filter((o) => o.n && o.dano);
+
 /** Dibuja el muñeco con lo que lleva puesto en cada hueco. */
 function pintarMuneco(p, i) {
   const eq = p.equipo ?? {};
   const puntos = HUECOS.map((h) => {
     const m = MUNECO[h.k];
     if (!m) return "";
-    const puesto = !!eq[h.k]?.trim();
+    const o = objDe(eq[h.k]);
+    const puesto = !!o;
     // La etiqueta se coloca al lado que le toca para no cruzar la silueta.
     const dx = m.lado === "izq" ? -14 : m.lado === "der" ? 14 : 0;
     const anclaje = m.lado === "izq" ? "end" : m.lado === "der" ? "start" : "middle";
     const dy = m.lado === "arriba" ? -16 : m.lado === "abajo" ? 22 : m.lado === "centro" ? 22 : 4;
     return `<g class="ranura${puesto ? " puesta" : ""}" data-hueco="${h.k}" data-i="${i}"
                role="button" tabindex="0"
-               aria-label="${h.n}: ${puesto ? esc(eq[h.k]) : "vacío"}">
+               aria-label="${h.n}: ${puesto ? esc(o.n) + bonoTexto(o) : "vacío"}">
       <circle cx="${m.x}" cy="${m.y}" r="11"/>
       <text class="ico" x="${m.x}" y="${m.y + 4}">${h.i}</text>
       <text class="etiq" x="${m.x + dx}" y="${m.y + dy}" text-anchor="${anclaje}">${
-        puesto ? esc(recortar(eq[h.k], 22)) : h.n.toLowerCase()
+        puesto ? esc(recortar(o.n, 22)) : h.n.toLowerCase()
       }</text>
+      ${puesto && bonoTexto(o) ? `<text class="bono" x="${m.x + dx}" y="${m.y + dy + 10}"
+         text-anchor="${anclaje}">${esc(bonoTexto(o).trim())}</text>` : ""}
     </g>`;
   }).join("");
 
-  const mochila = (p.mochila ?? []).filter((x) => x?.trim());
+  const mochila = (p.mochila ?? []).map(objDe).filter(Boolean);
   return `
     <div class="muneco-caja">
       <svg class="muneco" viewBox="-52 -8 304 318" role="img" aria-label="Equipo de ${esc(p.pj)}">
@@ -83,8 +128,9 @@ function pintarMuneco(p, i) {
         <ul class="bolsa">${
           mochila.length
             ? mochila.map((x, j) =>
-                `<li><span>${esc(x)}</span><button data-quitarbolsa="${i}" data-j="${j}"
-                   title="Quitar">✕</button></li>`).join("")
+                `<li title="${esc(x.nota ?? x.n)}"><span>${esc(x.n)}</span>
+                   <button data-quitarbolsa="${i}" data-j="${j}" title="Quitar">✕</button></li>`)
+                .join("")
             : `<li class="nada">Vacía.</li>`
         }</ul>
         <form class="escribir" data-bolsa="${i}">
@@ -278,7 +324,13 @@ const HERRAMIENTAS = [
         pj: { type: "string", description: "Nombre del personaje." },
         clase: { type: "string", description: "Clase y nivel, por ejemplo «Guerrero 2»." },
         pgMax: { type: "integer" },
-        ca: { type: "integer", description: "Clase de armadura." },
+        ca: {
+          type: "integer",
+          description:
+            "Clase de armadura SIN CONTAR la armadura que lleve equipada. Lo que sume la coraza " +
+            "o el escudo se pone al equiparlos, con el campo `ca` de `equipar`, y la app suma. " +
+            "Para un personaje sin armadura son 10 + su modificador de Destreza.",
+        },
         retrato: { type: "string", description: "Id de un retrato ya generado, si lo hay." },
         notas: {
           type: "string",
@@ -293,9 +345,9 @@ const HERRAMIENTAS = [
   {
     name: "equipar",
     description:
-      "Pone o quita algo de un hueco de equipo. Úsalo cuando encuentren algo y se lo pongan, y " +
-      "al montar la ficha en la sesión cero para repartir el equipo inicial. Es texto, no da " +
-      "bonificadores: si algo cambia la armadura, cámbiala tú con escribir_ficha.",
+      "Pone o quita algo de un hueco de equipo, CON sus bonificadores. Es tu trabajo, no de la " +
+      "mesa: en cuanto encuentren algo que se puedan poner, equípaselo y dilo. La app suma la CA " +
+      "sola y lo dibuja en el muñeco de la ficha.",
     input_schema: {
       type: "object",
       properties: {
@@ -306,8 +358,71 @@ const HERRAMIENTAS = [
                  "anillo1", "anillo2", "amuleto"],
         },
         objeto: { type: "string", description: "Qué se pone. Vacío para dejar el hueco libre." },
+        ca: {
+          type: "integer",
+          description:
+            "Lo que SUMA a la clase de armadura, no la CA total. Un camisote de malla son +3 " +
+            "sobre la base sin armadura, un escudo +2, una capa 0. Puede ser negativo.",
+        },
+        dano: {
+          type: "string",
+          description: "Solo si es un arma: el daño, por ejemplo «1d8+2 cortante».",
+        },
+        nota: { type: "string", description: "Una línea sobre el objeto, si tiene algo especial." },
       },
       required: ["pj", "hueco"],
+    },
+  },
+  {
+    name: "dar_objeto",
+    description:
+      "Mete algo en la mochila de un personaje. Úsalo EN CUANTO encuentren algo: no digas «lo " +
+      "apuntáis», apúntalo tú y que aparezca dibujado en su mochila. Si es algo que se puede " +
+      "llevar puesto y les conviene, usa equipar en vez de esto.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string" },
+        objeto: { type: "string", description: "Qué encuentran. En singular y concreto." },
+        nota: { type: "string", description: "Para qué sirve, si no es evidente." },
+      },
+      required: ["pj", "objeto"],
+    },
+  },
+  {
+    name: "quitar_objeto",
+    description:
+      "Saca algo de la mochila: se gasta, se rompe, se lo dan a alguien o lo dejan atrás.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string" },
+        objeto: { type: "string", description: "Nombre de lo que sale. Basta con acertar parte." },
+      },
+      required: ["pj", "objeto"],
+    },
+  },
+  {
+    name: "mostrar",
+    description:
+      "Cambia lo que se ve en el tablet. La pantalla la manejas TÚ: si alguien pide el mapa, " +
+      "muéstraselo con esto en vez de decirle qué pestaña tocar; si vas a hablar de lo que lleva " +
+      "alguien, abre su ficha; si acaba la sesión, saca el cierre. Hazlo también sin que lo " +
+      "pidan, cuando lo que estás contando se vea mejor en otra pantalla.",
+    input_schema: {
+      type: "object",
+      properties: {
+        vista: {
+          type: "string",
+          enum: ["mesa", "mapa", "grupo", "ficha", "cierre"],
+          description:
+            "«mesa» es la escena con las caras; «mapa» el mapa y lo que sabéis; «grupo» las " +
+            "barras y los suministros; «ficha» la hoja de un personaje (hace falta `pj`); " +
+            "«cierre» las estadísticas y el resumen del final.",
+        },
+        pj: { type: "string", description: "De quién es la ficha, si `vista` es «ficha»." },
+      },
+      required: ["vista"],
     },
   },
   {
@@ -352,6 +467,15 @@ const HERRAMIENTAS = [
 ];
 
 // ── Voces (mismos ids que scripts/lib.mjs) ───────────────────────────────────
+/**
+ * Este mapa es para las PIEZAS DE NARRACIÓN GRABADAS, donde cada personaje suena como él: la
+ * línea de Domar con la voz de Domar, la de Nera con la de Nera.
+ *
+ * **El DJ en vivo NO usa este mapa.** Usa siempre `VOZ_DJ`, y eso es una corrección: la voz de
+ * la cola se sacaba de la localización actual (`actual().voz`), así que el director de juego
+ * cambiaba de voz según dónde estuviera el grupo — hablaba como Mirena en la casa de los Ramos y
+ * como el Acreedor en el Corazón. En mesa se oye como si salieran tres narradores al azar.
+ */
 const VOZ = {
   narrador: "DdKbXdRlBmj7Ty7N0FVr",
   domar: "DdKbXdRlBmj7Ty7N0FVr",
@@ -361,6 +485,9 @@ const VOZ = {
   sela: "OTsv82NplloP7M5TyIJ3",
   acreedor: "PRfCKe8kdrG3nuXOAnoH",
 };
+
+/** La voz del director de juego. Una, fija, la misma en toda la partida. */
+const VOZ_DJ = VOZ.narrador;
 
 /**
  * Resumen de reglas para el DJ. Es una condensación de
@@ -495,9 +622,24 @@ TIENES HERRAMIENTAS Y LLEVAS EL ESTADO TÚ. No pidas a la mesa que apunte nada.
 - En cuanto un jugador conteste las seis preguntas de personaje, llama a escribir_entrevista con
   lo que haya dicho, y añade una PULLA: una línea burlona y cariñosa sobre el personaje. Va en su
   ficha y es lo que hace que se sienta suyo.
-- Reparte el equipo inicial con equipar, hueco por hueco, y equipa lo que encuentren cuando se lo
-  pongan. Los huecos son cabeza, pecho, manos, piernas, pies, capa, diestra, zurda, dos anillos y
-  amuleto.
+- Reparte el equipo inicial con equipar, hueco por hueco. Los huecos son cabeza, pecho, manos,
+  piernas, pies, capa, diestra, zurda, dos anillos y amuleto. Pon SIEMPRE el bonificador: la
+  armadura lleva su \`ca\` (malla +3, escudo +2, cuero +1, una capa 0) y las armas su \`dano\`.
+  La app suma la CA sola y lo dibuja en el muñeco.
+
+LOS OBJETOS Y LA PANTALLA LOS MANEJAS TÚ. Esto es lo que la mesa espera de ti:
+
+- **Encuentran algo → aparece.** En cuanto haya un objeto en la ficción, llama a dar_objeto y sale
+  dibujado en su mochila. Nunca digas «lo apuntáis» ni «que lo apunte quien lleve la ficha».
+- **Si les conviene ponérselo, póntelo tú.** Equipa lo que encuentren en el hueco que toque, con
+  su bonificador, y di en una frase qué cambia: «ahora tienes CA diecisiete». No preguntes «¿os lo
+  queréis poner?» para algo obvio; hazlo y sigue.
+- **Se gasta o se rompe → quitar_objeto.** Una antorcha consumida, una cuerda cortada, algo que
+  dejan atrás.
+- **Tú decides qué se ve.** Con mostrar cambias la pantalla del tablet: si preguntan dónde están o
+  piden el mapa, saca el mapa; si vais a hablar de lo que lleva alguien, abre su ficha; si acaba
+  la sesión, saca el cierre. Y hazlo también sin que lo pidan, cuando lo que estás contando se vea
+  mejor en otra pantalla. No les digas nunca qué pestaña tocar: llévalos tú.
 
 Puedes llamar a varias en el mismo turno. Después de usarlas, di en una o dos frases lo que ha
 pasado en la ficción — no leas los números como un contable, ya se ven en pantalla.
@@ -576,7 +718,7 @@ function cargar(k) {
 }
 
 let A = cargar(CLAVE_AJUSTES) ?? {
-  clave11: "", claveCl: "", modelo: "claude-sonnet-5", vozModelo: "eleven_flash_v2_5",
+  clave11: "", claveCl: "", modelo: "claude-sonnet-5", vozModelo: "eleven_multilingual_v2",
 };
 if (!CAMPANAS[A.aventura]) A.aventura = CAMPANA_POR_DEFECTO;
 
@@ -635,6 +777,9 @@ function irA(nombre, tocarHash = true) {
     $(`#v-${nombre}`).setAttribute("data-activa", "");
     document.querySelector("main").scrollTop = 0;
   }
+  // El botón de hablar de la mesa se va con el tablero, así que en las demás pantallas sale el
+  // flotante. Sin esto, el DJ saca el mapa y la mesa no puede contestarle.
+  $("#hablar-flota").hidden = enMesa;
   if (tocarHash && location.hash.slice(1) !== nombre) history.replaceState(null, "", `#${nombre}`);
 }
 
@@ -888,7 +1033,7 @@ function abrirFicha(i) {
         ${p.pulla ? `<p class="pulla">«${esc(p.pulla)}»<span>— el director de juego</span></p>` : ""}
         <div class="ficha-rejilla">
           <div><i>❤</i><span>vida</span><b>${p.pg} / ${p.pgMax}</b></div>
-          <div><i>🛡</i><span>armadura</span><b>${p.ca}</b></div>
+          <div><i>🛡</i><span>armadura</span><b>${caDe(p)}</b></div>
           <div><i>🌙</i><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
           <div><i>🩸</i><span>heridas</span><b>${p.heridas.length}</b></div>
           <div><i>✶</i><span>experiencia</span><b>${p.px ?? 0}</b></div>
@@ -902,6 +1047,13 @@ function abrirFicha(i) {
           return `<div class="pxbar" title="${falta} px para el nivel ${n + 1}">
             <i style="width:${pct}%"></i><span>${falta} px para el nivel ${n + 1}</span></div>`;
         })()}
+        ${bonosCa(p) ? `<p class="desglose">Armadura ${caDe(p)} = ${caBaseDe(p)} de base
+          ${Object.entries(p.equipo ?? {}).map(([k, v]) => {
+            const o = objDe(v); const n = Number(o?.ca) || 0;
+            return n ? ` ${n > 0 ? "+" : "−"} ${Math.abs(n)} (${esc(o.n)})` : "";
+          }).join("")}</p>` : ""}
+        ${armasDe(p).length ? `<p class="desglose">Con qué pega:
+          ${armasDe(p).map((o) => `<b>${esc(o.n)}</b> ${esc(o.dano)}`).join(" · ")}</p>` : ""}
       </div>
     </div>
 
@@ -973,6 +1125,13 @@ function editarEntrevista(i) {
   $("#ficha-caja").scrollTop = 0;
 }
 
+// El botón flotante no graba: reenvía el toque al de la mesa, que es el que tiene toda la
+// máquina de estados. Duplicar esa lógica en dos botones es cómo se acaba con dos grabadoras.
+$("#hablar-flota").addEventListener("click", () => bHablar.click());
+
+/** Quita la capa de la ficha. La usan el aspa, el clic fuera, y la herramienta `mostrar`. */
+function cerrarFicha() { $("#ficha").hidden = true; }
+
 $("#ficha").addEventListener("click", (ev) => {
   // Tocar fuera de la caja cierra: en mesa nadie busca la X.
   if (ev.target === $("#ficha") || ev.target.closest("#ficha-cerrar")) {
@@ -1001,9 +1160,12 @@ $("#ficha").addEventListener("click", (ev) => {
     const pj = E.partida[+ranura.dataset.i];
     const h = HUECOS.find((x) => x.k === ranura.dataset.hueco);
     pj.equipo ??= {};
-    const v = prompt(`${h.n} de ${pj.pj}:`, pj.equipo[h.k] ?? "");
+    const antes = objDe(pj.equipo[h.k]);
+    const v = prompt(`${h.n} de ${pj.pj}:`, antes?.n ?? "");
     if (v !== null) {
-      pj.equipo[h.k] = v.trim();
+      // Se conserva el bonificador de la pieza: si al corregir el nombre a mano se perdiera, la
+      // CA bajaría sin que nadie se hubiera quitado la armadura.
+      pj.equipo[h.k] = v.trim() ? { ...(antes ?? {}), n: v.trim() } : null;
       guardarEstado();
       abrirFicha(+ranura.dataset.i);
     }
@@ -1039,7 +1201,7 @@ $("#ficha-caja").addEventListener("submit", (ev) => {
   const v = c.value.trim();
   if (!v) return;
   E.partida[i].mochila ??= [];
-  E.partida[i].mochila.push(v);
+  E.partida[i].mochila.push({ n: v });
   c.value = "";
   guardarEstado(); abrirFicha(i);
 });
@@ -1056,7 +1218,9 @@ $("#ficha-caja").addEventListener("input", (ev) => {
   if (!p) return;
   if (c.dataset.eq !== undefined) {
     p.equipo ??= {};
-    p.equipo[c.dataset.eq] = c.value;
+    p.equipo[c.dataset.eq] = c.value.trim()
+      ? { ...(objDe(p.equipo[c.dataset.eq]) ?? {}), n: c.value.trim() }
+      : null;
     c.closest(".hueco")?.classList.toggle("puesto", !!c.value.trim());
   } else if (c.dataset.en !== undefined) {
     p.ficha ??= {};
@@ -1075,7 +1239,7 @@ function pintarGrupo() {
       <div class="pj-cab">
         <span class="nom">${esc(p.pj)}</span>
         <span class="cls">${esc(p.clase)}</span>
-        <span class="ca">CA ${p.ca}</span>
+        <span class="ca">CA ${caDe(p)}</span>
       </div>
       <div class="pg-fila">
         <button data-pg="${i}" data-d="-3">−3</button>
@@ -1295,7 +1459,7 @@ function pintarEditor() {
       <div class="numeros">
         <label>PG máx<input data-e="pgMax" data-i="${i}" type="number" inputmode="numeric" min="1" max="200" value="${p.pgMax}"></label>
         <label>PG ahora<input data-e="pg" data-i="${i}" type="number" inputmode="numeric" min="0" max="200" value="${p.pg}"></label>
-        <label>CA<input data-e="ca" data-i="${i}" type="number" inputmode="numeric" min="1" max="30" value="${p.ca}"></label>
+        <label>CA base<input data-e="caBase" data-i="${i}" type="number" inputmode="numeric" min="1" max="30" value="${caBaseDe(p)}"></label>
       </div>
       <button data-borrar="${i}"><span class="icono">✕</span><span>Quitar a ${esc(p.pj)}</span></button>
     </div>`,
@@ -1545,6 +1709,9 @@ const TEXTO_DJ = {
 function modo(m, txt) {
   bHablar.dataset.modo = m;
   tHablar.textContent = txt;
+  // El flotante es un espejo del de la mesa: mismo estado, mismo texto.
+  $("#hablar-flota").dataset.modo = m;
+  $("#hablar-flota-txt").textContent = txt;
   // El retrato del DJ refleja el mismo estado: en mesa se mira la cara, no el botón.
   $("#dj").dataset.estado = m;
   $("#dj-estado").textContent = TEXTO_DJ[m] ?? m;
@@ -1644,7 +1811,7 @@ async function repetir(indice, boton) {
   if (!t?.texto) return;
 
   boton.dataset.suena = "si";
-  const c = new ColaVoz(actual().voz ?? "narrador");
+  const c = new ColaVoz(VOZ_DJ);
   colaRepe = c;
   // Se trocea por frases igual que al hablar: así empieza a sonar sin esperar el párrafo entero.
   for (const frase of t.texto.split(/(?<=[.!?…])\s+/)) if (frase.trim()) c.encolar(frase.trim());
@@ -1816,7 +1983,7 @@ async function turno(blob, segundos, textoEscrito) {
     // 2. Claude responde, en streaming, y se va troceando por frases para que
     //    la voz empiece antes de que termine de escribir.
     modo("pensando", "Pensando…");
-    cola = new ColaVoz(actual().voz ?? "narrador");
+    cola = new ColaVoz(VOZ_DJ);
     let respuesta = "";
     let pendiente = "";
 
@@ -1863,10 +2030,12 @@ async function turno(blob, segundos, textoEscrito) {
 
 
 // ── Ejecutar lo que pide el DJ ───────────────────────────────────────────────
+/** Minúsculas y sin acentos, para comparar lo que escribe el DJ con lo que hay guardado. */
+const norm = (x) =>
+  String(x ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
 /** Busca un personaje por nombre, tolerando mayúsculas y acentos. */
 function buscarPj(nombre) {
-  const norm = (x) =>
-    String(x ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const n = norm(nombre);
   return (
     E.partida.find((p) => norm(p.pj) === n) ??
@@ -1967,17 +2136,21 @@ function ejecutarHerramienta(nombre, e) {
     const retrato = RETRATOS.includes(e.retrato) ? e.retrato : undefined;
     let p = buscarPj(e.pj);
     if (p) {
-      Object.assign(p, { pj: e.pj, clase: e.clase, pgMax, ca });
+      Object.assign(p, { pj: e.pj, clase: e.clase, pgMax, caBase: ca });
+      delete p.ca; // la CA es derivada; dejarla guardada solo sirve para que discrepen
       // Los PG actuales se respetan salvo que pasen del nuevo máximo: si está herido, sigue herido.
       p.pg = Math.min(p.pg, pgMax);
       if (retrato) p.retrato = retrato;
       if (e.notas) p.notas = e.notas;
       registrar("otro", `Ficha actualizada: ${p.pj} (${p.clase})`, p.pj);
-      return nota(`Ficha de ${p.pj} actualizada: ${p.clase}, ${p.pg}/${pgMax} PG, CA ${ca}.`);
+      return nota(
+        `Ficha de ${p.pj} actualizada: ${p.clase}, ${p.pg}/${pgMax} PG, CA ${caDe(p)}` +
+          `${bonosCa(p) ? ` (${ca} de base + ${bonosCa(p)} del equipo)` : ""}.`,
+      );
     }
     p = {
-      pj: e.pj, clase: e.clase, pg: pgMax, pgMax, ca,
-      heridas: [], agotamiento: 0, ...(retrato ? { retrato } : {}), ...(e.notas ? { notas: e.notas } : {}),
+      pj: e.pj, clase: e.clase, pg: pgMax, pgMax, caBase: ca,
+      heridas: [], agotamiento: 0, equipo: {}, mochila: [], px: 0, ...(retrato ? { retrato } : {}), ...(e.notas ? { notas: e.notas } : {}),
     };
     E.partida.push(p);
     registrar("otro", `Ficha nueva: ${p.pj} (${p.clase})`, p.pj);
@@ -1994,15 +2167,93 @@ function ejecutarHerramienta(nombre, e) {
       return `"${e.hueco}" no es un hueco. Son: ${HUECOS.map((h) => h.k).join(", ")}.`;
     }
     p.equipo ??= {};
-    const antes = p.equipo[e.hueco];
-    p.equipo[e.hueco] = (e.objeto ?? "").trim();
+    const antes = nombreObj(p.equipo[e.hueco]);
+    const caAntes = caDe(p);
+    const n = (e.objeto ?? "").trim();
+    // Se guarda como objeto para que el bonificador viaje CON la pieza: así quitarla lo retira,
+    // sin tener que acordarse de restarlo a mano.
+    p.equipo[e.hueco] = n
+      ? {
+          n,
+          ...(Number(e.ca) ? { ca: Math.max(-10, Math.min(10, Math.round(+e.ca))) } : {}),
+          ...(e.dano?.trim() ? { dano: e.dano.trim() } : {}),
+          ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}),
+        }
+      : null;
     const h = HUECOS.find((x) => x.k === e.hueco).n.toLowerCase();
-    registrar("otro", `${p.pj}: ${h} → ${p.equipo[e.hueco] || "(vacío)"}`, p.pj);
+    const o = objDe(p.equipo[e.hueco]);
+    registrar("hallazgo", `${p.pj}: ${h} → ${o ? o.n + bonoTexto(o) : "(vacío)"}`, p.pj);
+    const cambio = caDe(p) !== caAntes ? ` Su CA pasa de ${caAntes} a ${caDe(p)}.` : "";
     return nota(
-      p.equipo[e.hueco]
-        ? `${p.pj} lleva ${p.equipo[e.hueco]} en ${h}${antes ? ` (antes: ${antes})` : ""}.`
-        : `${p.pj} se queda con ${h} libre.`,
+      o
+        ? `${p.pj} lleva ${o.n} en ${h}${bonoTexto(o) ? ` (${bonoTexto(o).trim()})` : ""}` +
+          `${antes ? `, y suelta ${antes}` : ""}.${cambio}`
+        : `${p.pj} se queda con ${h} libre.${cambio}`,
     );
+  }
+
+  if (nombre === "dar_objeto") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
+    const n = (e.objeto ?? "").trim();
+    if (!n) return "Falta el nombre del objeto.";
+    p.mochila ??= [];
+    if (p.mochila.length >= 24) {
+      return `La mochila de ${p.pj} está llena (24 objetos). Quita algo antes con quitar_objeto.`;
+    }
+    p.mochila.push({ n, ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}) });
+    registrar("hallazgo", `${p.pj} se guarda ${n}`, p.pj);
+    return nota(`${n} entra en la mochila de ${p.pj}.`);
+  }
+
+  if (nombre === "quitar_objeto") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
+    const buscado = norm(e.objeto ?? "");
+    if (!buscado) return "Falta el nombre del objeto.";
+    p.mochila ??= [];
+    // Se acepta un trozo del nombre: el DJ dice «la cuerda» y en la mochila está «Cuerda de
+    // cáñamo, 15 m». Exigir el nombre exacto haría que la herramienta fallara casi siempre.
+    const i = p.mochila.findIndex((v) => {
+      const q = norm(nombreObj(v));
+      return q === buscado || q.includes(buscado) || buscado.includes(q);
+    });
+    if (i < 0) {
+      const hay = p.mochila.map(nombreObj).filter(Boolean);
+      return `${p.pj} no lleva nada que se parezca a "${e.objeto}". Lleva: ${
+        hay.join(", ") || "nada"
+      }.`;
+    }
+    const [fuera] = p.mochila.splice(i, 1);
+    registrar("otro", `${p.pj} suelta ${nombreObj(fuera)}`, p.pj);
+    return nota(`${nombreObj(fuera)} sale de la mochila de ${p.pj}.`);
+  }
+
+  if (nombre === "mostrar") {
+    // Abrir la ficha es un caso aparte: no es una pestaña, es una capa por encima de la mesa.
+    if (e.vista === "ficha") {
+      const p = buscarPj(e.pj);
+      if (!p) {
+        return `Para abrir una ficha hace falta de quién. No hay ningún personaje llamado "${
+          e.pj ?? ""
+        }". Son: ${E.partida.map((x) => x.pj).join(", ")}.`;
+      }
+      irA("escena");
+      abrirFicha(E.partida.indexOf(p));
+      return nota(`En pantalla: la ficha de ${p.pj}.`);
+    }
+    cerrarFicha();
+    const vistas = { mesa: "escena", mapa: "mapa", grupo: "grupo", cierre: "mapa" };
+    const destino = vistas[e.vista];
+    if (!destino) return `"${e.vista}" no es una vista. Son: mesa, mapa, grupo, ficha, cierre.`;
+    irA(destino);
+    // El cierre vive al final de la pestaña Misión, así que además hay que bajar hasta él.
+    if (e.vista === "cierre") {
+      $("#cierre-tabla")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    const comoSeLlama = { mesa: "la mesa", mapa: "el mapa", grupo: "el grupo",
+                          cierre: "el cierre de la sesión" };
+    return nota(`En pantalla: ${comoSeLlama[e.vista]}.`);
   }
 
   if (nombre === "escribir_entrevista") {
@@ -2043,7 +2294,7 @@ async function claudeStream(pregunta, alRecibir) {
   const contexto = () => {
     const l = actual();
     const grupo = E.partida
-      .map((p) => `${p.pj} (${p.clase}, ${p.pg}/${p.pgMax} PG, CA ${p.ca}${
+      .map((p) => `${p.pj} (${p.clase}, ${p.pg}/${p.pgMax} PG, CA ${caDe(p)}${
         p.heridas.length ? ", herido: " + p.heridas.join(" y ") : ""
       }${p.agotamiento ? ", agotamiento " + p.agotamiento : ""})`)
       .join("; ");
@@ -2199,8 +2450,9 @@ function parsearJson(t) {
 
 /** Convierte frases en voz y las reproduce en orden, sin solaparse. */
 class ColaVoz {
-  constructor(rol) {
-    this.voz = VOZ[rol] ?? VOZ.narrador;
+  /** `voz` es un ID de voz de ElevenLabs, no un rol: el DJ siempre habla con `VOZ_DJ`. */
+  constructor(voz) {
+    this.voz = voz ?? VOZ_DJ;
     this.cadena = Promise.resolve();
   }
   encolar(frase) {
@@ -2235,7 +2487,7 @@ class ColaVoz {
     const lim = conLimite(25_000, "la voz");
     try {
       const r = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${this.voz}?output_format=mp3_22050_32`,
+        `https://api.elevenlabs.io/v1/text-to-speech/${this.voz}?output_format=mp3_44100_128`,
         {
           method: "POST",
           headers: { "xi-api-key": A.clave11, "content-type": "application/json" },
