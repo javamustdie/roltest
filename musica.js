@@ -422,6 +422,12 @@ export function crearAmbiente(opciones = {}) {
       t0,
       nodos: [],
       fuentes: [],
+      // Los sonidos de un disparo (gotas, campanas, golpes del pulso) traen su `stop()` puesto y
+      // se limpian solos… salvo que el contexto se suspenda antes de que llegue ese instante, y
+      // entonces se quedan colgando para siempre. Por eso también se apuntan aquí, para poder
+      // pararlos a mano al liberar la voz. Se borran solos al terminar, así que el conjunto solo
+      // tiene lo que está sonando ahora mismo, no el historial de la sesión.
+      efimeras: new Set(),
       generadores: [],
       fin: Infinity, // más allá de aquí no se programan sucesos (voz apagándose)
       hasta: t0, // hasta dónde están escritos los sucesos
@@ -541,13 +547,14 @@ export function crearAmbiente(opciones = {}) {
       temporizadores.delete(v.temporizador);
       v.temporizador = null;
     }
-    for (const f of v.fuentes) {
+    for (const f of [...v.fuentes, ...v.efimeras]) {
       try {
         f.stop();
       } catch {
         /* ya paró */
       }
     }
+    v.efimeras.clear();
     for (const n of v.nodos) {
       try {
         n.disconnect();
@@ -609,6 +616,13 @@ export function crearAmbiente(opciones = {}) {
     v.fuentes.push(s);
     v.nodos.push(s);
     return s;
+  }
+
+  /** Apunta una fuente de un disparo en la voz y la desapunta cuando termina sola. */
+  function efimera(v, fuente) {
+    v.efimeras.add(fuente);
+    fuente.onended = () => v.efimeras.delete(fuente);
+    return fuente;
   }
 
   /** LFO lento sumado a un parámetro (filtro, ganancia, frecuencia). Lo que hace que respire. */
@@ -679,6 +693,7 @@ export function crearAmbiente(opciones = {}) {
     const fin = envolvente(g.gain, t, nivel, ataque, caida);
     s.start(t, entre(v.rnd, 0, RUIDO_SEG * 0.9));
     s.stop(fin + 0.02);
+    efimera(v, s);
     return fin;
   }
 
@@ -707,6 +722,7 @@ export function crearAmbiente(opciones = {}) {
     const fin = envolvente(g.gain, t, nivel, ataque, caida);
     o.start(t);
     o.stop(fin + 0.02);
+    efimera(v, o);
     return fin;
   }
 
@@ -1103,7 +1119,7 @@ export function crearAmbiente(opciones = {}) {
             golpeTono(v, tt, {
               hz: 82,
               tipo: "sine",
-              nivel: 0.085 * acento,
+              nivel: 0.095 * acento,
               ataque: 0.004,
               caida: 0.1,
               deriva: 0.78,
@@ -1113,7 +1129,7 @@ export function crearAmbiente(opciones = {}) {
             golpeRuido(v, tt, {
               hz: 330,
               q: 1.3,
-              nivel: 0.055 * acento,
+              nivel: 0.062 * acento,
               ataque: 0.003,
               caida: 0.065,
               pan: entre(v.rnd, -0.12, 0.12),
@@ -1124,7 +1140,7 @@ export function crearAmbiente(opciones = {}) {
             golpeRuido(v, tt + (paso % 2 ? 0.006 : 0), {
               hz: entre(v.rnd, 1250, 1750),
               q: entre(v.rnd, 1.8, 3.0),
-              nivel: 0.075 * [1, 0.45, 0.7, 0.45][paso],
+              nivel: 0.085 * [1, 0.45, 0.7, 0.45][paso],
               ataque: 0.003,
               caida: entre(v.rnd, 0.035, 0.07),
               pan: entre(v.rnd, -0.45, 0.45),
@@ -1336,19 +1352,28 @@ export function crearAmbiente(opciones = {}) {
     const t = ctx.currentTime + (programado ? 0 : ADELANTO);
     const lista = [...voces];
     for (const v of lista) apagarVoz(v, t, dur);
-    return espera(dur + COLA_VOZ + 0.1).then(() => {
-      for (const v of lista) liberarVoz(v);
-      pararPlan();
-      if (conf.dormir && !ctxAjeno && ctx && !voces.length && ctx.state === "running") {
-        // Suspender ahorra batería en la mesa. El siguiente `poner()` reanuda.
-        try {
-          ctx.suspend();
-        } catch {
-          /* da igual */
+    return espera(dur + COLA_VOZ + 0.1)
+      .then(() => {
+        for (const v of lista) liberarVoz(v);
+        pararPlan();
+        // OJO: aquí NO se puede suspender todavía. Los `stop()` que se acaban de dar los procesa
+        // el hilo de audio en el siguiente bloque; si se suspende en el mismo instante, ese bloque
+        // no llega a correr, los osciladores se quedan a medio parar y no lanzan su evento `ended`.
+        // No es que suenen —están desconectados—, pero quedan colgando. Un cuarto de segundo de
+        // margen y el hilo de audio termina su trabajo.
+        return espera(0.25);
+      })
+      .then(() => {
+        if (conf.dormir && !ctxAjeno && ctx && !voces.length && ctx.state === "running") {
+          // Suspender ahorra batería en la mesa. El siguiente `poner()` reanuda.
+          try {
+            ctx.suspend();
+          } catch {
+            /* da igual */
+          }
         }
-      }
-      return mando;
-    });
+        return mando;
+      });
   }
 
   function volumen(v) {

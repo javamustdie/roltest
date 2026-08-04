@@ -495,8 +495,8 @@
   gap: 16px;
   margin-top: 12px;
 }
-/* El nicho: piedra oscura con el foco justo detrás de la figura, marco de hierro remachado y
-   viñeta fuerte en los cantos. La figura tiene que salir del fondo por luz, no por línea. */
+/* El nicho donde vive la figura. Ya no hace falta fingir un cuerpo con luz de fondo: `figura.js`
+   dibuja uno de verdad, así que aquí solo se pone el marco de hierro y se deja sitio. */
 .ficha svg.muneco {
   max-width: 460px;
   margin-inline: auto;
@@ -506,125 +506,81 @@
   background-image:
     var(--grano),
     radial-gradient(58% 46% at 50% 34%, #262B1A 0%, #14170E 52%, #08090500 100%),
-    radial-gradient(120% 100% at 50% 50%, #1A1E1200 40%, #05060A 100%),
     linear-gradient(#141810, #0A0B07);
-  background-blend-mode: overlay, normal, normal, normal;
+  background-blend-mode: overlay, normal, normal;
   background-origin: border-box;
   background-clip: border-box;
   box-shadow: inset 0 0 34px #000000C0, 0 3px 10px #00000090;
 }
-/* La silueta grabada: trazo más claro que antes (se juega con poca luz) y una sombra de 1px
-   debajo, que es lo que da la sensación de bajorrelieve. */
-.ficha .muneco .cuerpo {
-  stroke: #596340;
-  stroke-width: 2.6;
-  filter: drop-shadow(0 1.5px 0 #050603);
-}
-.ficha .muneco .cuerpo ellipse { fill: #1A1E12; }
 
 /* ── Ranuras de equipo ───────────────────────────────────────────────────────────────────── */
-/* En SVG no hay `box-shadow`, así que el bisel se finge con `drop-shadow` encadenados: sombra
-   arriba y luz abajo = hueco hundido (la luz del panel viene de arriba). `r` se toca por CSS,
-   que en SVG 2 es una propiedad: 12 es el máximo que cabe sin que el aro toque las etiquetas,
-   que app.js coloca a 14 unidades del centro. */
-.ficha .muneco .ranura { cursor: pointer; transition: filter 140ms; }
-.ficha .muneco .ranura circle {
-  r: 15px;
-  fill: #0A0C06;
-  stroke: #2C3220;
-  stroke-width: 3;
-  filter: drop-shadow(0 -1px 1px #000000C0) drop-shadow(0 1.5px 0 #5B6543);
+/* El marco lo dibuja `figura.js`. El ESTADO se pone encima con un rectángulo, para no tener que
+   repintar el marco por CSS: transparente en reposo, y con color cuando algo está en la mano o
+   cuando ese hueco es un destino donde se puede soltar. */
+.ficha .muneco .ranura { cursor: pointer; }
+.ficha .muneco .marca-estado { fill: none; stroke: none; stroke-width: 3; }
+.ficha .muneco .ranura.puesta .marca-estado { stroke: #C79A3E70; stroke-width: 2; }
+.ficha .muneco .ranura.destino .marca-estado {
+  stroke: #C79A3E;
+  stroke-dasharray: 6 4;
 }
-/* Vacío = apagado. Antes era un emoji, y un emoji a todo color dentro de una ranura de piedra
-   parecía que el hueco ya llevaba algo. */
-.ficha .muneco .ranura .ico-objeto { opacity: .4; filter: grayscale(.9); }
-.ficha .muneco .ranura.puesta .ico-objeto { opacity: 1; filter: none; }
-/* Halo negro alrededor del texto (`paint-order:stroke`) para que la etiqueta se lea sobre la
-   piedra y sobre el marco sin depender de dónde caiga. */
-.ficha .muneco .ranura .etiq {
-  font: 500 8.4px var(--mono);
-  fill: #B2B795;
-  paint-order: stroke;
-  stroke: #050603;
-  stroke-width: 2.6px;
-  stroke-linejoin: round;
-}
-/* Las seis ranuras de los lados: app.js las ancla hacia fuera (`end` a la izquierda, `start` a
-   la derecha) y un nombre de 22 caracteres —el máximo que deja `recortar`— se salía del viewBox
-   y quedaba cortado a media palabra. Centrarlas reparte el texto a los dos lados del ancla, que
-   es exactamente lo que hace que «Camisote de malla remendado» quepa, y el desplazamiento
-   vertical las saca de encima de su propio aro. `text-anchor` es propiedad CSS, así que se
-   corrige sin tocar el marcado.
-   Los números son a ojo sobre las coordenadas de MUNECO en app.js: si allí se mueve una ranura,
-   hay que volver a mirar esto. */
-.ficha .muneco .ranura[data-hueco="capa"] .etiq,
-.ficha .muneco .ranura[data-hueco="manos"] .etiq,
-.ficha .muneco .ranura[data-hueco="diestra"] .etiq,
-.ficha .muneco .ranura[data-hueco="zurda"] .etiq,
-.ficha .muneco .ranura[data-hueco="anillo1"] .etiq,
-.ficha .muneco .ranura[data-hueco="anillo2"] .etiq { text-anchor: middle; }
-/* hombros: la etiqueta sube por encima del aro */
-.ficha .muneco .ranura[data-hueco="capa"] .etiq  { transform: translate(-10px, -22px); }
-.ficha .muneco .ranura[data-hueco="manos"] .etiq { transform: translate(-6px, -24px); }
-/* manos: baja, en el hueco entre el puño y el anillo */
-.ficha .muneco .ranura[data-hueco="diestra"] .etiq,
-.ficha .muneco .ranura[data-hueco="zurda"] .etiq { transform: translate(0, 22px); }
-/* anillos: más abajo aún, por debajo de la etiqueta de las piernas */
-.ficha .muneco .ranura[data-hueco="anillo1"] .etiq,
-.ficha .muneco .ranura[data-hueco="anillo2"] .etiq { transform: translate(0, 38px); }
-/* Ocupada: engaste de latón encendido, fondo cálido y brillo hacia fuera. */
-/* En la mano: el aro late en oro vivo. En destino: punteado, para que se vea dónde soltar sin
-   que parezca que ya lleva algo. */
-.ficha .muneco .ranura.enmano circle {
+.ficha .muneco .ranura.enmano .marca-estado {
   stroke: #F2C766;
   stroke-width: 4;
   filter: drop-shadow(0 0 6px #E8AE4CB0);
 }
-.ficha .muneco .ranura.destino circle {
-  stroke: #C79A3E;
-  stroke-width: 2.4;
-  stroke-dasharray: 4 3;
-}
-.ficha .bolsa li.enmano {
-  border-color: #F2C766;
-  box-shadow: inset 0 0 0 1px #F2C76660, 0 0 8px #E8AE4C55;
-}
-.ficha .cogiendo {
-  margin: 8px 0 0;
-  font: 400 .86rem/1.5 var(--serif);
-  font-style: italic;
-  color: #F0D79A;
-}
-.ficha .cogiendo b { font-style: normal; color: #FFF0C4; }
-
-/* Equipada: el ámbar va en el ARO y en el resplandor de fuera, no en el relleno. Con el relleno
-   claro el icono quedaba encima de naranja y se perdía: la pieza dejaba de reconocerse, que es
-   justo para lo que está el icono. */
-.ficha .muneco .ranura.puesta circle {
-  fill: #16130A;
-  stroke: var(--ambar);
-  stroke-width: 2.6;
-  filter:
-    drop-shadow(0 0 6px #D9A04A80)
-    drop-shadow(0 0 1.5px #F0DCA870)
-    drop-shadow(0 1.5px 1px #00000090);
-}
-.ficha .muneco .ranura.puesta .etiq { fill: #F2E4BC; }
-.ficha .muneco .ranura:hover circle,
-.ficha .muneco .ranura:focus circle {
-  stroke: var(--oro-alto);
-  filter: drop-shadow(0 0 7px #F0DCA8B0);
-}
+.ficha .muneco .ranura:hover .marca-estado,
+.ficha .muneco .ranura:focus .marca-estado { stroke: #C79A3E80; }
 .ficha .muneco .ranura:focus { outline: none; }
-.ficha .muneco .ranura:hover .etiq,
-.ficha .muneco .ranura:focus .etiq { fill: #FFF4D6; }
 
-/* ═══ 9. Mochila: rejilla de inventario ════════════════════════════════════════════════════ */
-.ficha .mochila { gap: 10px; }
-.ficha .mochila h2 { color: var(--oro); }
+/* Vacío = apagado: se ve QUÉ va en el hueco sin que parezca que ya lleva algo. */
+.ficha .muneco .ico-hueco { opacity: .34; filter: grayscale(.9) brightness(.9); }
+.ficha .muneco .ranura.puesta .ico-hueco { opacity: 1; filter: none; }
 
-/* La bandeja: hueco hundido con marco de hierro, igual que el nicho del muñeco, para que se
-   lean como dos piezas del mismo mueble. */
+/* Lo que lleva puesto, en lista debajo del muñeco. Los nombres NO van sobre la figura: con los
+   marcos pegados a los cantos, un rótulo centrado se sale por un lado y choca con el marco de
+   abajo por el otro. Y así se leen. */
+.ficha .puestas {
+  list-style: none;
+  margin: 12px auto 0;
+  padding: 10px 12px;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: linear-gradient(#1B1F14, #12150C);
+  border: 1px solid var(--tinta);
+  box-shadow: inset 0 1px 0 #6E7A4E40, inset 0 0 0 1px #00000060;
+}
+.ficha .puestas li {
+  display: grid;
+  grid-template-columns: 5.6em 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #C79A3E14;
+}
+.ficha .puestas li:last-child { border-bottom: none; }
+.ficha .puestas .dónde {
+  font: 500 .56rem/1.4 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--oro-bajo, #8E9377);
+}
+.ficha .puestas b { font: 400 .9rem/1.3 var(--serif); font-weight: 400; color: #E4DFC6; }
+.ficha .puestas em {
+  font: 500 .66rem/1 var(--mono);
+  font-style: normal;
+  color: var(--ambar);
+  white-space: nowrap;
+}
+.ficha .puestas .nada {
+  grid-template-columns: 1fr;
+  font-style: italic;
+  color: var(--tiza-baja);
+  font-size: .86rem;
+}
+
 .ficha .bolsa {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));

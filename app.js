@@ -13,43 +13,16 @@ import { RETRATOS } from "./retratos.js";
 import { rasgosDe } from "./rasgos.js";
 import { pintarMapaEn } from "./mapa.js";
 import { iconoObjeto } from "./objetos.js";
+import { figura, HUECOS_FIGURA, LIENZO, marcoHueco, interiorHueco } from "./figura.js";
 
 /**
- * Muñeco de equipo. Una silueta humana en SVG con los huecos colocados donde van en el cuerpo,
- * en vez de una lista de campos de texto.
+ * El muñeco de equipo lo dibuja `app/figura.js`: un cuerpo con volumen y **marcos cuadrados**
+ * en dos columnas, como el inventario de Diablo III.
  *
- * Las coordenadas son sobre un lienzo de 200×300 y están puestas a mano: es un muñeco, no un
- * layout automático, y colocarlo a ojo sobre la silueta es justo lo que lo hace legible.
+ * Antes eran once círculos pegados a una silueta de líneas, y se rechazó dos veces en mesa. Las
+ * coordenadas y el marco vienen del módulo; aquí solo se decide qué va dentro de cada hueco y en
+ * qué estado está.
  */
-const MUNECO = {
-  cabeza:  { x: 100, y: 30,  lado: "arriba" },
-  amuleto: { x: 100, y: 78,  lado: "arriba" },
-  pecho:   { x: 100, y: 118, lado: "centro" },
-  capa:    { x: 40,  y: 108, lado: "izq" },
-  diestra: { x: 26,  y: 168, lado: "izq" },
-  zurda:   { x: 174, y: 168, lado: "der" },
-  manos:   { x: 174, y: 118, lado: "der" },
-  anillo1: { x: 24,  y: 210, lado: "izq" },
-  anillo2: { x: 176, y: 210, lado: "der" },
-  piernas: { x: 100, y: 214, lado: "centro" },
-  pies:    { x: 100, y: 276, lado: "abajo" },
-};
-
-/** La silueta. Trazos sueltos, no un dibujo cerrado: encaja con el tono del resto. */
-const SILUETA = `
-  <g class="cuerpo">
-    <ellipse cx="100" cy="36" rx="17" ry="21"/>
-    <path d="M100 57 L100 74"/>
-    <path d="M70 80 Q100 70 130 80 L134 150 Q100 158 66 150 Z"/>
-    <path d="M70 82 L44 104 L38 152"/>
-    <path d="M130 82 L156 104 L162 152"/>
-    <path d="M38 152 L34 196"/>
-    <path d="M162 152 L166 196"/>
-    <path d="M78 156 L74 226 L70 272"/>
-    <path d="M122 156 L126 226 L130 272"/>
-    <path d="M60 278 L84 278"/>
-    <path d="M116 278 L140 278"/>
-  </g>`;
 
 /**
  * Un objeto de equipo es `{n, ca, dano, nota}`, pero también puede ser **texto pelado**: así se
@@ -99,42 +72,65 @@ const armasDe = (p) =>
  */
 let cogido = null;
 
-/** Dibuja el muñeco con lo que lleva puesto en cada hueco. */
+/**
+ * Dibuja el muñeco con lo que lleva puesto en cada hueco.
+ *
+ * El nombre de la pieza va DEBAJO de su marco y solo cuando lleva algo: el hueco vacío ya dice
+ * qué es con su icono apagado, y un rótulo por hueco eran once palabras que no hacían falta.
+ */
 function pintarMuneco(p, i) {
   const eq = p.equipo ?? {};
-  const puntos = HUECOS.map((h) => {
-    const m = MUNECO[h.k];
-    if (!m) return "";
+  const puntos = HUECOS_FIGURA.map((h, n) => {
     const o = objDe(eq[h.k]);
     const puesto = !!o;
-    // La etiqueta se coloca al lado que le toca para no cruzar la silueta.
-    const dx = m.lado === "izq" ? -14 : m.lado === "der" ? 14 : 0;
-    const anclaje = m.lado === "izq" ? "end" : m.lado === "der" ? "start" : "middle";
-    const dy = m.lado === "arriba" ? -16 : m.lado === "abajo" ? 22 : m.lado === "centro" ? 22 : 4;
+    const nom = HUECOS.find((x) => x.k === h.k);
     const enMano = cogido?.tipo === "hueco" && cogido.i === i && cogido.hueco === h.k;
-    // Un hueco donde cabe lo que se ha cogido se resalta: en una figura con once ranuras hay que
-    // ver de un vistazo dónde se puede soltar.
+    // Un hueco donde cabe lo que se ha cogido se resalta: con once marcos hay que ver de un
+    // vistazo dónde se puede soltar.
     const libre = !!cogido && cogido.i === i && !enMano;
+
+    // El icono se escala al hueco libre que deja el marco, conservando proporción y centrado.
+    const d = interiorHueco(h);
+    const lado = Math.min(d.w, d.h);
+    const ix = d.x + (d.w - lado) / 2, iy = d.y + (d.h - lado) / 2;
+
     return `<g class="ranura${puesto ? " puesta" : ""}${enMano ? " enmano" : ""}${
       libre ? " destino" : ""}" data-hueco="${h.k}" data-i="${i}"
                role="button" tabindex="0"
-               aria-label="${h.n}: ${puesto ? esc(o.n) + bonoTexto(o) : "vacío"}">
-      <circle cx="${m.x}" cy="${m.y}" r="14"/>
-      ${iconoEn(puesto ? o.n : h.ej, m.x, m.y, 25, `p${i}-${h.k}`)}
-      <text class="etiq" x="${m.x + dx}" y="${m.y + dy}" text-anchor="${anclaje}">${
-        puesto ? esc(recortar(o.n, 22)) : h.n.toLowerCase()
-      }</text>
-      ${puesto && bonoTexto(o) ? `<text class="bono" x="${m.x + dx}" y="${m.y + dy + 10}"
-         text-anchor="${anclaje}">${esc(bonoTexto(o).trim())}</text>` : ""}
+               aria-label="${nom?.n ?? h.k}: ${puesto ? esc(o.n) + bonoTexto(o) : "vacío"}">
+      ${marcoHueco(h.x, h.y, h.w, h.h, { sufijo: `p${i}`, defs: n === 0 })}
+      <g class="ico-hueco"
+         transform="translate(${ix.toFixed(1)} ${iy.toFixed(1)}) scale(${(lado / 100).toFixed(4)})"
+        >${iconoObjeto(puesto ? o.n : nom?.ej ?? "fardo",
+                       { sufijo: `p${i}-${h.k}`, sombra: false })}</g>
+      <rect class="marca-estado" x="${h.x}" y="${h.y}" width="${h.w}" height="${h.h}"/>
     </g>`;
   }).join("");
+
+  // Los nombres NO van sobre el muñeco. Con los marcos en dos columnas pegados a los cantos, un
+  // rótulo centrado debajo se sale del lienzo por un lado y choca con el marco de abajo por el
+  // otro; y en la referencia el muñeco es solo iconos. Aquí va la lista de lo que lleva puesto,
+  // que además se lee mucho mejor que once textos de once píxeles.
+  const puestas = HUECOS_FIGURA
+    .map((h) => ({ h, o: objDe(p.equipo?.[h.k]) }))
+    .filter((x) => x.o)
+    .map(({ h, o }) => {
+      const nom = HUECOS.find((x) => x.k === h.k);
+      return `<li><span class="dónde">${esc(nom?.n ?? h.k)}</span>
+        <b>${esc(o.n)}</b>${bonoTexto(o) ? `<em>${esc(bonoTexto(o).trim())}</em>` : ""}</li>`;
+    })
+    .join("");
 
   const mochila = (p.mochila ?? []).map(objDe).filter(Boolean);
   return `
     <div class="muneco-caja">
-      <svg class="muneco" viewBox="-52 -8 304 318" role="img" aria-label="Equipo de ${esc(p.pj)}">
-        ${SILUETA}${puntos}
+      <svg class="muneco" viewBox="0 0 ${LIENZO.ancho} ${LIENZO.alto}" role="img"
+           aria-label="Equipo de ${esc(p.pj)}">
+        ${figura({ sufijo: `f${i}` })}${puntos}
       </svg>
+      <ul class="puestas">${
+        puestas || `<li class="nada">No lleva nada puesto.</li>`
+      }</ul>
       <div class="mochila" data-soltar="${i}">
         <h2><svg class="ico-tit" viewBox="0 0 100 100" aria-hidden="true"
               >${iconoObjeto("mochila", { sufijo: `tm${i}`, sombra: false })}</svg> Mochila</h2>
@@ -246,15 +242,6 @@ const HUECOS = [
   { k: "amuleto", n: "Amuleto", ej: "amuleto" },
 ];
 
-/**
- * Encaja un icono de `objetos.js` —que se dibuja en un lienzo de 100×100— dentro de otro SVG,
- * centrado en (cx,cy) y con el lado que se pida. Se usa en las ranuras del muñeco.
- */
-const iconoEn = (nombre, cx, cy, lado, sufijo) => {
-  const k = lado / 100;
-  return `<g transform="translate(${(cx - lado / 2).toFixed(2)} ${(cy - lado / 2).toFixed(2)}) ` +
-    `scale(${k.toFixed(4)})">${iconoObjeto(nombre, { sufijo, sombra: false })}</g>`;
-};
 
 /** Las seis preguntas de la sesión cero, en el mismo orden en que se hacen. */
 const ENTREVISTA = [
@@ -2041,7 +2028,19 @@ function avisar(txt) {
   a.textContent = txt;
   a.hidden = false;
 }
-function limpiarAviso() { $("#aviso").hidden = true; }
+function limpiarAviso() { $("#aviso").hidden = true; $("#aviso").dataset.tipo = "error"; }
+
+/**
+ * Un aviso de PELIGRO, no de error: alguien está a punto de morir. Se distingue en color del
+ * aviso de fallo técnico a propósito — en mesa no se pueden confundir «la app tiene un problema»
+ * y «vuestro amigo se muere».
+ */
+function alarma(txt) {
+  const a = $("#aviso");
+  a.dataset.tipo = "peligro";
+  a.textContent = txt;
+  a.hidden = false;
+}
 $("#aviso").addEventListener("click", limpiarAviso);
 
 function cabecerasClaude() {
@@ -2438,9 +2437,25 @@ function ejecutarHerramienta(nombre, e) {
     p.pg = Math.max(0, Math.min(p.pgMax, p.pg + (e.delta | 0)));
     registrar("tirada", `${p.pj}: ${antes} → ${p.pg} PG (${e.motivo})`, p.pj);
     const cae = p.pg === 0 && antes > 0;
+
+    // La muerte es definitiva en este sistema y no hay resurrección, así que caer a 0 —y quedarse
+    // a un golpe de caer— se avisan EN PANTALLA, no solo en la narración. Que la mesa lo vea venir
+    // es la diferencia entre una muerte que duele y una que sienta mal.
+    if (cae) {
+      alarma(
+        `${p.pj} cae a 0 PG. Inconsciente y agonizante: salvación de muerte cada turno, 10 o más. ` +
+          `Dos éxitos estabilizan, dos fallos matan. Y toca tirar herida persistente.`,
+      );
+    } else if (p.pg > 0 && p.pg < antes && p.pg <= Math.max(2, Math.ceil(p.pgMax * 0.2))) {
+      alarma(`${p.pj} se queda en ${p.pg} de ${p.pgMax} PG. Un golpe más y cae.`);
+    }
+
     return nota(
       `${p.pj}: ${antes} → ${p.pg} de ${p.pgMax} PG.` +
-        (cae ? " Ha caído a 0: inconsciente y agonizante, y toca tirar herida persistente." : ""),
+        (cae
+          ? " Ha caído a 0: inconsciente y agonizante, y toca tirar herida persistente. La mesa ya " +
+            "tiene el aviso en pantalla."
+          : ""),
     );
   }
 
@@ -3554,7 +3569,7 @@ irA(location.hash.slice(1) || "escena", false);
  * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
  * en mesa algo «no funciona».
  */
-const VERSION_APP = "corvalar-v13";
+const VERSION_APP = "corvalar-v14";
 $("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
 
 if ("serviceWorker" in navigator) {

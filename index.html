@@ -259,6 +259,11 @@
            justify-content:flex-start; background:#2A1512; color:#F0C4B4; border:none;
            border-top:1px solid #8D3524; font:400 .82rem/1.4 var(--serif); }
   .aviso::after { content:" ✕"; color:#C4705C; margin-left:auto; padding-left:10px; }
+  /* Peligro, no error: alguien se muere. Se distingue del fallo técnico a propósito — no se
+     pueden confundir «la app tiene un problema» y «vuestro amigo se muere». */
+  .aviso[data-tipo="peligro"] { background:#2A1A08; color:#F0D79A; border-top-color:var(--sebo);
+                                font-weight:400; }
+  .aviso[data-tipo="peligro"]::after { color:var(--sebo); }
 
   /* 46px de alto en vez de 60: era el elemento más grande de la lateral y se comía el sitio de
      la conversación. Sigue estando muy por encima del objetivo táctil recomendado. */
@@ -650,44 +655,29 @@
      una ranura y se escribe lo que lleva. */
   .muneco-caja { display:grid; grid-template-columns:minmax(200px,1fr) minmax(160px,1fr);
                  gap:14px; margin-top:10px; align-items:start; }
-  .muneco { width:100%; max-width:360px; aspect-ratio:304/318; background:#0E100A;
-            border:1px solid var(--liquen); }
-  .muneco .cuerpo { fill:none; stroke:#39412B; stroke-width:2.4; stroke-linecap:round; }
-  .muneco .cuerpo ellipse { fill:#151910; }
+  /* El muñeco: la figura y los marcos los dibuja app/figura.js, así que aquí solo el tamaño y
+     el estado de las ranuras. Esto es el estilo de reserva si ornado.css no carga. */
+  .muneco { width:100%; max-width:460px; aspect-ratio:440/524; background:#0E100A;
+            border:1px solid var(--liquen); display:block; margin-inline:auto; }
   .muneco .ranura { cursor:pointer; }
-  .muneco .ranura circle { r:14px; fill:#151910; stroke:#39412B; stroke-width:1.6; }
-  /* El hueco vacío dibuja apagado el icono de lo que va ahí; puesto, a todo color. */
-  .muneco .ranura .ico-objeto { opacity:.42; filter:grayscale(.9); }
-  .muneco .ranura.puesta .ico-objeto { opacity:1; filter:none; }
-  .muneco .ranura .etiq { font:400 8.4px var(--mono); fill:var(--tiza-baja); }
-  /* El bonificador debajo del nombre de la pieza: se lee de un vistazo qué está sumando. */
-  .muneco .ranura .bono { font:500 7.4px var(--mono); fill:var(--sebo); }
-  /* Coger y soltar: lo que está en la mano y dónde se puede dejar. */
-  .muneco .ranura.enmano circle { stroke:var(--ambar); stroke-width:3; }
-  .muneco .ranura.destino circle { stroke:var(--sebo); stroke-dasharray:3 2.4; }
-  .bolsa li.enmano { border-color:var(--ambar); }
-  .cogiendo { margin:6px 0 0; font-size:.84rem; font-style:italic; color:var(--ambar); }
-  .cogiendo b { font-style:normal; }
-  /* Las seis ranuras de los lados: app.js las ancla hacia fuera, y un nombre largo se salía del
-     viewBox cortado a media palabra. Centrarlas reparte el texto a los dos lados del ancla, y el
-     desplazamiento vertical las quita de encima de su propio aro. `text-anchor` es propiedad CSS,
-     así que se corrige sin tocar el marcado. ornado.css repite estas reglas con su propia
-     especificidad; esto es lo que se ve si esa hoja no carga. */
-  .muneco .ranura[data-hueco="capa"] .etiq, .muneco .ranura[data-hueco="manos"] .etiq,
-  .muneco .ranura[data-hueco="diestra"] .etiq, .muneco .ranura[data-hueco="zurda"] .etiq,
-  .muneco .ranura[data-hueco="anillo1"] .etiq,
-  .muneco .ranura[data-hueco="anillo2"] .etiq { text-anchor:middle; }
-  .muneco .ranura[data-hueco="capa"] .etiq  { transform:translate(-10px,-22px); }
-  .muneco .ranura[data-hueco="manos"] .etiq { transform:translate(-6px,-24px); }
-  .muneco .ranura[data-hueco="diestra"] .etiq,
-  .muneco .ranura[data-hueco="zurda"] .etiq { transform:translate(0,22px); }
-  .muneco .ranura[data-hueco="anillo1"] .etiq,
-  .muneco .ranura[data-hueco="anillo2"] .etiq { transform:translate(0,38px); }
-  .muneco .ranura.puesta circle { fill:#14120A; stroke:var(--sebo); stroke-width:2; }
-  .muneco .ranura.puesta .ico { opacity:1; }
-  .muneco .ranura.puesta .etiq { fill:var(--tiza); }
-  .muneco .ranura:hover circle, .muneco .ranura:focus circle { stroke:var(--ambar); }
+  .muneco .marca-estado { fill:none; stroke:none; stroke-width:3; }
+  .muneco .ranura.destino .marca-estado { stroke:var(--sebo); stroke-dasharray:6 4; }
+  .muneco .ranura.enmano .marca-estado { stroke:var(--ambar); stroke-width:4; }
   .muneco .ranura:focus { outline:none; }
+  .muneco .ico-hueco { opacity:.34; filter:grayscale(.9); }
+  .muneco .ranura.puesta .ico-hueco { opacity:1; filter:none; }
+  .muneco .ranura.puesta .marca-estado { stroke:var(--sebo); stroke-width:2; opacity:.5; }
+  /* Lo que lleva puesto, en lista debajo del muñeco: los nombres no caben sobre la figura. */
+  .puestas { list-style:none; margin:12px auto 0; padding:9px 11px; max-width:460px;
+             display:flex; flex-direction:column; gap:2px;
+             background:var(--musgo); border:1px solid var(--liquen); }
+  .puestas li { display:grid; grid-template-columns:5.6em 1fr auto; align-items:baseline; gap:8px;
+                padding:4px 0; }
+  .puestas .dónde { font:500 .56rem/1.4 var(--mono); letter-spacing:.1em;
+                    text-transform:uppercase; color:var(--tiza-baja); }
+  .puestas b { font:400 .9rem/1.3 var(--serif); color:var(--tiza); }
+  .puestas em { font:500 .66rem/1 var(--mono); font-style:normal; color:var(--sebo); }
+  .puestas .nada { grid-template-columns:1fr; font-style:italic; color:var(--tiza-baja); }
 
   .mochila { display:flex; flex-direction:column; gap:8px; }
   .bolsa { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px; }
@@ -1158,7 +1148,7 @@
 
     <!-- Los avisos, al pie de la lateral: siempre a la vista y en la misma zona que el DJ.
          Antes vivían en la pestaña de Ajustes, y durante la partida nadie mira Ajustes. -->
-    <button class="aviso" id="aviso" hidden></button>
+    <button class="aviso" id="aviso" data-tipo="error" hidden></button>
   </aside>
 </div>
 
