@@ -7,7 +7,7 @@
  *
  * Sube VERSION al cambiar cualquier fichero de app/ para forzar la actualización.
  */
-const VERSION = "corvalar-v12";
+const VERSION = "corvalar-v13";
 
 const BASE = [
   "./",
@@ -40,6 +40,12 @@ self.addEventListener("activate", (e) => {
       .then((ks) => Promise.all(ks.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
+});
+
+// Quién eres, para que Ajustes pueda decir qué versión está sirviendo de verdad. Es la primera
+// pregunta cuando algo «no funciona» en el tablet: si el código es el nuevo o uno de caché.
+self.addEventListener("message", (e) => {
+  if (e.data === "version") e.source?.postMessage({ version: VERSION });
 });
 
 self.addEventListener("fetch", (e) => {

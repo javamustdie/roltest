@@ -55,7 +55,10 @@
  *           sufijo:    string  — como en figura(); usa el MISMO para toda la figura.
  *           defs:      boolean — emitir el <defs> del marco (por defecto true). Son idénticos
  *                                para el mismo sufijo, así que repetirlos once veces no rompe
- *                                nada; ponerlo a false solo ahorra marcado.
+ *                                nada; ponerlo a false solo ahorra marcado. OJO: los degradados
+ *                                del marco NO los pone `figura()`, así que al menos UNA de las
+ *                                llamadas de cada SVG tiene que emitirlos o los marcos saldrán
+ *                                negros.
  *           acento:    string|null — color del filo interior, para marcar un hueco (destino de
  *                                un arrastre, hueco ocupado…). Por defecto null.
  *           remaches:  boolean — los cuatro remaches de latón de las esquinas (true).
@@ -133,9 +136,9 @@ export const HUECOS_FIGURA = [
 // El recorrido es LARGO a propósito, de la tiza casi blanca al verde de turba: con rampas cortas
 // —todo en el tercio claro— la figura salía plana, como un muñeco de plástico. El lado en sombra
 // muere casi en el color del fondo, que es lo que hace que el cuerpo aparezca por la luz.
-const CARNE_LUZ = ["#F3EEDA", "#D4CFB2", "#A5AB88", "#727A59", "#464E36"];  // lado iluminado
-const CARNE_MED = ["#E2DDC4", "#B7B399", "#8B9170", "#5C6445", "#383F2A"];  // eje del cuerpo
-const CARNE_SOM = ["#ABAC8F", "#8A9070", "#697152", "#484F37", "#2C3321"];  // lado en sombra
+const CARNE_LUZ = ["#E6E1CA", "#C2BDA0", "#909872", "#5E6646", "#383F29"];  // lado iluminado
+const CARNE_MED = ["#D0CBB0", "#A3A084", "#767D5D", "#4C5437", "#2D3421"];  // eje del cuerpo
+const CARNE_SOM = ["#93967A", "#72785B", "#545C40", "#39402A", "#232919"];  // lado en sombra
 const HIERRO = [["#A9AF90", 0], ["#7C8464", .28], ["#4A5139", .62], ["#2A2F1F", 1]];
 const HONDO = [["#080A05", 0], ["#101408", .45], ["#1B2011", .8], ["#242A17", 1]];
 
@@ -216,12 +219,16 @@ const gradLienzo = (id, paradas, [x1, y1, x2, y2]) =>
  * Cilindro: la rampa de carne cruzando de lado a lado la pieza, en coordenadas del lienzo. Un
  * brazo, un muslo y un cuello son cilindros, y esto es lo que les da la vuelta.
  *
- * `x1` es el canto que mira a la luz y `x2` el que queda en sombra. La luz no se pone justo en el
- * borde (`.06`) porque un cilindro tiene su máximo un poco por dentro del canto.
+ * El eje va del canto que mira a la luz al canto en sombra, y tiene que ser PERPENDICULAR al eje
+ * de la pieza. Con el eje siempre horizontal, el brazo —que baja inclinado— salía oscuro en el
+ * hombro y claro en la muñeca: no un cilindro, sino una mancha que se apaga en diagonal, y el
+ * canto contra el pecho se leía como un tirante.
+ *
+ * La luz no se pone justo en el borde (.05) porque un cilindro tiene su máximo un poco por dentro.
  */
-const cilindro = (id, x1, x2, rampa) =>
+const cilindro = (id, [x1, y1, x2, y2], rampa) =>
   gradLienzo(id, [[rampa[0], .05], [rampa[1], .28], [rampa[2], .55], [rampa[3], .8],
-                  [rampa[4], 1]], [x1, 0, x2, 0]);
+                  [rampa[4], 1]], [x1, y1, x2, y2]);
 
 /** Desenfoque. Tres fuerzas: `b1` para surcos y filos, `b2` para masas, `b3` para el suelo. */
 const desenfoque = (id, r) =>
@@ -230,12 +237,12 @@ const desenfoque = (id, r) =>
 
 // ── El cuerpo ─────────────────────────────────────────────────────────────────────────────────
 //
-// Figura de pie, de frente, brazos algo separados del cuerpo. Proporciones de siempre: siete
-// cabezas y media, de la coronilla (y=76) a la planta (y=508). La cabeza mide 58 de alto, y de
-// ahí salen los puntos de referencia:
+// Figura de pie, de frente, brazos algo separados del cuerpo. Proporciones de siempre: unas siete
+// cabezas, de la coronilla (y=78) a la planta (y=507). La cabeza mide 63 de alto, y de ahí salen
+// los puntos de referencia:
 //
-//   mentón 134 · hombros 152 · pectorales 190 · cintura 256 · ingle 302
-//   punta de los dedos 344 · rodilla 390 · tobillo 484 · planta 508
+//   mentón 141 · hombros 152 · pectorales 190 · cintura 260 · cadera 292 · pubis 318
+//   punta de los dedos 351 · rodilla 390 · tobillo 484 · planta 507
 //
 // CÓMO ESTÁ MONTADO, que es lo que importa si hay que retocarlo:
 //
@@ -243,11 +250,16 @@ const desenfoque = (id, r) =>
 //      cada uno con su cilindro: un degradado en coordenadas del LIENZO que cruza la pieza del
 //      canto iluminado al canto en sombra. Al estar todos en el mismo sistema de coordenadas y
 //      con rampas emparejadas por lado, el cuerpo se lee como una sola cosa iluminada de lado.
-//   2. La misma lista hace de <clipPath>. Todo el sombreado se pinta DENTRO del recorte, y por
-//      eso se puede sombrear a brochazos anchos y desenfocados sin que se salga del cuerpo.
-//   3. Encima van dos velos (uno hacia los pies, porque la luz viene de arriba, y otro hacia la
-//      derecha) y el modelado: pectorales, esternón, rodillas, ingles… lo justo. Cada raya de más
-//      convierte el dibujo en un mapa.
+//   2. Las piezas van agrupadas en cuatro CAPAS, de atrás hacia delante: piernas, tronco, brazos,
+//      cabeza. Cada capa se recorta con la silueta de SUS piezas y lleva dentro su propio
+//      sombreado, así que se puede sombrear a brochazos anchos y desenfocados sin salirse.
+//
+//      Esto NO es un detalle de organización: con un solo recorte para todo el cuerpo, el filo de
+//      luz del costado del tronco se pintaba ENCIMA del brazo que lo tapa, y el brazo salía con
+//      un canto claro y recto de arriba abajo — una hombrera de armadura. El sombreado de una
+//      pieza solo puede tocar lo que está a su altura o por detrás.
+//   3. Encima va un velo hacia los pies (la luz viene de arriba) y el modelado: pectorales,
+//      esternón, rodillas, ingles… lo justo. Cada raya de más convierte el dibujo en un mapa.
 //
 // Solo se escribe la mitad izquierda del lienzo (que es el lado DERECHO de la figura, porque nos
 // mira); la otra sale de `esp()`. Los contornos de los que cuelgan los filos de luz repiten unos
@@ -268,114 +280,128 @@ const D_CUELLO =
   "C234 141 232 130 231 118 Z";
 
 /**
- * Tronco, de la clavícula a la ingle. La cintura entra a 72 de ancho entre unos hombros de 90 y
+ * Tronco, de la clavícula al pubis. La cintura entra a 72 de ancho entre unos hombros de 90 y
  * unas caderas de 84: sin ese estrechamiento el cuerpo se lee como un tablón.
+ *
+ * El bajo baja hasta el pubis (220,317) formando una V, y los muslos se pintan DESPUÉS por encima
+ * (ver D_PIERNA): así el único canto que se ve ahí es la línea de la ingle.
  */
 const D_TRONCO =
   "M220 146 C204 146 191 150 184 158 C177 166 174 176 175 190 C176 208 182 226 185 244 " +
-  "C187 254 186 264 183 276 C180 288 177 296 178 303 C179 309 184 313 191 311 L220 306 " +
-  "L249 311 C256 313 261 309 262 303 C263 296 260 288 257 276 C254 264 253 254 255 244 " +
+  "C187 254 186 264 183 276 C181 286 178 294 179 300 C186 308 200 316 220 317 " +
+  "C240 316 254 308 261 300 C262 294 259 286 257 276 C254 264 253 254 255 244 " +
   "C258 226 264 208 265 190 C266 176 263 166 256 158 C249 150 236 146 220 146 Z";
 
 /**
  * Brazo derecho de la figura (a nuestra izquierda). Del hombro al puño.
  *
- * La esquina de (164,154) es el ACROMION, y está ahí por algo: sin ella, el trapecio y el
- * deltoides forman una sola cuesta continua del cuello al codo y la figura parece llevar una
- * capa puesta. El hombro tiene que ir casi plano y romper de golpe.
+ * El codo de la curva por (164,152) es el ACROMION, y está ahí por algo: sin él, el trapecio y el
+ * deltoides forman una sola cuesta continua del cuello al codo y la figura parece llevar una capa
+ * puesta. El hombro va casi plano desde la clavícula y rompe hacia abajo de golpe.
  *
- * El canto de dentro se mete por encima del tronco arriba (el brazo va DELANTE) y se separa a
- * partir del codo: es la postura del inventario del Diablo, brazos algo abiertos.
+ * El canto de dentro sube en DIAGONAL del sobaco a la clavícula. Cuando subía recto —una vertical
+ * en x=190— el trozo de brazo que tapa el pecho salía con canto propio y parecía una hombrera de
+ * armadura. Ese canto tiene que ser la línea del sobaco, y las líneas del sobaco van al sesgo.
  */
 const D_BRAZO =
-  "M190 145 C179 146 170 149 164 154 C158 160 156 168 157 177 C155 186 153 193 152 201 " +
-  "C148 217 143 235 139 251 C136 270 131 292 129 311 C128 316 130 319 134 319 L147 319 " +
-  "C148 306 149 300 151 293 C154 278 155 272 157 265 C159 258 161 254 164 250 " +
-  "C168 240 170 232 174 225 C178 214 181 208 184 200 C187 190 189 183 190 177 " +
-  "C190 166 190 155 190 145 Z";
+  "M186 147 C174 148 164 152 158 162 C154 170 153 178 152 186 C149 197 146 206 143 215 " +
+  "C139 228 136 240 133 250 C130 260 129 270 128 280 C126 292 124 304 122 316 L121 326 " +
+  "L143 326 C143 316 143 308 144 300 C146 288 148 284 150 280 " +
+  "C152 270 154 260 157 250 C161 238 164 227 170 215 C174 206 177 198 179 190 " +
+  "C183 178 185 160 186 147 Z";
 
-/** Mano derecha de la figura: dedos juntos y algo doblados, pulgar hacia dentro. */
+/**
+ * Mano derecha de la figura: dedos juntos y algo doblados, pulgar hacia dentro.
+ *
+ * Empieza en y=314 y es un poco MÁS ANCHA que el brazo a esa altura, así que le tapa el corte:
+ * si la mano arranca justo donde acaba el brazo, en la muñeca queda un escalón.
+ */
 const D_MANO =
-  "M129 314 C125 320 124 331 128 340 C131 346 138 349 143 345 C147 341 149 331 148 320 " +
-  "L147 313 Z";
+  "M121 314 C118 322 118 332 121 340 C124 348 132 351 137 346 C142 342 143 331 143 320 " +
+  "L143 314 Z";
 
 /**
  * Pierna derecha de la figura: muslo, rodilla estrecha y gemelo por fuera. La cara de dentro cae
  * casi recta y la de fuera hace las dos curvas — es lo que la separa de un tubo.
  */
+// El muslo se pinta ENCIMA de la pelvis y su canto de arriba es la línea de la INGLE: de la
+// cadera (176,292) al pubis (213,318), en diagonal. Es lo único que quita del todo el efecto
+// «calzón»: mientras el corte del bajo del tronco cruzaba los muslos, cualquier ajuste de tono lo
+// dejaba en un canto raro. Aquí el canto es una línea que existe en el cuerpo.
 const D_PIERNA =
-  "M177 296 C172 310 171 330 171 346 C172 360 175 368 177 376 C178 384 179 388 179 392 " +
-  "C180 400 179 408 180 416 C181 428 184 442 186 458 C186 470 186 480 186 490 L206 490 " +
-  "C206 480 206 470 206 458 C206 444 208 430 209 418 C209 410 209 404 209 392 " +
-  "C209 386 210 382 210 376 C211 366 213 344 212 320 L212 296 Z";
+  "M182 289 C177 299 173 313 171 332 C171 340 171 344 171 346 C172 360 175 368 177 376 " +
+  "C178 384 179 388 179 392 C180 400 179 408 180 416 C181 428 184 442 186 458 " +
+  "C186 470 186 480 186 490 L206 490 C206 480 206 470 206 458 C206 444 208 430 209 418 " +
+  "C209 410 209 404 209 392 C209 386 210 382 210 376 C211 366 213 344 213 320 L213 318 " +
+  "C205 313 192 302 182 289 Z";
 
 /** Pie derecho de la figura: empeine en escorzo, talón estrecho y los dedos hacia el que mira. */
 const D_PIE =
-  "M186 480 C182 487 179 494 178 499 C177 504 181 507 188 507 L207 507 C212 507 214 503 213 498 " +
-  "C211 491 208 485 207 480 Z";
+  "M187 480 C184 487 181 494 180 499 C179 504 182 507 189 507 L206 507 C211 507 213 503 212 498 " +
+  "C210 491 208 485 207 480 Z";
+
+/** Las piezas del cuerpo. La clave es también la del cilindro con que se rellena (ver TONOS). */
+const PIEZAS = {
+  "pierna-i": D_PIERNA, "pierna-d": esp(D_PIERNA),
+  "pie-i": D_PIE, "pie-d": esp(D_PIE),
+  "cuello": D_CUELLO, "tronco": D_TRONCO,
+  "brazo-i": D_BRAZO, "brazo-d": esp(D_BRAZO),
+  "mano-i": D_MANO, "mano-d": esp(D_MANO),
+  "cabeza": D_CABEZA,
+};
 
 /**
- * Las piezas del cuerpo, en el orden en que se pintan: primero lo que va detrás. `g` es el
- * cilindro con el que se rellena cada una (ver TONOS).
- */
-const PIEZAS = [
-  { d: D_PIERNA,       g: "pierna-i" },
-  { d: esp(D_PIERNA),  g: "pierna-d" },
-  { d: D_PIE,          g: "pie-i" },
-  { d: esp(D_PIE),     g: "pie-d" },
-  { d: D_CUELLO,       g: "cuello" },
-  { d: D_TRONCO,       g: "tronco" },
-  { d: D_BRAZO,        g: "brazo-i" },
-  { d: esp(D_BRAZO),   g: "brazo-d" },
-  { d: D_MANO,         g: "mano-i" },
-  { d: esp(D_MANO),    g: "mano-d" },
-  { d: D_CABEZA,       g: "cabeza" },
-];
-
-/**
- * El cilindro de cada pieza: de qué x a qué x cruza la rampa y cuál de las tres rampas usa. Los
- * dos números son los cantos de la pieza en el lienzo — el primero, el que mira a la luz.
+ * El cilindro de cada pieza: el eje de su rampa —del punto que mira a la luz al que queda en
+ * sombra, cruzando la pieza— y cuál de las tres rampas usa.
+ *
+ * Los ejes de los brazos van inclinados a propósito: son perpendiculares al brazo, que baja
+ * abriéndose. Los de las piernas, el tronco y el cuello son casi horizontales, porque esas piezas
+ * son casi verticales.
  */
 const TONOS = {
-  "cuello":   [196, 250, CARNE_MED],
-  "cabeza":   [197, 243, CARNE_MED],
-  "tronco":   [172, 266, CARNE_MED],
-  "brazo-i":  [126, 190, CARNE_LUZ],
-  "brazo-d":  [250, 314, CARNE_SOM],
-  "mano-i":   [124, 150, CARNE_LUZ],
-  "mano-d":   [290, 316, CARNE_SOM],
-  "pierna-i": [170, 213, CARNE_LUZ],
-  "pierna-d": [227, 270, CARNE_SOM],
-  "pie-i":    [176, 214, CARNE_LUZ],
-  "pie-d":    [226, 264, CARNE_SOM],
+  "cuello":   [200, 140, 244, 150, CARNE_MED],
+  "cabeza":   [198, 96, 244, 110, CARNE_MED],
+  "tronco":   [168, 220, 266, 236, CARNE_MED],
+  "brazo-i":  [137, 236, 170, 245, CARNE_LUZ],
+  "brazo-d":  [270, 245, 303, 236, CARNE_SOM],
+  "pierna-i": [170, 402, 213, 402, CARNE_LUZ],
+  "pierna-d": [227, 402, 270, 402, CARNE_SOM],
+};
+
+/**
+ * Piezas que NO tienen cilindro propio: se rellenan con el de la pieza a la que van pegadas.
+ * La mano con el del brazo y el pie con el de la pierna, para que en la muñeca y en el tobillo no
+ * haya salto de tono — la mano es la continuación del brazo, no otra pieza.
+ */
+const RELLENO = {
+  "mano-i": "brazo-i", "mano-d": "brazo-d",
+  "pie-i": "pierna-i", "pie-d": "pierna-d",
 };
 
 // Contornos de los que cuelga el modelado. `_I` es el canto que mira a la luz (a la izquierda del
 // lienzo) y `_D` el que queda en sombra; los del lado derecho salen de `esp()`.
 const C_TRONCO_I = "M184 158 C177 166 174 176 175 190 C176 208 182 226 185 244 " +
-  "C187 254 186 264 183 276 C180 288 177 296 178 303";
-const C_BRAZO_I = "M190 145 C179 146 170 149 164 154 C158 160 156 168 157 177 " +
-  "C155 186 153 193 152 201 C148 217 143 235 139 251 C136 270 131 292 129 311";
-const C_BRAZO_D = "M147 319 C148 306 149 300 151 293 C154 278 155 272 157 265 " +
-  "C159 258 161 254 164 250 C168 240 170 232 174 225 C178 214 181 208 184 200 " +
-  "C187 190 189 183 190 177";
-const C_PIERNA_I = "M177 296 C172 310 171 330 171 346 C172 360 175 368 177 376 " +
+  "C187 254 186 264 183 276 C181 286 178 294 179 300";
+const C_BRAZO_I = "M186 147 C174 148 164 152 158 162 C154 170 153 178 152 186 " +
+  "C149 197 146 206 143 215 C139 228 136 240 133 250 C130 260 129 270 128 280 " +
+  "C126 292 124 304 122 318";
+const C_BRAZO_D = "M143 324 C143 314 143 308 144 300 C146 288 148 284 150 280 " +
+  "C152 270 154 260 157 250 C161 238 164 227 170 215 C174 206 177 198 179 190 " +
+  "C183 178 185 160 186 147";
+const C_PIERNA_I = "M175 300 C173 312 171 330 171 346 C172 360 175 368 177 376 " +
   "C178 384 179 388 179 392 C180 400 179 408 180 416 C181 428 184 442 186 458 " +
   "C186 470 186 480 186 490";
-const C_PIERNA_D = "M212 302 C213 344 211 366 210 376 C210 382 209 386 209 392 " +
+const C_PIERNA_D = "M212 318 C213 340 211 366 210 376 C210 382 209 386 209 392 " +
   "C209 404 209 410 209 418 C208 430 206 444 206 458 C206 470 206 480 206 490";
 const C_CABEZA_I = "M214 79 C205 82 197 90 197 103 C197 114 199 122 203 129";
 
-/**
- * El sombreado, que es lo que convierte el contorno en un cuerpo. Va todo dentro del recorte de
- * la silueta, así que se puede pintar a brochazos anchos sin miedo a salirse.
- */
-function modelado(pref) {
-  return [
-    // Velo hacia los pies: la luz viene de arriba, así que las piernas se apagan. Un rectángulo
-    // con degradado; el recorte lo pega al cuerpo.
-    `<rect x="110" y="60" width="230" height="460" fill="url(#${pref}-suelo)"/>`,
+/** El velo hacia los pies: la luz viene de arriba, así que lo de abajo se apaga. */
+const velo = (pref) => `<rect x="110" y="60" width="230" height="460" fill="url(#${pref}-suelo)"/>`;
 
+/** Cabeza: cráneo, sien en sombra, cuencas, nariz, boca y pelo. */
+function modCabeza(pref) {
+  return [
+    velo(pref),
     // ── Cabeza ──
     // Cráneo iluminado por la izquierda, sien derecha en sombra, cuencas hundidas y sombra bajo
     // el mentón. Nada de rasgos con línea: a este tamaño una raya oscura es una máscara.
@@ -387,64 +413,94 @@ function modelado(pref) {
     filo("M218 107 C220 113 221 118 219 122", pref, 2.2, .3),
     surco("M221 123 C223 124 224 125 222 126", pref, 2, .3),
     surco("M215 131 C218 132 223 132 226 131", pref, 2.2, .28),
-    som("M207 132 C212 139 229 139 233 132 C233 143 227 150 220 150 C213 150 207 143 207 132 Z",
-        pref, .5, "b1"),
-    // Pelo corto, pegado al cráneo, con la coronilla algo iluminada.
-    `<path d="M197 102 C196 86 206 76 220 76 C234 76 244 86 243 103 C239 94 231 90 223 90 ` +
-      `C213 90 202 94 197 102 Z" fill="url(#${pref}-pelo)"/>`,
+    // Pelo corto, pegado al cráneo, con la coronilla algo iluminada. Se dibuja de sobra por
+    // arriba: lo recorta la silueta de la propia cabeza. El pico del medio y los dos huecos de
+    // las sienes son lo que lo separa de un gorro de baño.
+    `<path d="M195 104 C194 84 205 72 220 72 C235 72 246 84 245 105 C242 98 237 93 231 91 ` +
+      `C228 95 224 97 220 97 C216 97 212 95 209 91 C203 93 198 98 195 104 Z" ` +
+      `fill="url(#${pref}-pelo)"/>`,
     filo("M204 86 C209 82 215 80 220 80", pref, 2.4, .26, "b1", LUZ_MEDIA),
+  ].join("");
+}
 
-    // ── Cuello y hombros ──
-    // El cuello va SIEMPRE más apagado que la cara: le cae encima la sombra de la mandíbula.
-    som("M204 142 L236 142 C238 152 236 160 232 166 L208 166 C204 160 202 152 204 142 Z",
-        pref, .42),
+/** Cuello y tronco: la sombra de la mandíbula, clavículas, pectorales, costillar, ingles. */
+function modTronco(pref) {
+  return [
+    velo(pref),
+    // ── Cuello ──
+    // Va SIEMPRE más apagado que la cara: le cae encima la sombra de la mandíbula.
+    som("M204 140 L236 140 C238 152 236 160 232 166 L208 166 C204 160 202 152 204 140 Z",
+        pref, .45),
     filo("M210 128 C208 138 205 146 200 152", pref, 3, .3),
-    surco("M220 160 C212 161 204 163 196 168", pref, 2.6, .32),
-    surco("M220 160 C228 161 236 163 244 168", pref, 2.6, .24),
-    filo("M219 157 C211 158 204 160 197 164", pref, 2, .28),
+    // Las clavículas, cortas: de largo llegaban a los hombros y parecían un collar.
+    surco("M216 161 C210 162 205 164 200 167", pref, 2.4, .28),
+    surco("M224 161 C230 162 235 164 240 167", pref, 2.4, .2),
+    filo("M216 158 C210 159 205 161 201 164", pref, 1.8, .26),
 
     // ── Tronco ──
     filo(C_TRONCO_I, pref, 5, .5),
     surco(esp(C_TRONCO_I), pref, 9, .45, "b2"),
-    // Pectorales: luz en el de la izquierda y pliegue corto debajo de los dos. El pliegue muere
-    // hacia el sobaco, que es lo que lo separa de una sonrisa dibujada en el pecho.
+    // Pectorales: luz en el de la izquierda y pliegue corto debajo de cada uno. Los pliegues van
+    // FLOJOS y no llegan al centro: subidos de tono y unidos por el esternón, se leen como un
+    // sujetador dibujado en el pecho.
     brillo("M186 176 C197 174 207 182 208 194 C208 203 200 209 191 207 C183 205 179 194 181 " +
            "184 C182 179 183 177 186 176 Z", pref, .3),
-    surco("M191 202 C198 209 207 211 214 207", pref, 3.2, .38),
-    surco("M249 202 C242 209 233 211 226 207", pref, 3.2, .28),
+    surco("M192 200 C198 207 205 210 211 208", pref, 2.8, .24),
+    surco("M248 200 C242 208 235 211 229 209", pref, 2.8, .18),
     filo("M186 182 C191 176 199 174 205 177", pref, 2.4, .32),
-    // Costillar en sombra por la derecha, esternón, ombligo y una sombra blanda en cada ingle.
+    // Costillar en sombra por la derecha, esternón y ombligo.
     som("M248 200 C256 214 258 232 256 250 L246 246 C248 230 246 214 242 204 Z", pref, .3),
-    surco("M220 172 L220 198", pref, 2.2, .22),
-    surco("M219 256 C222 256 222 260 219 260 C217 260 217 256 219 256 Z", pref, 2.4, .45),
-    som("M184 276 C194 290 204 300 214 306 L214 314 C198 308 186 294 180 280 Z", pref, .28),
-    som("M256 276 C246 290 236 300 226 306 L226 314 C242 308 254 294 260 280 Z", pref, .24),
-    // Pubis y sombra del tronco sobre los muslos: sin esto la pelvis es una mancha clara. Va
-    // flojo a propósito; subido de tono parece un calzón pintado.
-    som("M207 300 L233 300 C233 310 227 316 220 316 C213 316 207 310 207 300 Z", pref, .38),
+    surco("M220 174 L220 196", pref, 2, .2),
+    surco("M219 256 C222 256 222 260 219 260 C217 260 217 256 219 260 Z", pref, 2.4, .45),
+    // El pubis, en sombra, y de sobra hacia los lados: entre los dos muslos queda un pico de
+    // pelvis a la vista, y con los muslos oscuros por dentro ese pico claro se lee como una
+    // prenda. Tiene que quedar en penumbra como todo lo que hay entre las piernas.
+    som("M203 298 L237 298 C237 312 229 320 220 320 C211 320 203 312 203 298 Z", pref, .5),
+    // La sombra que ARROJA el brazo sobre el pecho. Va aquí, con el tronco, y no con el brazo: es
+    // una sombra en el pecho, y el brazo se pinta después encima. Es lo que hace que el canto del
+    // brazo se lea como un brazo delante del pecho y no como un tirante.
+    som("M188 148 C182 166 179 186 178 202 L194 208 C195 188 198 168 202 154 Z", pref, .45),
+    som("M252 148 C258 166 261 186 262 202 L246 208 C245 188 242 168 238 154 Z", pref, .38),
+  ].join("");
+}
 
-    // ── Brazos ──
-    // Deltoides con su luz, sombra en el sobaco y en el canto de dentro (es lo que despega el
-    // brazo del tronco), y el codo marcado.
+/** Brazos y manos: deltoides, cantos, codo y dedos. */
+function modBrazos(pref) {
+  return [
+    velo(pref),
+    // Deltoides con su luz, sombra en el canto de dentro (es lo que despega el brazo del tronco)
+    // y el codo marcado.
     filo(C_BRAZO_I, pref, 5, .5),
     surco(C_BRAZO_D, pref, 8, .45, "b2"),
-    brillo("M168 158 C178 156 187 165 185 177 C182 188 171 191 165 185 C159 179 161 161 168 " +
-           "158 Z", pref, .28),
-    surco("M188 172 C184 184 181 194 180 204", pref, 5, .3, "b2"),
-    surco("M141 246 C147 251 154 253 160 251", pref, 3, .3),
+    brillo("M164 154 C174 152 183 161 181 174 C178 185 167 188 161 182 C155 176 157 157 164 " +
+           "154 Z", pref, .3),
+    surco("M186 164 C182 176 180 186 179 196", pref, 5, .3, "b2"),
+    surco("M135 246 C141 251 148 253 154 251", pref, 3, .3),
     // El brazo del otro lado: la luz le llega de refilón, así que su canto de dentro solo lleva
     // un filo tenue y el de fuera, sombra ancha.
     filo(esp(C_BRAZO_D), pref, 4, .2),
     surco(esp(C_BRAZO_I), pref, 8, .45, "b2"),
-    // Manos: dedos y pulgar. Tres surcos cortos; más, y a 440 px es una mancha rayada.
-    surco("M129 322 C135 320 141 321 147 323 M129 330 C135 328 141 329 147 331 " +
-          "M132 338 C137 336 142 337 146 339", pref, 1.8, .32),
-    filo("M128 319 C126 325 126 332 129 338", pref, 2.4, .35),
-    surco(esp("M129 322 C135 320 141 321 147 323 M129 330 C135 328 141 329 147 331 " +
-              "M132 338 C137 336 142 337 146 339"), pref, 1.8, .28),
-    filo(esp("M147 319 C149 325 149 332 146 338"), pref, 2.2, .18),
+    // Manos: pulgar, muñeca y dos surcos de dedos, al sesgo. Con tres surcos rectos y paralelos
+    // la mano se leía como el puño de un jersey de lana.
+    surco("M141 326 C137 328 133 332 131 338", pref, 2, .3),
+    surco("M125 332 C129 330 133 331 137 334 M126 340 C130 338 133 339 136 342", pref, 1.8, .26),
+    filo("M123 322 C121 328 121 335 124 341", pref, 2.4, .35),
+    surco(esp("M141 326 C137 328 133 332 131 338"), pref, 2, .24),
+    surco(esp("M125 332 C129 330 133 331 137 334 M126 340 C130 338 133 339 136 342"),
+          pref, 1.8, .22),
+    filo(esp("M141 322 C143 328 143 335 140 341"), pref, 2.2, .18),
+  ].join("");
+}
 
-    // ── Piernas ──
+/** Piernas y pies: muslos, rodillas, gemelos, tobillos y empeines. */
+function modPiernas(pref) {
+  return [
+    velo(pref),
+    // Sombra justo por debajo de la ingle: es lo que hace que el canto de arriba del muslo se lea
+    // como un pliegue de la piel y no como el borde de una pieza pegada encima.
+    som("M182 289 C192 302 205 313 213 318 L213 332 C200 328 186 313 177 300 Z", pref, .42),
+    som(esp("M182 289 C192 302 205 313 213 318 L213 332 C200 328 186 313 177 300 Z"),
+        pref, .36),
     filo(C_PIERNA_I, pref, 5, .45),
     surco(C_PIERNA_D, pref, 8, .4, "b2"),
     filo(esp(C_PIERNA_D), pref, 4, .18),
@@ -456,8 +512,9 @@ function modelado(pref) {
            "378 Z", pref, .22),
     brillo(esp("M182 378 C190 375 198 381 198 390 C198 398 190 402 184 399 C178 396 177 382 " +
                "182 378 Z"), pref, .14),
-    surco("M179 394 C187 400 196 402 205 399", pref, 3.2, .34),
-    surco(esp("M179 394 C187 400 196 402 205 399"), pref, 3.2, .3),
+    // El pliegue de debajo de la rodilla, corto y flojo: de lado a lado parecía una liga.
+    surco("M183 396 C189 400 195 401 201 399", pref, 2.8, .22),
+    surco(esp("M183 396 C189 400 195 401 201 399"), pref, 2.8, .2),
     // Gemelo iluminado, espinilla y tobillo.
     brillo("M181 412 C187 410 190 420 189 432 C188 444 183 448 180 444 C176 438 177 416 181 " +
            "412 Z", pref, .2),
@@ -465,14 +522,25 @@ function modelado(pref) {
     surco("M186 482 L206 482", pref, 3, .34),
     surco(esp("M186 482 L206 482"), pref, 3, .34),
     // Pies: empeine iluminado, dedos y la línea de la planta.
-    filo("M186 486 C182 491 179 496 178 501", pref, 2.4, .4),
-    surco("M182 502 C188 499 198 499 205 502", pref, 2.2, .3),
-    surco("M185 505 L206 505", pref, 2.2, .4),
-    filo(esp("M186 486 C182 491 179 496 178 501"), pref, 2, .18),
-    surco(esp("M182 502 C188 499 198 499 205 502"), pref, 2.2, .26),
-    surco(esp("M185 505 L206 505"), pref, 2.2, .4),
+    filo("M187 486 C184 491 181 496 180 501", pref, 2.4, .4),
+    surco("M184 502 C190 499 199 499 205 502", pref, 2.2, .3),
+    surco("M186 505 L205 505", pref, 2.2, .4),
+    filo(esp("M187 486 C184 491 181 496 180 501"), pref, 2, .18),
+    surco(esp("M184 502 C190 499 199 499 205 502"), pref, 2.2, .26),
+    surco(esp("M186 505 L205 505"), pref, 2.2, .4),
   ].join("");
 }
+
+/**
+ * Las cuatro capas, de atrás hacia delante. Cada una lleva sus piezas y su sombreado, y se
+ * recorta con la silueta de sus propias piezas.
+ */
+const CAPAS = [
+  { k: "tronco",  piezas: ["cuello", "tronco"],                       sombras: modTronco },
+  { k: "piernas", piezas: ["pierna-i", "pierna-d", "pie-i", "pie-d"], sombras: modPiernas },
+  { k: "brazos",  piezas: ["brazo-i", "brazo-d", "mano-i", "mano-d"], sombras: modBrazos },
+  { k: "cabeza",  piezas: ["cabeza"],                                 sombras: modCabeza },
+];
 
 /** El dibujo de la figura. Ver la cabecera del fichero para el contrato y las opciones. */
 export function figura(opciones = {}) {
@@ -484,9 +552,9 @@ export function figura(opciones = {}) {
     `<defs>` +
       // Un cilindro por pieza, todos en coordenadas del lienzo (ver TONOS).
       Object.entries(TONOS)
-        .map(([k, [x1, x2, rampa]]) => cilindro(`${pref}-${k}`, x1, x2, rampa)).join("") +
+        .map(([k, t]) => cilindro(`${pref}-${k}`, t.slice(0, 4), t[4])).join("") +
       // Velo hacia los pies: la luz cae de arriba.
-      gradLienzo(`${pref}-suelo`, [[SOMBRA, 0, 0], [SOMBRA, .55, .08], [SOMBRA, 1, .34]],
+      gradLienzo(`${pref}-suelo`, [[SOMBRA, 0, 0], [SOMBRA, .55, .1], [SOMBRA, 1, .42]],
                  [0, 150, 0, 508]) +
       grad(`${pref}-pelo`, [["#3C4029", 0], ["#252A18", .55], ["#14180C", 1]], [0, 0, .8, 1]) +
       `<radialGradient id="${pref}-halo" cx=".46" cy=".42" r=".6">` +
@@ -494,10 +562,11 @@ export function figura(opciones = {}) {
         `<stop offset=".55" stop-color="#3A422C" stop-opacity=".09"/>` +
         `<stop offset="1" stop-color="#12140E" stop-opacity="0"/>` +
       `</radialGradient>` +
-      // El recorte del cuerpo: la unión de todas las piezas.
-      `<clipPath id="${pref}-piel">` +
-        PIEZAS.map(({ d }) => `<path d="${d}"/>`).join("") +
-      `</clipPath>` +
+      // Un recorte por capa: la unión de las piezas de esa capa.
+      CAPAS.map((c) =>
+        `<clipPath id="${pref}-c-${c.k}">` +
+          c.piezas.map((p) => `<path d="${PIEZAS[p]}"/>`).join("") +
+        `</clipPath>`).join("") +
       desenfoque(`${pref}-b1`, 1.5) +
       desenfoque(`${pref}-b2`, 4.5) +
       desenfoque(`${pref}-b3`, 9) +
@@ -506,19 +575,24 @@ export function figura(opciones = {}) {
   // El halo hace de aire alrededor del cuerpo: sin él la figura flota en el vacío. Y la sombra
   // del suelo le da un sitio donde estar de pie.
   const halo = conHalo
-    ? `<ellipse cx="${EJE}" cy="290" rx="128" ry="214" fill="url(#${pref}-halo)"/>` +
+    // El radio (124) se queda por dentro de las columnas de marcos, que empiezan en x=90 y 350:
+    // el halo es aire alrededor del cuerpo, no un foco detrás de los huecos.
+    ? `<ellipse cx="${EJE}" cy="290" rx="124" ry="212" fill="url(#${pref}-halo)"/>` +
       `<ellipse cx="${EJE}" cy="512" rx="74" ry="8" fill="${SOMBRA}" opacity=".7" ` +
         `filter="url(#${pref}-b3)"/>`
     : "";
 
   return `${defs}<g class="figura-cuerpo"${op !== 1 ? ` opacity="${op}"` : ""}>` +
     halo +
-    // 1. Las piezas del cuerpo, cada una con su cilindro, de atrás hacia delante.
-    `<g class="figura-piezas">` +
-      PIEZAS.map(({ d, g }) => `<path d="${d}" fill="url(#${pref}-${g})"/>`).join("") +
-    `</g>` +
-    // 2. El modelado, recortado por la silueta.
-    `<g clip-path="url(#${pref}-piel)">${modelado(pref)}</g>` +
+    // Las cuatro capas, de atrás hacia delante: dentro de cada una, primero las piezas y luego
+    // su sombreado, todo recortado por la silueta de la propia capa.
+    CAPAS.map((c) =>
+      `<g class="figura-capa" clip-path="url(#${pref}-c-${c.k})">` +
+        c.piezas.map((p) =>
+          `<path class="figura-pieza" d="${PIEZAS[p]}" ` +
+          `fill="url(#${pref}-${RELLENO[p] ?? p})"/>`).join("") +
+        c.sombras(pref) +
+      `</g>`).join("") +
     `</g>`;
 }
 

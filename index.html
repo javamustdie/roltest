@@ -303,6 +303,54 @@
                  padding:14px 16px calc(var(--alto-banda, 200px) + 20px);
                  display:flex; flex-direction:column; gap:14px; }
 
+  /* ── Tira de iniciativa ─────────────────────────────────────────────
+     Durante el combate, quién va ahora. Antes se llevaba de cabeza y se perdía. */
+  .iniciativa { position:absolute; top:56px; left:0; right:0; z-index:5;
+                display:flex; justify-content:center; gap:5px; flex-wrap:wrap; padding:0 14px;
+                pointer-events:auto; }
+  .turno-ini { min-height:32px; padding:0 11px; font:500 .72rem/1 var(--mono);
+               letter-spacing:.06em; background:#12140EE0; color:var(--tiza-baja);
+               border:1px solid var(--liquen); }
+  .turno-ini[data-mio="si"] { color:var(--tiza); }
+  .turno-ini.ahora { background:var(--sebo); color:#17140F; border-color:#F0C97A;
+                     box-shadow:0 0 12px #C8823C70; }
+
+  /* ── Tirada en pantalla ─────────────────────────────────────────────
+     Grande y en el centro: es el momento en que la mesa mira la pantalla. */
+  .tirada-caja { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+                 z-index:9; width:min(92%, 420px); padding:20px 22px 22px;
+                 background:linear-gradient(#1E2216F5,#12140EFA);
+                 border:1px solid var(--sebo); box-shadow:0 12px 44px #000000C0;
+                 display:flex; flex-direction:column; gap:12px; }
+  .tirada-caja[data-fase="pasa"] { border-color:#6E8A3C; }
+  .tirada-caja[data-fase="falla"] { border-color:var(--herrumbre); }
+  .tir-cerrar { position:absolute; top:6px; right:6px; min-height:32px; min-width:34px;
+                padding:0; border:none; background:none; color:var(--tiza-baja); }
+  .tir-cab { display:flex; flex-direction:column; gap:3px; }
+  .tir-cab b { font:400 1.3rem/1.1 var(--serif); font-weight:400; }
+  .tir-cab span { font:500 .7rem/1.3 var(--mono); letter-spacing:.14em; text-transform:uppercase;
+                  color:var(--sebo); }
+  .tir-cab em { font:500 .66rem/1 var(--mono); letter-spacing:.1em; text-transform:uppercase;
+                color:var(--ambar); font-style:normal; }
+  .tir-cifras { display:flex; gap:10px; }
+  .tir-cifras span { flex:1; padding:8px 10px; background:#0E100A; border:1px solid var(--liquen);
+                     font:500 .62rem/1.4 var(--mono); letter-spacing:.1em; text-transform:uppercase;
+                     color:var(--tiza-baja); }
+  .tir-cifras b { display:block; font:500 1.5rem/1.1 var(--mono); color:var(--tiza);
+                  font-variant-numeric:tabular-nums; }
+  .tir-dados #tir-pedir { display:flex; gap:8px; }
+  .tir-dados input { width:4.4em; text-align:center; font:500 1.4rem/1 var(--mono);
+                     padding:10px 6px; }
+  .tir-dados button { flex:1; min-height:50px; font-size:1.02rem; border-color:var(--sebo); }
+  .tir-fin { display:flex; flex-direction:column; gap:4px; }
+  .tir-cuenta { margin:0; font:500 1.06rem/1.3 var(--mono); color:var(--tiza);
+                font-variant-numeric:tabular-nums; }
+  .tir-veredicto { margin:0; font:500 2.1rem/1 var(--mono); letter-spacing:.16em; }
+  .tirada-caja[data-fase="pasa"] .tir-veredicto { color:#9CBE5A; }
+  .tirada-caja[data-fase="falla"] .tir-veredicto { color:#D4644A; }
+  .tir-nat { margin:0; font:500 .72rem/1 var(--mono); letter-spacing:.12em;
+             text-transform:uppercase; color:var(--ambar); }
+
   /* ── Ilustración en vivo ────────────────────────────────────────────
      Se pone por encima de las capas (6) y por debajo de la banda (8): cuando hay una pelea la
      imagen es lo que se mira, pero los personajes no desaparecen. */
@@ -849,6 +897,16 @@
         </div>
       </section>
       <section>
+        <h2>Esta versión</h2>
+        <p style="margin:0;font:500 .78rem/1.5 var(--mono);color:var(--tiza-baja)" id="version">
+          comprobando…
+        </p>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
+          Si algo no funciona, lo primero es mirar aquí: dice si el tablet tiene el código nuevo o
+          uno viejo de la caché. Recargar dos veces lo actualiza.
+        </p>
+      </section>
+      <section>
         <h2>Reiniciar</h2>
         <button id="reiniciar"><span class="icono">⟲</span><span>Empezar partida de cero</span></button>
       </section>
@@ -958,6 +1016,36 @@
       </div>
     </div>
 
+    <!-- La tira de iniciativa, durante el combate. Arriba, bajo el rótulo del lugar. -->
+    <div class="iniciativa" id="iniciativa" hidden></div>
+
+    <!-- La tirada. El DJ pone la CD ANTES, la mesa canta el dado y LA APP hace la cuenta: así se
+         puede comprobar el resultado en vez de fiarse de lo que diga el DJ. -->
+    <div class="tirada-caja" id="tirada-caja" data-fase="pide" hidden>
+      <button class="tir-cerrar" id="tir-cerrar" title="Quitar la tirada">✕</button>
+      <div class="tir-cab">
+        <b id="tir-quien"></b>
+        <span id="tir-que"></span>
+        <em id="tir-ventaja" hidden></em>
+      </div>
+      <div class="tir-cifras">
+        <span>CD <b id="tir-cd"></b></span>
+        <span>tu bono <b id="tir-mod"></b></span>
+      </div>
+      <form class="tir-dados" id="tirada-forma-caja">
+        <div id="tir-pedir">
+          <input id="tir-d1" inputmode="numeric" autocomplete="off" placeholder="d20" maxlength="2">
+          <input id="tir-d2" inputmode="numeric" autocomplete="off" placeholder="d20" maxlength="2" hidden>
+          <button type="submit">Resolver</button>
+        </div>
+      </form>
+      <div class="tir-fin" id="tir-resultado" hidden>
+        <p class="tir-cuenta" id="tir-cuenta"></p>
+        <p class="tir-veredicto" id="tir-veredicto"></p>
+        <p class="tir-nat" id="tir-nat" hidden></p>
+      </div>
+    </div>
+
     <!-- La ilustración que pinta el DJ en vivo. Va encima de todo lo demás de la escena menos la
          banda: cuando hay una pelea es lo que se mira. Mientras se pinta se ve que está en
          marcha, porque son diez o veinte segundos. -->
@@ -1041,6 +1129,9 @@
         </button>
         <button id="acc-antorcha" title="Descuenta una antorcha de los suministros del grupo">
           <span class="icono">🔥</span><span>Antorcha</span>
+        </button>
+        <button id="acc-ilustrar" title="Pide una ilustración de lo que está pasando ahora">
+          <span class="icono">🖌</span><span>Ilustrar</span>
         </button>
         <button id="acc-ambiente" data-on="no"
                 title="Enciende o apaga la música y el ambiente. Lo cambia el DJ según la escena.">

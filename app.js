@@ -471,6 +471,49 @@ const HERRAMIENTAS = [
     },
   },
   {
+    name: "pedir_tirada",
+    description:
+      "Pone una tirada en pantalla ANTES de que tiren, con su CD a la vista. Úsalo SIEMPRE que " +
+      "haya que tirar: es lo que hace que la mesa pueda comprobar el resultado en vez de fiarse " +
+      "de ti. La app hace la cuenta sola y dice si pasa, así que da el modificador exacto.\n\n" +
+      "Si no hay riesgo real, no pidas tirada: se resuelve narrando.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string", description: "Quién tira." },
+        que: { type: "string", description: "Qué tirada: «Supervivencia», «salvación de Sabiduría», «ataque con arco»." },
+        cd: { type: "integer", description: "El número que hay que igualar o pasar. En un ataque, la CA del objetivo." },
+        mod: { type: "integer", description: "Lo que suma al d20: característica + competencia. Exacto." },
+        ventaja: { type: "string", enum: ["ninguna", "ventaja", "desventaja"] },
+      },
+      required: ["pj", "que", "cd", "mod"],
+    },
+  },
+  {
+    name: "iniciativa",
+    description:
+      "Pone el orden de turnos en pantalla al empezar un combate, y lo quita al acabar. Mientras " +
+      "está puesto, la mesa ve de quién es el turno sin preguntar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        orden: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Nombres en orden de iniciativa, de mayor a menor, incluyendo a los enemigos. " +
+            "Lista vacía para quitar la tira: el combate ha terminado.",
+        },
+      },
+      required: ["orden"],
+    },
+  },
+  {
+    name: "siguiente_turno",
+    description: "Pasa al siguiente de la tira de iniciativa. Llámalo al acabar cada turno.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "ambiente",
     description:
       "Cambia la música de fondo. Hazlo cuando cambie el tono de la escena, no en cada frase: al " +
@@ -754,8 +797,16 @@ LOS OBJETOS Y LA PANTALLA LOS MANEJAS TÚ. Esto es lo que la mesa espera de ti:
   queréis poner?» para algo obvio; hazlo y sigue.
 - **Se gasta o se rompe → quitar_objeto.** Una antorcha consumida, una cuerda cortada, algo que
   dejan atrás.
+- **Toda tirada va por pedir_tirada, con su CD y el modificador exacto.** La app hace la cuenta y
+  dice si pasa, y eso es lo que permite que la mesa te compruebe. No resuelvas una tirada de
+  cabeza ni pidas que canten «17+5»: pon la tirada y espera.
+- **En combate, pon la iniciativa** con iniciativa al empezar, pasa turno con siguiente_turno, y
+  quítala con una lista vacía al acabar.
 - **El dinero también es tuyo.** cambiar_oro cuando encuentren monedas, cobren o paguen. Si la mesa
   tiene que apuntar el dinero a mano, no lo apunta.
+- **Ilustra SIN QUE TE LO PIDAN** cuando empieza un combate, cuando aparece una criatura por
+  primera vez, y cuando se cierra una escena. Y si te lo piden, ilústralo SIEMPRE, aunque acabes
+  de hacerlo: no discutas la petición.
 - **Ilustra los momentos que lo merecen.** Con ilustrar pintas lo que está pasando y sale en
   pantalla: una pelea, la aparición de algo, un hallazgo. Tarda unos quince segundos y la mesa ve
   que está en marcha, así que **sigue narrando mientras**, no te calles a esperarla. El prompt en
@@ -1680,7 +1731,7 @@ function pintarCierre() {
 function pintarTodo() {
   pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarBanda();
   pintarMapa(); pintarGasto(); pintarArrancar(); pintarRegistro(); pintarCierre();
-  pintarResumen();
+  pintarResumen(); pintarTirada(); pintarIniciativa();
 }
 
 const esc = (s) =>
@@ -2585,6 +2636,50 @@ function ejecutarHerramienta(nombre, e) {
     return nota(`${nombreObj(fuera)} sale de la mochila de ${p.pj}.`);
   }
 
+  if (nombre === "pedir_tirada") {
+    const p = buscarPj(e.pj);
+    // Se acepta que tire alguien que no está en el grupo (un NPC, una bestia): la tirada se
+    // muestra igual, solo que sin buscar su ficha.
+    const cd = Math.round(+e.cd) || 0;
+    const mod = Math.round(+e.mod) || 0;
+    E.tirada = {
+      pj: p?.pj ?? (String(e.pj ?? "").trim() || "alguien"),
+      que: String(e.que ?? "").trim() || "una prueba",  // aquí sí: || solo, sin ??
+      cd, mod,
+      ventaja: ["ventaja", "desventaja"].includes(e.ventaja) ? e.ventaja : "ninguna",
+      dados: [], total: null, pasa: null,
+    };
+    guardarEstado(); pintarTirada();
+    return nota(
+      `En pantalla: ${E.tirada.pj} tira ${E.tirada.que}, CD ${cd}, ${mod >= 0 ? "+" : ""}${mod}` +
+        `${E.tirada.ventaja !== "ninguna" ? ` con ${E.tirada.ventaja}` : ""}. ` +
+        `Espera a que canten el dado; la app hace la cuenta.`,
+    );
+  }
+
+  if (nombre === "iniciativa") {
+    const orden = (Array.isArray(e.orden) ? e.orden : [])
+      .map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, 12);
+    E.iniciativa = orden.length ? { orden, turno: 0 } : null;
+    guardarEstado(); pintarIniciativa();
+    return nota(
+      orden.length
+        ? `Orden en pantalla: ${orden.join(", ")}. Empieza ${orden[0]}.`
+        : "Tira de iniciativa quitada.",
+    );
+  }
+
+  if (nombre === "siguiente_turno") {
+    if (!E.iniciativa) return "No hay ningún combate en marcha, así que no hay turno que pasar.";
+    const n = E.iniciativa.orden.length;
+    E.iniciativa.turno = (E.iniciativa.turno + 1) % n;
+    const vuelta = E.iniciativa.turno === 0;
+    guardarEstado(); pintarIniciativa();
+    return nota(
+      `Turno de ${E.iniciativa.orden[E.iniciativa.turno]}${vuelta ? " (ronda nueva)" : ""}.`,
+    );
+  }
+
   if (nombre === "ambiente") {
     const cuales = ["calma", "tension", "combate", "horror", "duelo"];
     if (!cuales.includes(e.estado)) return `"${e.estado}" no vale. Son: ${cuales.join(", ")}.`;
@@ -2598,8 +2693,11 @@ function ejecutarHerramienta(nombre, e) {
 
   if (nombre === "ilustrar") {
     if (!A.claveFal) {
-      return "No hay clave de fal.ai en Ajustes, así que no puedo pintar. Sigue narrando sin " +
-        "imagen y dilo si viene al caso.";
+      // El aviso va a la MESA, no solo al DJ. Antes esto devolvía un texto y el DJ decidía si lo
+      // mencionaba o no: se pidió una ilustración, no salió nada, y nadie supo por qué.
+      avisar("El DJ ha querido ilustrar la escena pero falta la clave de fal.ai. Está en Ajustes.");
+      return "No hay clave de fal.ai en Ajustes, así que no puedo pintar. DILE A LA MESA que le " +
+        "falta esa clave, y sigue narrando sin imagen.";
     }
     const prompt = (e.prompt ?? "").trim();
     if (!prompt) return "Falta el prompt de la ilustración.";
@@ -2900,6 +2998,111 @@ class ColaVoz {
 }
 
 
+// ── Tirada en pantalla ───────────────────────────────────────────────────────
+/**
+ * El DJ anuncia la CD ANTES de tirar —es la regla de este sistema— así que la app puede hacer la
+ * cuenta ella. Y eso es justo el punto: la mesa canta el dado, la pantalla suma y dice si pasa,
+ * y el DJ ya no puede colar un resultado. Es lo que la partida de prueba existe para comprobar,
+ * y hasta ahora solo se podía comprobar de oído.
+ *
+ * Con ventaja o desventaja se piden DOS dados y se coge el mejor o el peor, que es la regla.
+ */
+function pintarTirada() {
+  const t = E.tirada;
+  const caja = $("#tirada-caja");
+  caja.hidden = !t;
+  if (!t) return;
+
+  const dobles = t.ventaja !== "ninguna";
+  caja.dataset.fase = t.total === null ? "pide" : t.pasa ? "pasa" : "falla";
+  $("#tir-quien").textContent = t.pj;
+  $("#tir-que").textContent = t.que;
+  $("#tir-cd").textContent = t.cd;
+  $("#tir-mod").textContent = `${t.mod >= 0 ? "+" : "−"}${Math.abs(t.mod)}`;
+  $("#tir-ventaja").textContent = dobles ? t.ventaja : "";
+  $("#tir-ventaja").hidden = !dobles;
+  $("#tir-d2").hidden = !dobles;
+  $("#tir-pedir").hidden = t.total !== null;
+  $("#tir-resultado").hidden = t.total === null;
+
+  if (t.total !== null) {
+    const usado = t.ventaja === "desventaja" ? Math.min(...t.dados) : Math.max(...t.dados);
+    const desc = t.dados.length > 1
+      ? `${t.dados.join(" y ")} → ${usado}`
+      : `${usado}`;
+    $("#tir-cuenta").textContent =
+      `${desc} ${t.mod >= 0 ? "+" : "−"} ${Math.abs(t.mod)} = ${t.total}`;
+    $("#tir-veredicto").textContent = t.pasa ? "PASA" : "FALLA";
+    // Un 20 o un 1 natural se dicen: cambian lo que pasa después, y en mesa se celebran.
+    const nat = usado === 20 ? "veinte natural" : usado === 1 ? "uno natural" : "";
+    $("#tir-nat").textContent = nat;
+    $("#tir-nat").hidden = !nat;
+  }
+}
+
+/** Resuelve la tirada con los dados que ha cantado la mesa y se lo cuenta al DJ. */
+async function resolverTirada() {
+  const t = E.tirada;
+  if (!t || t.total !== null) return;
+  const dobles = t.ventaja !== "ninguna";
+  const d1 = parseInt($("#tir-d1").value, 10);
+  const d2 = dobles ? parseInt($("#tir-d2").value, 10) : NaN;
+  const vale = (x) => Number.isInteger(x) && x >= 1 && x <= 20;
+  if (!vale(d1) || (dobles && !vale(d2))) {
+    avisar(dobles ? "Hacen falta los DOS dados, de 1 a 20." : "El dado va de 1 a 20.");
+    return;
+  }
+  t.dados = dobles ? [d1, d2] : [d1];
+  const usado = t.ventaja === "desventaja" ? Math.min(...t.dados) : Math.max(...t.dados);
+  t.total = usado + t.mod;
+  t.pasa = t.total >= t.cd;
+  guardarEstado(); pintarTirada();
+
+  const linea =
+    `${t.pj}, ${t.que}: ${t.dados.join(" y ")}${t.dados.length > 1 ? ` (${t.ventaja})` : ""}` +
+    ` ${t.mod >= 0 ? "+" : "−"} ${Math.abs(t.mod)} = ${t.total} contra CD ${t.cd}. ` +
+    `${t.pasa ? "PASA" : "FALLA"}${usado === 20 ? " (veinte natural)" : usado === 1 ? " (uno natural)" : ""}.`;
+  registrar("tirada", linea, t.pj);
+  $("#tir-d1").value = ""; $("#tir-d2").value = "";
+  // Se le manda al DJ ya resuelta: la cuenta la ha hecho la app, no él.
+  await turno(null, 0, linea);
+}
+
+$("#tirada-forma-caja").addEventListener("submit", (ev) => { ev.preventDefault(); resolverTirada(); });
+$("#tir-cerrar").addEventListener("click", () => {
+  E.tirada = null;
+  guardarEstado(); pintarTirada();
+});
+
+
+// ── Iniciativa ───────────────────────────────────────────────────────────────
+/** La tira de turnos durante el combate. Antes se llevaba de cabeza, y se perdía. */
+function pintarIniciativa() {
+  const ini = E.iniciativa;
+  const caja = $("#iniciativa");
+  caja.hidden = !ini;
+  if (!ini) return;
+  caja.innerHTML = ini.orden
+    .map((n, i) => {
+      // Quien está en el grupo se marca aparte de los enemigos: en una tira de siete nombres hay
+      // que distinguir de un vistazo a los tuyos.
+      const mio = !!buscarPj(n);
+      return `<button class="turno-ini${i === ini.turno ? " ahora" : ""}"
+                data-turno="${i}" data-mio="${mio ? "si" : "no"}"
+                title="${i === ini.turno ? "Le toca" : "Tocar para saltar a su turno"}"
+                >${esc(n)}</button>`;
+    })
+    .join("");
+}
+
+$("#iniciativa").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-turno]");
+  if (!b || !E.iniciativa) return;
+  E.iniciativa.turno = +b.dataset.turno;
+  guardarEstado(); pintarIniciativa();
+});
+
+
 // ── Ambiente sonoro ──────────────────────────────────────────────────────────
 /**
  * La música y el ambiente están **sintetizados en el navegador** (`app/musica.js`), no son
@@ -3083,6 +3286,63 @@ function recuperarIlustracion() {
   try { x = JSON.parse(localStorage.getItem(CLAVE_ILUSTRACION)); } catch { /* nada */ }
   if (x?.datos) pintarIlustracion({ estado: "lista", datos: x.datos, pie: x.pie });
 }
+
+/**
+ * Ilustrar a petición de la mesa, sin pasar por la decisión del DJ.
+ *
+ * Existe porque la primera vez que se pidió una imagen en mesa no salió ninguna: la herramienta
+ * está, pero llamarla depende de que el modelo lo decida en ese turno. Con un botón no depende.
+ *
+ * Hace una llamada corta y aparte para convertir la conversación en un prompt de imagen en
+ * inglés. Es un par de segundos y sale mucho mejor que mandar el texto español tal cual: el
+ * generador no entiende «el Ahogado» ni «la turbera».
+ */
+async function pedirIlustracion() {
+  if (ilustrando) return avisar("Ya se está pintando una. Espera a que termine.");
+  if (!A.claveFal) return avisar("Falta la clave de fal.ai en Ajustes para poder ilustrar.");
+  if (!A.claveCl) return avisar("Falta la clave de Claude en Ajustes.");
+  limpiarAviso();
+  const b = $("#acc-ilustrar");
+  b.disabled = true;
+
+  const l = actual();
+  const ultimas = E.charla.slice(-4).map((t) => `${t.de === "mesa" ? "MESA" : "DJ"}: ${t.texto}`);
+  const lim = conLimite(40_000, "el prompt de la ilustración");
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", headers: cabecerasClaude(), signal: lim.señal,
+      body: JSON.stringify({
+        model: A.modelo, max_tokens: 300,
+        system:
+          "Convierte lo que está pasando en una partida de rol en un prompt de imagen, EN INGLÉS. " +
+          "Describe lo que se ve como si fuera un cuadro: quién, haciendo qué, dónde, con qué luz. " +
+          "Una sola frase, sin nombres propios (el generador no los conoce) y sin describir " +
+          "cuerpos, piel ni ropa escasa, que el filtro del proveedor lo bloquea. No añadas estilo " +
+          "ni calidad ni nada de «masterpiece»: eso se pone aparte. Contesta SOLO con el prompt.",
+        messages: [{ role: "user", content:
+          [`Sitio: ${l.nombre}. ${l.pie ?? ""}`, ...(ultimas.length ? ultimas : ["Acaban de llegar."])]
+            .join("\n") }],
+        ...(/sonnet-5|opus-5/.test(A.modelo) ? { thinking: { type: "disabled" } } : {}),
+      }),
+    });
+    if (!r.ok) throw new Error(explicar("Claude", r.status));
+    const j = await r.json();
+    E.gasto.entrada += j.usage?.input_tokens ?? 0;
+    E.gasto.salida += j.usage?.output_tokens ?? 0;
+    const prompt = (j.content ?? []).filter((c) => c.type === "text")
+      .map((c) => c.text).join("").trim();
+    if (!prompt) throw new Error("no he sabido describir la escena");
+    await ilustrarEscena(prompt, l.nombre);
+  } catch (err) {
+    avisar(`La ilustración no ha salido: ${err?.message ?? "error"}`);
+  } finally {
+    lim.listo();
+    b.disabled = false;
+    pintarGasto();
+  }
+}
+
+$("#acc-ilustrar").addEventListener("click", pedirIlustracion);
 
 $("#ilus-cerrar").addEventListener("click", () => {
   pintarIlustracion({ estado: "no" });
@@ -3288,6 +3548,33 @@ if (A.ambiente) {
 actualizarBotonHablar();
 irA(location.hash.slice(1) || "escena", false);
 
+/**
+ * La versión, a la vista en Ajustes. `VERSION_APP` la sube a mano quien cambia la app; la del
+ * service worker se le pregunta a él, y son dos cosas distintas a propósito: si no coinciden, el
+ * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
+ * en mesa algo «no funciona».
+ */
+const VERSION_APP = "corvalar-v13";
+$("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
+
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    const v = e.data?.version;
+    if (!v) return;
+    $("#version").textContent =
+      `app ${VERSION_APP} · service worker ${v}` +
+      (v === VERSION_APP ? " · al día ✓" : " · ¡NO COINCIDEN! recarga dos veces");
+  });
+  navigator.serviceWorker.ready.then((reg) => {
+    reg.active?.postMessage("version");
+  }).catch(() => {});
+  // Si no contesta en tres segundos, se dice: mejor «no contesta» que «preguntando…» para siempre.
+  setTimeout(() => {
+    if ($("#version").textContent.includes("preguntando")) {
+      $("#version").textContent = `app ${VERSION_APP} · el service worker no contesta`;
+    }
+  }, 3000);
+} else {
+  $("#version").textContent = `app ${VERSION_APP} · sin service worker (no funcionará sin red)`;
 }
