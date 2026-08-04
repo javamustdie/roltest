@@ -92,6 +92,12 @@ const armasDe = (p) =>
     .map(([k, v]) => ({ hueco: k, ...objDe(v) }))
     .filter((o) => o.n && o.dano);
 
+/**
+ * Lo que está «en la mano» mientras se mueve equipo: `{tipo:"bolsa"|"hueco", i, j|hueco, obj}`.
+ * Vive fuera de la ficha porque la ficha se repinta entera a cada toque.
+ */
+let cogido = null;
+
 /** Dibuja el muñeco con lo que lleva puesto en cada hueco. */
 function pintarMuneco(p, i) {
   const eq = p.equipo ?? {};
@@ -104,7 +110,12 @@ function pintarMuneco(p, i) {
     const dx = m.lado === "izq" ? -14 : m.lado === "der" ? 14 : 0;
     const anclaje = m.lado === "izq" ? "end" : m.lado === "der" ? "start" : "middle";
     const dy = m.lado === "arriba" ? -16 : m.lado === "abajo" ? 22 : m.lado === "centro" ? 22 : 4;
-    return `<g class="ranura${puesto ? " puesta" : ""}" data-hueco="${h.k}" data-i="${i}"
+    const enMano = cogido?.tipo === "hueco" && cogido.i === i && cogido.hueco === h.k;
+    // Un hueco donde cabe lo que se ha cogido se resalta: en una figura con once ranuras hay que
+    // ver de un vistazo dónde se puede soltar.
+    const libre = !!cogido && cogido.i === i && !enMano;
+    return `<g class="ranura${puesto ? " puesta" : ""}${enMano ? " enmano" : ""}${
+      libre ? " destino" : ""}" data-hueco="${h.k}" data-i="${i}"
                role="button" tabindex="0"
                aria-label="${h.n}: ${puesto ? esc(o.n) + bonoTexto(o) : "vacío"}">
       <circle cx="${m.x}" cy="${m.y}" r="11"/>
@@ -123,12 +134,21 @@ function pintarMuneco(p, i) {
       <svg class="muneco" viewBox="-52 -8 304 318" role="img" aria-label="Equipo de ${esc(p.pj)}">
         ${SILUETA}${puntos}
       </svg>
-      <div class="mochila">
+      <div class="mochila" data-soltar="${i}">
         <h2>🎒 Mochila</h2>
+        ${cogido?.tipo === "hueco" && cogido.i === i
+          ? `<p class="cogiendo">Llevas <b>${esc(cogido.obj.n)}</b> en la mano. Toca un hueco
+               para ponerlo, o aquí para guardarlo.</p>`
+          : cogido?.tipo === "bolsa" && cogido.i === i
+            ? `<p class="cogiendo">Toca el hueco del muñeco donde quieras ponerlo.</p>`
+            : ""}
         <ul class="bolsa">${
           mochila.length
             ? mochila.map((x, j) =>
-                `<li title="${esc(x.nota ?? x.n)}"><span>${esc(x.n)}</span>
+                `<li data-bolsaobj data-i="${i}" data-j="${j}" tabindex="0"
+                     class="${cogido?.tipo === "bolsa" && cogido.i === i && cogido.j === j
+                              ? "enmano" : ""}"
+                     title="${esc(x.nota ?? x.n)}"><span>${esc(x.n)}</span>
                    <button data-quitarbolsa="${i}" data-j="${j}" title="Quitar">✕</button></li>`)
                 .join("")
             : `<li class="nada">Vacía.</li>`
@@ -384,6 +404,14 @@ const HERRAMIENTAS = [
       properties: {
         pj: { type: "string" },
         objeto: { type: "string", description: "Qué encuentran. En singular y concreto." },
+        ca: {
+          type: "integer",
+          description:
+            "Si es armadura o escudo, lo que sumaría a la CA al ponérselo. Ponlo aunque de " +
+            "momento vaya a la mochila: el bonificador viaja con el objeto, así que cuando se lo " +
+            "equipen —tú o ellos a mano— se aplica solo.",
+        },
+        dano: { type: "string", description: "Si es un arma, su daño. Mismo motivo que `ca`." },
         nota: { type: "string", description: "Para qué sirve, si no es evidente." },
       },
       required: ["pj", "objeto"],
@@ -630,7 +658,9 @@ TIENES HERRAMIENTAS Y LLEVAS EL ESTADO TÚ. No pidas a la mesa que apunte nada.
 LOS OBJETOS Y LA PANTALLA LOS MANEJAS TÚ. Esto es lo que la mesa espera de ti:
 
 - **Encuentran algo → aparece.** En cuanto haya un objeto en la ficción, llama a dar_objeto y sale
-  dibujado en su mochila. Nunca digas «lo apuntáis» ni «que lo apunte quien lleve la ficha».
+  dibujado en su mochila. Nunca digas «lo apuntáis» ni «que lo apunte quien lleve la ficha». Si es
+  armadura o arma, pon su \`ca\` o su \`dano\` YA, aunque de momento vaya a la mochila: el
+  bonificador viaja con el objeto y se aplica en cuanto se lo pongan.
 - **Si les conviene ponérselo, póntelo tú.** Equipa lo que encuentren en el hueco que toque, con
   su bonificador, y di en una frase qué cambia: «ahora tienes CA diecisiete». No preguntes «¿os lo
   queréis poner?» para algo obvio; hazlo y sigue.
@@ -1011,6 +1041,7 @@ $("#banda").addEventListener("click", (ev) => {
 function abrirFicha(i) {
   const p = E.partida[i];
   if (!p) return;
+  if (cogido && cogido.i !== i) cogido = null;
   const l = actual();
   p.equipo ??= {};
   p.ficha ??= {};
@@ -1057,7 +1088,7 @@ function abrirFicha(i) {
       </div>
     </div>
 
-    <div><h2>Puntos de golpe</h2>
+    <div data-bloque="pg"><h2>Puntos de golpe</h2>
       <div class="pg-fila" style="margin-top:8px">
         <button data-fpg="${i}" data-d="-3">−3</button>
         <button data-fpg="${i}" data-d="-1">−1</button>
@@ -1067,18 +1098,18 @@ function abrirFicha(i) {
       </div>
     </div>
 
-    <div><h2>Equipo</h2>
+    <div data-bloque="equipo"><h2>Equipo</h2>
       <p class="vacio">Toca una ranura del muñeco para poner o cambiar lo que lleva ahí.</p>
       ${pintarMuneco(p, i)}
     </div>
 
     ${p.heridas.length
-      ? `<div><h2>Heridas persistentes</h2><div class="marcas" style="margin-top:8px">${p.heridas
+      ? `<div data-bloque="heridas"><h2>Heridas persistentes</h2><div class="marcas" style="margin-top:8px">${p.heridas
           .map((h, j) => `<button class="marca" data-fherida="${i}" data-h="${j}">${esc(h)} ✕</button>`)
           .join("")}</div></div>`
       : ""}
 
-    <div><h2>Quién es</h2>
+    <div data-bloque="quien"><h2>Quién es</h2>
       ${entrevista.length
         ? `<dl class="entrevista">${entrevista
             .map((c) => `<dt>${c.n}</dt><dd>${esc(p.ficha[c.k])}</dd>`).join("")}</dl>`
@@ -1090,9 +1121,9 @@ function abrirFicha(i) {
       </div>
     </div>
 
-    ${p.notas ? `<div><h2>De la ficha</h2><p class="notas">${esc(p.notas)}</p></div>` : ""}
+    ${p.notas ? `<div data-bloque="notas"><h2>De la ficha</h2><p class="notas">${esc(p.notas)}</p></div>` : ""}
 
-    <div><h2>Dónde estáis</h2>
+    <div data-bloque="donde"><h2>Dónde estáis</h2>
       <p style="margin:6px 0 0;font-size:.9rem">${esc(l.id)} · ${esc(l.nombre)}</p>
       <p style="margin:4px 0 0;font:500 .8rem/1.5 var(--mono);color:var(--tiza-baja)">${
         Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(" · ")
@@ -1130,12 +1161,12 @@ function editarEntrevista(i) {
 $("#hablar-flota").addEventListener("click", () => bHablar.click());
 
 /** Quita la capa de la ficha. La usan el aspa, el clic fuera, y la herramienta `mostrar`. */
-function cerrarFicha() { $("#ficha").hidden = true; }
+function cerrarFicha() { cogido = null; $("#ficha").hidden = true; }
 
 $("#ficha").addEventListener("click", (ev) => {
   // Tocar fuera de la caja cierra: en mesa nadie busca la X.
   if (ev.target === $("#ficha") || ev.target.closest("#ficha-cerrar")) {
-    $("#ficha").hidden = true;
+    cerrarFicha();
     return;
   }
   const pg = ev.target.closest("button[data-fpg]");
@@ -1153,28 +1184,88 @@ $("#ficha").addEventListener("click", (ev) => {
     abrirFicha(+quitar.dataset.fherida);
     return;
   }
-  // Ranura del muñeco: se pregunta qué se pone. Un prompt es feo, pero en mesa es un toque y
-  // escribir, y un panel de inventario completo sería otra pantalla que atravesar.
+  // ── Mover objetos: coger y soltar, por TOQUES ────────────────────────────
+  // No se arrastra. Esto es una tablet, y el arrastrar-y-soltar de HTML5 no existe en táctil:
+  // habría que reimplementarlo con eventos de puntero y coordenadas. Coger con un toque y
+  // soltar con otro se comporta igual con dedo, ratón y teclado, y es lo que hacen los propios
+  // juegos de inventario en mando.
+  const celda = ev.target.closest("li[data-bolsaobj]");
+  if (celda && !ev.target.closest("button")) {
+    const i = +celda.dataset.i, j = +celda.dataset.j;
+    // Tocar lo que ya estaba cogido lo suelta: hace falta una salida sin efectos.
+    cogido = cogido?.tipo === "bolsa" && cogido.i === i && cogido.j === j
+      ? null
+      : { tipo: "bolsa", i, j };
+    abrirFicha(i);
+    return;
+  }
+
   const ranura = ev.target.closest(".ranura");
   if (ranura) {
-    const pj = E.partida[+ranura.dataset.i];
-    const h = HUECOS.find((x) => x.k === ranura.dataset.hueco);
+    const i = +ranura.dataset.i;
+    const pj = E.partida[i];
+    const k = ranura.dataset.hueco;
     pj.equipo ??= {};
-    const antes = objDe(pj.equipo[h.k]);
-    const v = prompt(`${h.n} de ${pj.pj}:`, antes?.n ?? "");
-    if (v !== null) {
-      // Se conserva el bonificador de la pieza: si al corregir el nombre a mano se perdiera, la
-      // CA bajaría sin que nadie se hubiera quitado la armadura.
-      pj.equipo[h.k] = v.trim() ? { ...(antes ?? {}), n: v.trim() } : null;
-      guardarEstado();
-      abrirFicha(+ranura.dataset.i);
+    pj.mochila ??= [];
+    const puesto = objDe(pj.equipo[k]);
+
+    if (cogido && cogido.i === i) {
+      if (cogido.tipo === "bolsa") {
+        // De la mochila al hueco. Lo que hubiera puesto se va a la mochila, no se pierde.
+        const [obj] = pj.mochila.splice(cogido.j, 1);
+        if (objDe(obj)) {
+          pj.equipo[k] = objDe(obj);
+          if (puesto) pj.mochila.push(puesto);
+        }
+      } else if (cogido.hueco !== k) {
+        // De un hueco a otro: se intercambian, que es lo que uno espera al mover un anillo.
+        pj.equipo[cogido.hueco] = puesto ?? null;
+        pj.equipo[k] = objDe(cogido.obj);
+      }
+      cogido = null;
+      guardarEstado(); pintarGrupo(); pintarBanda();
+      abrirFicha(i);
+      return;
+    }
+
+    if (puesto) {
+      cogido = cogido?.tipo === "hueco" && cogido.hueco === k
+        ? null
+        : { tipo: "hueco", i, hueco: k, obj: puesto };
+      abrirFicha(i);
+      return;
+    }
+
+    // Hueco vacío y nada cogido: se escribe a mano. Sigue siendo la vía para meter algo que no
+    // está en la mochila, y en la sesión cero es más rápido que dar-y-equipar.
+    const h = HUECOS.find((x) => x.k === k);
+    const v = prompt(`${h.n} de ${pj.pj}:`, "");
+    if (v?.trim()) {
+      pj.equipo[k] = { n: v.trim() };
+      guardarEstado(); pintarGrupo(); pintarBanda();
+      abrirFicha(i);
     }
     return;
   }
+
+  // Soltar en la mochila lo que se ha cogido de un hueco: así se desequipa sin borrarlo.
+  const bolsa = ev.target.closest("[data-soltar]");
+  if (bolsa && cogido?.tipo === "hueco" && cogido.i === +bolsa.dataset.soltar) {
+    const pj = E.partida[cogido.i];
+    pj.mochila ??= [];
+    pj.mochila.push(cogido.obj);
+    pj.equipo[cogido.hueco] = null;
+    cogido = null;
+    guardarEstado(); pintarGrupo(); pintarBanda();
+    abrirFicha(+bolsa.dataset.soltar);
+    return;
+  }
+
   const quitarB = ev.target.closest("button[data-quitarbolsa]");
   if (quitarB) {
     const pj = E.partida[+quitarB.dataset.quitarbolsa];
     pj.mochila?.splice(+quitarB.dataset.j, 1);
+    cogido = null;
     guardarEstado(); abrirFicha(+quitarB.dataset.quitarbolsa);
     return;
   }
@@ -1184,7 +1275,7 @@ $("#ficha").addEventListener("click", (ev) => {
   if (volver) { abrirFicha(+volver.dataset.volver); return; }
   const ir = ev.target.closest("button[data-ir-grupo]");
   if (ir) {
-    $("#ficha").hidden = true;
+    cerrarFicha();
     irA("grupo");
     if ($("#editor").hidden) $("#editar-grupo").click();
   }
@@ -2201,9 +2292,19 @@ function ejecutarHerramienta(nombre, e) {
     if (p.mochila.length >= 24) {
       return `La mochila de ${p.pj} está llena (24 objetos). Quita algo antes con quitar_objeto.`;
     }
-    p.mochila.push({ n, ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}) });
-    registrar("hallazgo", `${p.pj} se guarda ${n}`, p.pj);
-    return nota(`${n} entra en la mochila de ${p.pj}.`);
+    // Los bonificadores se guardan YA, no al equipar: si el objeto llega a la mochila pelado y
+    // luego alguien lo arrastra a un hueco a mano, entraría sin sumar nada y la CA mentiría.
+    const obj = {
+      n,
+      ...(Number(e.ca) ? { ca: Math.max(-10, Math.min(10, Math.round(+e.ca))) } : {}),
+      ...(e.dano?.trim() ? { dano: e.dano.trim() } : {}),
+      ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}),
+    };
+    p.mochila.push(obj);
+    registrar("hallazgo", `${p.pj} se guarda ${n}${bonoTexto(obj)}`, p.pj);
+    return nota(
+      `${n} entra en la mochila de ${p.pj}${bonoTexto(obj) ? ` (${bonoTexto(obj).trim()})` : ""}.`,
+    );
   }
 
   if (nombre === "quitar_objeto") {

@@ -477,6 +477,12 @@
   .muneco .ranura .etiq { font:400 8.4px var(--mono); fill:var(--tiza-baja); }
   /* El bonificador debajo del nombre de la pieza: se lee de un vistazo qué está sumando. */
   .muneco .ranura .bono { font:500 7.4px var(--mono); fill:var(--sebo); }
+  /* Coger y soltar: lo que está en la mano y dónde se puede dejar. */
+  .muneco .ranura.enmano circle { stroke:var(--ambar); stroke-width:3; }
+  .muneco .ranura.destino circle { stroke:var(--sebo); stroke-dasharray:3 2.4; }
+  .bolsa li.enmano { border-color:var(--ambar); }
+  .cogiendo { margin:6px 0 0; font-size:.84rem; font-style:italic; color:var(--ambar); }
+  .cogiendo b { font-style:normal; }
   /* Las seis ranuras de los lados: app.js las ancla hacia fuera, y un nombre largo se salía del
      viewBox cortado a media palabra. Centrarlas reparte el texto a los dos lados del ancla, y el
      desplazamiento vertical las quita de encima de su propio aro. `text-anchor` es propiedad CSS,

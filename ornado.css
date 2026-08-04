@@ -571,6 +571,30 @@
 .ficha .muneco .ranura[data-hueco="anillo1"] .etiq,
 .ficha .muneco .ranura[data-hueco="anillo2"] .etiq { transform: translate(0, 38px); }
 /* Ocupada: engaste de latón encendido, fondo cálido y brillo hacia fuera. */
+/* En la mano: el aro late en oro vivo. En destino: punteado, para que se vea dónde soltar sin
+   que parezca que ya lleva algo. */
+.ficha .muneco .ranura.enmano circle {
+  stroke: #F2C766;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 6px #E8AE4CB0);
+}
+.ficha .muneco .ranura.destino circle {
+  stroke: #C79A3E;
+  stroke-width: 2.4;
+  stroke-dasharray: 4 3;
+}
+.ficha .bolsa li.enmano {
+  border-color: #F2C766;
+  box-shadow: inset 0 0 0 1px #F2C76660, 0 0 8px #E8AE4C55;
+}
+.ficha .cogiendo {
+  margin: 8px 0 0;
+  font: 400 .86rem/1.5 var(--serif);
+  font-style: italic;
+  color: #F0D79A;
+}
+.ficha .cogiendo b { font-style: normal; color: #FFF0C4; }
+
 .ficha .muneco .ranura.puesta circle {
   fill: #3A2C10;
   stroke: var(--ambar);
@@ -763,7 +787,11 @@
    cebra va sin `column-gap` (el hueco lo pone el padding de dt) porque una franja partida en
    dos por el hueco de la rejilla se ve como un error de pintado. */
 .ficha .entrevista {
-  grid-template-columns: minmax(7.6em, auto) 1fr;
+  /* La primera columna va ACOTADA, no `auto`: con `auto` la etiqueta más larga («lo que no deja
+     pasar») estiraba la columna hasta comerse la mitad de la fila, y en la ficha a dos columnas
+     eso dejaba las respuestas partidas en tres líneas de tres palabras. Ahora la etiqueta se
+     parte ella, que para eso es un rótulo. */
+  grid-template-columns: minmax(0, 8.4em) minmax(0, 1fr);
   gap: 0;
   margin-top: 10px;
   border-top: 1px solid #C79A3E28;
@@ -863,6 +891,38 @@
   .ficha .muneco .ranura .etiq { font-size: 9px; }
   .ficha .bolsa { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
   .ficha .pg-fila .val { min-width: 4.8em; font-size: 1.16rem; padding: 10px 6px; }
+}
+
+/* ═══ 14b. Dos columnas en pantalla ancha ═══════════════════════════════════════════════════
+   La ficha era UNA columna a cualquier ancho, así que en una tablet en horizontal había que
+   bajar media pantalla para llegar al equipo —lo que más se mira— con medio ancho vacío al lado.
+
+   El orden del DOM se queda como está (que es el bueno en vertical: estado, PG, equipo, y el
+   resto) y aquí se recoloca por rejilla usando `data-bloque`. Se hace por NOMBRE y no por
+   `nth-child` porque los bloques de heridas y de notas solo existen si el personaje tiene
+   heridas o notas: contar posiciones se rompería en cuanto alguien se cura. */
+@media (min-width: 1040px) {
+  .ficha .ficha-caja {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-auto-flow: row;
+    align-content: start;
+    gap: 18px 20px;
+  }
+  /* La cabecera con el retrato y los medallones, de lado a lado. */
+  .ficha .ficha-cab { grid-column: 1 / -1; }
+  /* El equipo a la derecha, y ocupando lo que necesite: es el bloque alto. Los demás se colocan
+     solos en la columna izquierda porque tienen `grid-column: 1` fijado abajo. */
+  .ficha [data-bloque="equipo"] { grid-column: 2; grid-row: 2 / span 40; }
+  .ficha [data-bloque="pg"],
+  .ficha [data-bloque="heridas"],
+  .ficha [data-bloque="quien"],
+  .ficha [data-bloque="notas"],
+  .ficha [data-bloque="donde"] { grid-column: 1; }
+  /* El botón de cerrar, al final y de lado a lado. */
+  .ficha .ficha-caja > .fila:last-child { grid-column: 1 / -1; }
+  /* Con la mitad del ancho para él, el muñeco puede crecer y las etiquetas respirar. */
+  .ficha svg.muneco { max-width: 100%; }
 }
 
 /* Muy estrecho de verdad (móvil pequeño): el medallón encoge y la ✕ de la bolsa crece, que si
