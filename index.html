@@ -216,14 +216,17 @@
      Las caras «viven» con animación CSS sobre UNA sola imagen: respiran, parpadean y de vez en
      cuando hacen un tic. No son fotogramas generados. Cada hueco lleva duraciones distintas
      para que no respiren a la vez, que es lo que delata el truco. */
-  .banda { display:flex; justify-content:center; align-items:flex-end; gap:2px;
-           padding:2px; background:linear-gradient(#0E100A,#171B10);
-           box-shadow:inset 0 1px 0 #00000090; }
+  .banda { position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:center;
+           align-items:flex-end; gap:4px; padding:8px 6px 8px;
+           background:linear-gradient(#0000, #000000B8 55%, #000000E0);
+           pointer-events:auto; }
   .banda:empty { display:none; }
-  .pj-banda { background:var(--musgo); border:1px solid #0A0B07; padding:7px 9px 6px;
-              min-height:0; display:flex; flex-direction:column; align-items:center; gap:5px;
-              font:inherit; color:var(--tiza); cursor:pointer; overflow:hidden; }
-  .pj-banda:hover { background:var(--musgo-alto); }
+  /* Sin fondo de tarjeta: los personajes van INTEGRADOS sobre la ilustración, no en cajas. */
+  .pj-banda { background:none; border:none; padding:0; min-height:0; display:flex;
+              flex-direction:column; align-items:center; gap:4px;
+              font:inherit; color:var(--tiza); cursor:pointer; }
+  .pj-banda .nom { text-shadow:0 1px 3px #000; }
+  .pj-banda .pgnum { text-shadow:0 1px 3px #000; }
 
   .marco { width:var(--marco); max-width:100%; aspect-ratio:1; position:relative;
            overflow:hidden; background:#0B0D07;
@@ -280,6 +283,92 @@
   .pj-banda[data-estado="caido"] .cara,
   .pj-banda[data-estado="caido"] .cara img { animation:none; }
 
+
+  /* ── Tablero: la escena a sangre, con la lateral del DJ ───────────────
+     Así es como se pidió y como funcionan los CRPG de los que viene la idea: la ilustración
+     ocupa TODO, los personajes van integrados abajo sobre ella, y a la derecha una columna
+     estrecha con el narrador, la transcripción y las acciones. La imagen no se encoge: se
+     recorta con object-fit para que quepa lo demás. */
+  .tablero { flex:1; min-height:0; display:flex; }
+  .escenario { flex:1; min-width:0; position:relative; overflow:hidden;
+               background:linear-gradient(#191D12,#0B0D07); }
+  .escenario > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+                     display:block; }
+  .escenario .sin-arte { position:absolute; inset:0; display:flex; align-items:center;
+                         justify-content:center; color:var(--tiza-baja); font-style:italic;
+                         font-size:.9rem; text-align:center; padding:24px; }
+  /* Rótulo del lugar, sobre la imagen y con degradado para que se lea encima de cualquier cosa. */
+  .rotulo { position:absolute; top:0; left:0; right:0; padding:12px 16px 26px;
+            background:linear-gradient(#000000C0, #0000); pointer-events:none;
+            display:flex; align-items:baseline; gap:12px; }
+  .rotulo .lugar { font:500 .64rem/1 var(--mono); letter-spacing:.2em; color:var(--sebo); }
+  .rotulo h1 { margin:0; font:400 1.15rem/1.2 var(--serif); text-shadow:0 1px 3px #000;
+               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rotulo .reloj { margin-left:auto; }
+  .pie-escena { position:absolute; left:16px; bottom:calc(var(--marco) + 62px);
+                font:400 .74rem/1.3 var(--serif); font-style:italic; color:#CFC9B4;
+                text-shadow:0 1px 3px #000; pointer-events:none; max-width:60%; }
+
+  /* ── Lateral del DJ ───────────────────────────────────────────────── */
+  .lateral { flex:none; width:clamp(250px, 21%, 400px); display:flex; flex-direction:column;
+             min-height:0; border-left:1px solid var(--liquen); background:var(--turba); }
+
+  .dj { flex:none; display:flex; align-items:center; gap:10px; padding:9px 11px;
+        border-bottom:1px solid var(--liquen); background:var(--musgo); }
+  .dj .cara-dj { width:54px; height:54px; flex:none; position:relative; overflow:hidden;
+                 border:1px solid #0A0B07; box-shadow:inset 0 0 0 1px #6E7A4E;
+                 background:#0B0D07; }
+  .dj .cara-dj img { width:100%; height:100%; object-fit:cover; object-position:50% 30%; }
+  .dj .quien-dj { min-width:0; }
+  .dj .quien-dj b { display:block; font:400 .92rem/1.2 var(--serif); }
+  .dj .quien-dj span { font:500 .64rem/1.3 var(--mono); color:var(--tiza-baja);
+                       letter-spacing:.06em; }
+  /* Se ilumina cuando habla: es la señal de que le toca a él y no a la mesa. */
+  @keyframes brillo { 0%,100% { box-shadow:inset 0 0 0 1px var(--ambar), 0 0 10px #D9A04A55 }
+                      50% { box-shadow:inset 0 0 0 1px #F0C97A, 0 0 22px #D9A04A99 } }
+  .dj[data-estado="hablando"] { background:#2A2415; }
+  .dj[data-estado="hablando"] .cara-dj { animation:brillo 1.5s ease-in-out infinite; }
+  .dj[data-estado="pensando"] .cara-dj { box-shadow:inset 0 0 0 1px var(--sebo); opacity:.75; }
+  .dj[data-estado="grabando"] { background:#2A1512; }
+  .dj[data-estado="grabando"] .cara-dj { opacity:.5; }
+
+  .lateral .charla { flex:1; min-height:0; overflow-y:auto; padding:10px 11px;
+                     display:flex; flex-direction:column; gap:9px; }
+  .lateral .acciones { flex:none; border-top:1px solid var(--liquen); padding:9px 11px;
+                       display:flex; flex-direction:column; gap:7px; background:var(--musgo); }
+  .lateral .acciones .fila > button { min-height:40px; font-size:.84rem; padding:8px 10px; }
+  .tirada { display:flex; gap:7px; }
+  .tirada input { flex:1; min-width:0; min-height:42px; padding:8px 10px; text-align:center;
+                  font:500 1.05rem/1 var(--mono); }
+  .tirada button { flex:none; min-height:42px; padding:8px 13px; }
+
+  /* ── Ficha de personaje, como capa sobre la escena ────────────────── */
+  .ficha { position:fixed; inset:0; z-index:40; background:#0A0B07EE;
+           display:flex; align-items:center; justify-content:center; padding:18px; }
+  .ficha-caja { background:var(--musgo); border:1px solid var(--liquen); max-width:620px;
+                width:100%; max-height:100%; overflow-y:auto; padding:16px 18px;
+                display:flex; flex-direction:column; gap:12px; }
+  .ficha-caja .cab { display:flex; align-items:center; gap:12px; }
+  .ficha-caja .cab .retrato { width:82px; height:82px; flex:none; object-fit:cover;
+                              border:1px solid #0A0B07; box-shadow:inset 0 0 0 1px #6E7A4E; }
+  .ficha-caja h3 { margin:0; font:400 1.3rem/1.2 var(--serif); }
+  .ficha-caja .sub { font:400 .8rem/1.3 var(--serif); font-style:italic; color:var(--tiza-baja); }
+  .ficha-rejilla { display:grid; grid-template-columns:repeat(auto-fit,minmax(88px,1fr)); gap:8px; }
+  .ficha-rejilla div { background:var(--musgo-alto); border:1px solid var(--liquen);
+                       padding:8px 10px; }
+  .ficha-rejilla b { display:block; font:500 1.1rem/1 var(--mono);
+                     font-variant-numeric:tabular-nums; color:var(--sebo); }
+  .ficha-rejilla span { font:500 .6rem/1.4 var(--mono); letter-spacing:.1em;
+                        text-transform:uppercase; color:var(--tiza-baja); }
+
+  /* En pantalla estrecha la lateral pasa debajo: en vertical no caben dos columnas. */
+  @media (max-width: 780px) {
+    .tablero { flex-direction:column; }
+    .escenario { flex:none; height:44%; }
+    .lateral { width:auto; flex:1; border-left:none; border-top:1px solid var(--liquen); }
+    .pie-escena { display:none; }
+  }
+
   @media (max-height: 700px) {
     :root { --barra: 56px; }
     .pj-banda { padding:5px 5px 4px; gap:3px; }
@@ -297,68 +386,77 @@
 </head>
 <body>
 
-<header>
-  <span class="lugar" id="cab-lugar">L0</span>
-  <h1 id="cab-nombre">El camino del sur</h1>
-  <div class="reloj" id="cab-reloj" data-urgente="no">Luna Muerta <b>3</b></div>
-</header>
+<!-- ── Tablero: la escena a sangre con la lateral del narrador ──────────────────────
+     La cabecera antigua desaparece: el rótulo del lugar va SOBRE la ilustración, que ahora
+     ocupa todo el hueco disponible. -->
+<div class="tablero" id="v-tablero">
+  <div class="escenario">
+    <img id="esc-arte" alt="" hidden>
+    <div class="sin-arte" id="esc-arte-vacio">Sin arte para esta escena todavía</div>
+
+    <div class="rotulo">
+      <span class="lugar" id="cab-lugar">L0</span>
+      <h1 id="cab-nombre">El camino del sur</h1>
+      <div class="reloj" id="cab-reloj" data-urgente="no">Luna Muerta <b>3</b></div>
+    </div>
+
+    <div class="pie-escena" id="esc-pie"></div>
+
+    <!-- Los personajes, integrados sobre la ilustración. -->
+    <div class="banda" id="banda"></div>
+  </div>
+
+  <aside class="lateral">
+    <!-- El narrador. Se ilumina cuando habla. -->
+    <div class="dj" id="dj" data-estado="listo">
+      <span class="cara-dj"><img id="dj-cara" alt="" src="retratos/dj.webp"></span>
+      <span class="quien-dj">
+        <b>Director de juego</b>
+        <span id="dj-estado">esperando a la mesa</span>
+      </span>
+    </div>
+
+    <div class="charla" id="charla"></div>
+
+    <div class="acciones">
+      <button id="arrancar" class="grande">
+        <span class="icono">▸</span><span id="arrancar-txt">Empezar la sesión cero</span>
+      </button>
+
+      <button class="hablar" id="hablar" data-modo="listo">
+        <span class="icono">🎤</span><span id="hablar-txt">Toca para hablar</span>
+      </button>
+      <button id="cancelar" hidden><span class="icono">■</span><span>Cancelar</span></button>
+
+      <!-- Escribir: la vía de respaldo si el micrófono falla, y la buena para nombres propios. -->
+      <form id="escribir-forma" class="escribir">
+        <input id="escribir" autocomplete="off" enterkeyhint="send" placeholder="…o escríbelo">
+        <button type="submit" id="escribir-enviar">Enviar</button>
+      </form>
+
+      <!-- Cantar una tirada es lo que más se hace en mesa: un campo y ya. -->
+      <form class="tirada" id="tirada-forma">
+        <input id="tirada" inputmode="numeric" autocomplete="off" placeholder="tirada">
+        <button type="submit">🎲 Canto</button>
+      </form>
+
+      <div class="fila">
+        <button id="acc-narracion"><span class="icono">▶</span><span>Narración</span></button>
+        <button id="acc-antorcha"><span class="icono">🔥</span><span>−1 antorcha</span></button>
+      </div>
+      <audio id="esc-audio" preload="metadata"></audio>
+      <p style="margin:0;font-size:.72rem;color:var(--tiza-baja)" id="esc-nota-audio"></p>
+    </div>
+  </aside>
+</div>
 
 <main>
-  <!-- ══ ESCENA ══════════════════════════════════════════════════════ -->
-  <div class="vista" id="v-escena" data-activa>
-    <figure>
-      <img class="lienzo" id="esc-arte" alt="" hidden>
-      <div class="lienzo lienzo-vacio" id="esc-arte-vacio">
-        Sin arte para esta escena todavía
-      </div>
-      <figcaption id="esc-pie"></figcaption>
-    </figure>
-
-    <section>
-      <h2>Narración</h2>
-      <button id="esc-play"><span class="icono">▶</span><span>Reproducir</span></button>
-      <!-- preload="metadata" y no "none": con "none" el navegador no toca el fichero hasta que
-           alguien pulsa, así que un audio que falta no se detecta y el botón se queda activo
-           mintiendo. Cargar solo la cabecera basta para saber si está y desactivarlo antes. -->
-      <audio id="esc-audio" preload="metadata"></audio>
-      <div class="barra-progreso"><i id="esc-progreso"></i></div>
-      <p style="margin:.5rem 0 0;font-size:.78rem;color:var(--tiza-baja)" id="esc-nota-audio"></p>
-    </section>
-
+  <!-- ══ MAPA ════════════════════════════════════════════════════════ -->
+  <div class="vista" id="v-mapa">
     <section>
       <h2>Lo que sabéis</h2>
       <ul class="sabeis" id="esc-sabeis"></ul>
     </section>
-
-    <section id="sec-arrancar">
-      <h2>Empezar</h2>
-      <button id="arrancar" class="grande">
-        <span class="icono">▸</span><span id="arrancar-txt">Empezar la sesión cero</span>
-      </button>
-      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="arrancar-nota"></p>
-    </section>
-
-    <section>
-      <h2>Conversación con el DJ</h2>
-      <div class="charla" id="charla">
-        <div class="turno" data-de="dj">
-          <div class="quien">director de juego</div>
-          <p>Aprieta el botón de abajo y pregúntame lo que quieras. Suéltalo cuando acabes.</p>
-        </div>
-      </div>
-      <!-- Escribir es la vía de respaldo cuando el micrófono no está disponible, y también la
-           cómoda para nombres propios, que la transcripción destroza. -->
-      <form id="escribir-forma" class="escribir">
-        <input id="escribir" autocomplete="off" enterkeyhint="send"
-               placeholder="…o escribe tu turno y pulsa Enviar">
-        <button type="submit" id="escribir-enviar">Enviar</button>
-      </form>
-      <button id="charla-limpiar"><span class="icono">✕</span><span>Vaciar conversación</span></button>
-    </section>
-  </div>
-
-  <!-- ══ MAPA ════════════════════════════════════════════════════════ -->
-  <div class="vista" id="v-mapa">
     <section>
       <h2>Dónde estáis</h2>
       <svg class="mapa" id="mapa" viewBox="0 0 100 100" role="img"
@@ -422,6 +520,23 @@
         reglas, y trae una hoja de verificación para pillarle si se equivoca.
       </p>
       <label class="casilla">
+        <input type="checkbox" id="cachondeo">
+        <span>
+          <b>DJ cachondo</b>
+          <small>El DJ se pica con la mesa, entra a las coñas y vacila a quien saca un uno. El
+          horror no se rebaja: al describir la escena o hacer de aldeano sigue siendo serio.</small>
+        </span>
+      </label>
+      <label class="casilla">
+        <input type="checkbox" id="diarizar">
+        <span>
+          <b>Distinguir quién habla</b>
+          <small>Deja el micro para una conversación entre varios: separa las voces y le dice al DJ
+          quién ha dicho qué. Son voces anónimas («Voz 1», «Voz 2»), no sabe vuestros nombres — los
+          deduce por lo que decís. Encarece un poco la transcripción.</small>
+        </span>
+      </label>
+      <label class="casilla">
         <input type="checkbox" id="sesion-cero">
         <span>
           <b>Modo sesión cero</b>
@@ -470,6 +585,10 @@
       <div class="estado-linea neutro" id="estado-claves">Sin comprobar.</div>
     </section>
     <section>
+      <h2>Conversación</h2>
+      <button id="charla-limpiar"><span class="icono">✕</span><span>Vaciar conversación</span></button>
+    </section>
+    <section>
       <h2>Gasto de esta sesión</h2>
       <div class="estado-linea neutro" id="gasto">Aún nada.</div>
       <button id="gasto-reset"><span class="icono">⟲</span><span>Poner el contador a cero</span></button>
@@ -480,19 +599,20 @@
 <!-- Panel de mesa: los retratos, el botón de hablar y las pestañas. Siempre a la vista,
      como la barra inferior de los Might and Magic. -->
 <div class="panel">
-  <!-- Los avisos van AQUÍ, en el panel, y no en la pestaña de Ajustes: durante la partida nadie
-       está mirando Ajustes, así que un error escrito allí es un error invisible. -->
+  <!-- Los avisos van AQUÍ, siempre a la vista y no en la pestaña de Ajustes: durante la partida
+       nadie mira Ajustes, así que un error escrito allí es un error invisible. -->
   <button class="aviso" id="aviso" hidden></button>
-  <div class="banda" id="banda"></div>
-  <button class="hablar" id="hablar" data-modo="listo">
-    <span class="icono">🎤</span><span id="hablar-txt">Toca para hablar</span>
-  </button>
   <nav>
-  <button data-va="escena" data-activa><span class="g">📖</span><span>Escena</span></button>
-  <button data-va="mapa"><span class="g">🗺</span><span>Mapa</span></button>
+  <button data-va="escena" data-activa><span class="g">🕯</span><span>Mesa</span></button>
+  <button data-va="mapa"><span class="g">🗺</span><span>Misión</span></button>
   <button data-va="grupo"><span class="g">🛡</span><span>Grupo</span></button>
   <button data-va="ajustes"><span class="g">⚙</span><span>Ajustes</span></button>
   </nav>
+</div>
+
+<!-- Ficha del personaje: capa sobre todo, se abre tocando un retrato. -->
+<div class="ficha" id="ficha" hidden>
+  <div class="ficha-caja" id="ficha-caja"></div>
 </div>
 
 <script type="module" src="app.js"></script>

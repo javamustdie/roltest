@@ -135,6 +135,23 @@ Al acabar, di que apunten los personajes en la pestaña Grupo con «Editar perso
 quiten el modo sesión cero de Ajustes para empezar a jugar.
 `.trim();
 
+/**
+ * Tono de mesa opcional. La ficción sigue siendo la misma —el horror no se rebaja— pero el DJ
+ * se permite el mismo cachondeo que hay en una mesa de verdad. Se separa del tono narrativo a
+ * propósito: lo que cambia es cómo habla CONTIGO, no cómo describe el bosque.
+ */
+const GUIA_CACHONDEO = `
+REGISTRO DE MESA: los jugadores son colegas y se pican entre ellos. Entra al trapo.
+- Puedes ser sarcástico, burlón y seco con la MESA. Si alguien hace una tontería, dilo.
+- Si se insultan entre ellos, no hagas de árbitro: te ríes y sigues. No moralices ni des sermones.
+- Puedes vacilar a quien saca un uno y celebrar con maldad a quien saca un veinte.
+- Comentarios de una línea, nunca chistes largos ni explicados.
+- Lo que NO se toca: cuando describes la escena o interpretas a un NPC, sigues siendo folk horror
+  serio. El cachondeo es tuyo como DJ hablando con la mesa, no del mundo. Un aldeano no hace
+  chistes; tú sí, entre paréntesis.
+- Y las líneas y velos que acordó la mesa siguen mandando sobre todo esto.
+`.trim();
+
 /** Lo específico de cada aventura. Se añade a GUIA según la que esté elegida. */
 const TRAMA = {
   corvalar: `
@@ -238,8 +255,16 @@ function irA(nombre, tocarHash = true) {
   for (const o of document.querySelectorAll("nav button")) o.removeAttribute("data-activa");
   for (const v of document.querySelectorAll(".vista")) v.removeAttribute("data-activa");
   document.querySelector(`nav button[data-va="${nombre}"]`).setAttribute("data-activa", "");
-  $(`#v-${nombre}`).setAttribute("data-activa", "");
-  document.querySelector("main").scrollTop = 0;
+
+  // La mesa es un tablero a pantalla completa, hermano de main, no una vista dentro de él:
+  // la ilustración tiene que poder ocupar todo el hueco sin el relleno de las otras pestañas.
+  const enMesa = nombre === "escena";
+  $("#v-tablero").hidden = !enMesa;
+  document.querySelector("main").hidden = enMesa;
+  if (!enMesa) {
+    $(`#v-${nombre}`).setAttribute("data-activa", "");
+    document.querySelector("main").scrollTop = 0;
+  }
   if (tocarHash && location.hash.slice(1) !== nombre) history.replaceState(null, "", `#${nombre}`);
 }
 
@@ -301,16 +326,14 @@ function pintarEscena() {
   $("#esc-sabeis").innerHTML = (l.sabeis ?? [])
     .map((s) => `<li>${esc(s)}</li>`).join("") || "<li>Nada todavía.</li>";
 
-  const a = $("#esc-audio"), boton = $("#esc-play");
+  const a = $("#esc-audio"), boton = $("#acc-narracion");
   // El aviso se limpia en cada escena: si no, el de una escena sin audio se quedaría pegado
   // en la siguiente, que sí lo tiene.
   $("#esc-nota-audio").textContent = "";
   if (l.audio) a.src = `audio/${l.audio}.mp3`;
   else a.removeAttribute("src");
-  const etiqueta = CAMPANA.voces[l.voz] ?? "narrador";
-  boton.querySelector("span:last-child").textContent = `Reproducir · ${etiqueta}`;
+  boton.querySelector("span:last-child").textContent = "Narración";
   boton.disabled = !l.audio;
-  $("#esc-progreso").style.width = "0";
 }
 
 function pintarCharla() {
@@ -383,11 +406,88 @@ setInterval(() => {
 
 $("#banda").addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-pjbanda]");
-  if (!b) return;
-  irA("grupo");
-  // Resaltar un momento la ficha del personaje tocado, para no dejar al dedo buscándola.
-  const ficha = $("#grupo-lista").children[+b.dataset.pjbanda];
-  ficha?.scrollIntoView({ block: "center", behavior: "smooth" });
+  if (b) abrirFicha(+b.dataset.pjbanda);
+});
+
+// ── Ficha de personaje, como capa sobre la mesa ───────────────────────────────
+function abrirFicha(i) {
+  const p = E.partida[i];
+  if (!p) return;
+  const l = actual();
+  const sum = Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(" · ");
+  const cara = p.retrato
+    ? `<img class="retrato" alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp">`
+    : `<span class="retrato" style="display:flex;align-items:center;justify-content:center;
+         font:500 1.6rem/1 var(--serif);color:#4A5236">${esc(iniciales(p.pj))}</span>`;
+
+  $("#ficha-caja").innerHTML = `
+    <div class="cab">
+      ${cara}
+      <div>
+        <h3>${esc(p.pj)}</h3>
+        <div class="sub">${esc(p.clase)}${p.retrato ? "" : " · sin retrato todavía"}</div>
+      </div>
+    </div>
+
+    <div class="ficha-rejilla">
+      <div><span>puntos de golpe</span><b>${p.pg} / ${p.pgMax}</b></div>
+      <div><span>clase de armadura</span><b>${p.ca}</b></div>
+      <div><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
+      <div><span>heridas</span><b>${p.heridas.length}</b></div>
+    </div>
+
+    ${p.heridas.length
+      ? `<div><h2>Heridas persistentes</h2><div class="marcas" style="margin-top:8px">${p.heridas
+          .map((h) => `<span class="marca">${esc(h)}</span>`).join("")}</div></div>`
+      : `<p style="margin:0;font-size:.84rem;color:var(--tiza-baja)">Sin heridas persistentes.</p>`}
+
+    <div><h2>Puntos de golpe</h2>
+      <div class="pg-fila" style="margin-top:8px">
+        <button data-fpg="${i}" data-d="-3">−3</button>
+        <button data-fpg="${i}" data-d="-1">−1</button>
+        <span class="val">${p.pg} / ${p.pgMax}</span>
+        <button data-fpg="${i}" data-d="1">+1</button>
+        <button data-fpg="${i}" data-d="3">+3</button>
+      </div>
+    </div>
+
+    <div><h2>Dónde estáis</h2>
+      <p style="margin:6px 0 0;font-size:.9rem">${esc(l.id)} · ${esc(l.nombre)}</p>
+      <ul class="sabeis" style="margin-top:8px">${(l.sabeis ?? [])
+        .map((x) => `<li>${esc(x)}</li>`).join("") || "<li>Nada todavía.</li>"}</ul>
+    </div>
+
+    <div><h2>Suministros del grupo</h2>
+      <p style="margin:6px 0 0;font:500 .82rem/1.5 var(--mono);color:var(--tiza-baja)">${esc(sum)}</p>
+    </div>
+
+    <div class="fila">
+      <button data-ir-grupo="${i}"><span class="icono">✎</span><span>Editar en Grupo</span></button>
+      <button id="ficha-cerrar"><span class="icono">✕</span><span>Cerrar</span></button>
+    </div>`;
+  $("#ficha").hidden = false;
+}
+
+$("#ficha").addEventListener("click", (ev) => {
+  // Tocar fuera de la caja cierra: en mesa nadie busca la X.
+  if (ev.target === $("#ficha") || ev.target.closest("#ficha-cerrar")) {
+    $("#ficha").hidden = true;
+    return;
+  }
+  const pg = ev.target.closest("button[data-fpg]");
+  if (pg) {
+    const p = E.partida[+pg.dataset.fpg];
+    p.pg = Math.max(0, Math.min(p.pgMax, p.pg + +pg.dataset.d));
+    guardarEstado(); pintarGrupo(); pintarBanda();
+    abrirFicha(+pg.dataset.fpg);
+    return;
+  }
+  const ir = ev.target.closest("button[data-ir-grupo]");
+  if (ir) {
+    $("#ficha").hidden = true;
+    irA("grupo");
+    if ($("#editor").hidden) $("#editar-grupo").click();
+  }
 });
 
 function pintarGrupo() {
@@ -630,25 +730,21 @@ $("#gasto-reset").addEventListener("click", () => {
 
 // ── Narración pregenerada ────────────────────────────────────────────────────
 {
-  const a = $("#esc-audio"), b = $("#esc-play");
+  const a = $("#esc-audio"), b = $("#acc-narracion");
   b.addEventListener("click", () => {
     if (a.paused) { a.play().catch(() => avisar("No he podido reproducir el audio.")); }
     else a.pause();
   });
   a.addEventListener("play", () => (b.querySelector(".icono").textContent = "❚❚"));
   a.addEventListener("pause", () => (b.querySelector(".icono").textContent = "▶"));
-  a.addEventListener("timeupdate", () => {
-    $("#esc-progreso").style.width = `${(a.currentTime / a.duration) * 100 || 0}%`;
-  });
   // Falta el MP3 (aún sin pregenerar, o el service worker no lo tiene en caché). Se dice qué
   // pasa y qué lo arregla: un botón desactivado sin explicación, en mesa, parece la app rota.
   a.addEventListener("error", () => {
     if (!a.getAttribute("src")) return; // escena sin narración: ya viene desactivado
     b.disabled = true;
     b.querySelector("span:last-child").textContent = "Narración sin generar";
-    $("#esc-nota-audio").textContent =
-      "Falta el audio de esta escena. Se genera con node scripts/pregenerar.mjs --solo=voz " +
-      "y hace falta la clave de ElevenLabs. La voz en vivo del botón de hablar funciona igual.";
+    // En la lateral no cabe un párrafo: mensaje corto, y el detalle solo si hace falta.
+    $("#esc-nota-audio").textContent = "Narración sin generar. La voz en vivo sí funciona.";
   });
 }
 
@@ -659,6 +755,16 @@ $("#modelo").value = A.modelo;
 $("#voz-modelo").value = A.vozModelo;
 $("#aventura").value = A.aventura;
 $("#sesion-cero").checked = !!A.sesionCero;
+$("#cachondeo").checked = !!A.cachondeo;
+$("#diarizar").checked = !!A.diarizar;
+
+for (const [id, campo] of [["cachondeo", "cachondeo"], ["diarizar", "diarizar"]]) {
+  $(`#${id}`).addEventListener("change", (ev) => {
+    A[campo] = ev.target.checked;
+    guardarAjustes();
+    ponEstado("Guardado en este dispositivo.", "ok");
+  });
+}
 
 // Cambiar de aventura tiene efecto inmediato, sin pasar por «Guardar»: es lo que se espera
 // de un selector que reescribe la escena, el mapa y el grupo enteros.
@@ -684,6 +790,8 @@ $("#guardar").addEventListener("click", () => {
   A.modelo = $("#modelo").value;
   A.vozModelo = $("#voz-modelo").value;
   A.sesionCero = $("#sesion-cero").checked;
+  A.cachondeo = $("#cachondeo").checked;
+  A.diarizar = $("#diarizar").checked;
   guardarAjustes();
   ponEstado("Guardado en este dispositivo.", "ok");
   actualizarBotonHablar();
@@ -790,9 +898,20 @@ let grabadora = null, trozos = [], inicioGrab = 0, ocupado = false;
 let micro = null; // MediaStream reutilizado
 let cronometro = null;
 
+const TEXTO_DJ = {
+  listo: "esperando a la mesa",
+  grabando: "escuchando…",
+  pensando: "pensando…",
+  hablando: "hablando",
+};
 function modo(m, txt) {
   bHablar.dataset.modo = m;
   tHablar.textContent = txt;
+  // El retrato del DJ refleja el mismo estado: en mesa se mira la cara, no el botón.
+  $("#dj").dataset.estado = m;
+  $("#dj-estado").textContent = TEXTO_DJ[m] ?? m;
+  // Cancelar solo tiene sentido mientras hay algo en marcha.
+  $("#cancelar").hidden = !(m === "pensando" || m === "hablando");
 }
 function actualizarBotonHablar() {
   const falta = !A.clave11 || !A.claveCl;
@@ -866,6 +985,37 @@ bHablar.addEventListener("click", () => {
   grabadora ? pararGrabacion() : empezarGrabacion();
 });
 
+// ── Cancelar ─────────────────────────────────────────────────────────────────
+// Botón propio y visible. Antes cancelar era «vuelve a tocar el botón de hablar», que nadie
+// adivina y que además no se distinguía de empezar a grabar otra vez.
+$("#cancelar").addEventListener("click", () => {
+  if (!ocupado) return;
+  cola?.cortar();
+  enCurso?.ac.abort(new Error("cancelado por la mesa"));
+});
+
+// ── Cantar una tirada ────────────────────────────────────────────────────────
+// Es lo que más se hace en mesa, y dictar números por voz es justo lo que peor transcribe.
+$("#tirada-forma").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const c = $("#tirada");
+  const n = c.value.trim();
+  if (!n || ocupado) return;
+  if (!A.claveCl) { avisar("Falta la clave de Anthropic en Ajustes."); return; }
+  c.value = "";
+  await turno(null, 0, `Hemos tirado y sale ${n}.`);
+});
+
+// ── Gastar una antorcha ──────────────────────────────────────────────────────
+$("#acc-antorcha").addEventListener("click", () => {
+  const k = Object.keys(E.suministros).find((x) => /antorcha/i.test(x));
+  if (!k) return;
+  if (E.suministros[k] <= 0) { avisar("No quedan antorchas. A oscuras: desventaja en todo."); return; }
+  E.suministros[k]--;
+  guardarEstado(); pintarGrupo();
+  if (E.suministros[k] === 0) avisar("Era la última antorcha.");
+});
+
 // ── Escribir el turno, en vez de hablarlo ────────────────────────────────────
 // No es un adorno: si el micrófono falla —permiso denegado, sin https, portátil sin micro— sin
 // esto no se puede jugar en absoluto. Y para dictar nombres propios va mejor.
@@ -885,12 +1035,7 @@ $("#escribir-forma").addEventListener("submit", async (ev) => {
 function pintarArrancar() {
   const cero = !!A.sesionCero;
   $("#arrancar-txt").textContent = cero ? "Empezar la sesión cero" : "Empezar la escena";
-  $("#arrancar-nota").textContent = cero
-    ? "El DJ empieza por las líneas y velos, luego el mundo y los arquetipos, y después os " +
-      "pregunta a cada uno. No hace falta micrófono: puedes contestar escribiendo."
-    : "El DJ describe dónde estáis y qué se puede hacer. Para crear personajes, marca «Modo " +
-      "sesión cero» en Ajustes.";
-  $("#sec-arrancar").hidden = E.charla.length > 0;
+  $("#arrancar").hidden = E.charla.length > 0;
 }
 
 $("#arrancar").addEventListener("click", async () => {
@@ -931,6 +1076,35 @@ function conLimite(ms, queEs) {
 
 /** Petición en curso, para poder cancelarla desde el botón. */
 let enCurso = null;
+let cola = null;
+
+/**
+ * Reconstruye el diálogo por hablantes a partir de la respuesta de Scribe con diarización.
+ *
+ * Scribe devuelve palabras con `speaker_id`, no frases por persona, así que hay que agrupar
+ * los tramos consecutivos del mismo hablante. Los identificadores son anónimos (speaker_0,
+ * speaker_1…): no sabe QUIÉN es cada uno, solo que son distintos. Se numeran «Voz 1», «Voz 2»
+ * y el DJ ya los cruza con los nombres del grupo por lo que dicen.
+ */
+function porHablantes(tr) {
+  const palabras = tr.words?.filter((w) => w.text?.trim());
+  if (!palabras?.length) return tr.text?.trim() ?? "";
+
+  const etiquetas = new Map();
+  const tramos = [];
+  for (const w of palabras) {
+    const id = w.speaker_id ?? "speaker_0";
+    if (!etiquetas.has(id)) etiquetas.set(id, `Voz ${etiquetas.size + 1}`);
+    const ult = tramos[tramos.length - 1];
+    if (ult && ult.id === id) ult.texto += (w.type === "spacing" ? "" : " ") + w.text.trim();
+    else tramos.push({ id, texto: w.text.trim() });
+  }
+  // Con un solo hablante no se etiqueta nada: «Voz 1: hola» leído por el DJ suena a robot.
+  if (etiquetas.size < 2) return tramos.map((t) => t.texto).join(" ").replace(/\s+/g, " ").trim();
+  return tramos
+    .map((t) => `${etiquetas.get(t.id)}: ${t.texto.replace(/\s+/g, " ").trim()}`)
+    .join("\n");
+}
 
 /** Envía un turno a Claude: desde el micrófono (blob) o escrito (texto). */
 async function turno(blob, segundos, textoEscrito) {
@@ -947,13 +1121,15 @@ async function turno(blob, segundos, textoEscrito) {
       fd.append("file", blob, "voz.webm");
       fd.append("model_id", "scribe_v1");
       fd.append("language_code", "spa");
+      if (A.diarizar) fd.append("diarize", "true");
       const lim = conLimite(30_000, "la transcripción");
       enCurso = lim;
       const rs = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
         method: "POST", headers: { "xi-api-key": A.clave11 }, body: fd, signal: lim.señal,
       }).finally(lim.listo);
       if (!rs.ok) throw new Error(`no he podido transcribir. ${explicar("ElevenLabs", rs.status)}`);
-      dicho = (await rs.json()).text?.trim();
+      const tr = await rs.json();
+      dicho = A.diarizar ? porHablantes(tr) : tr.text?.trim();
       E.gasto.sttSeg += segundos;
       if (!dicho) throw new Error("no he entendido nada. Prueba a hablar más cerca, o escríbelo abajo");
     }
@@ -964,7 +1140,7 @@ async function turno(blob, segundos, textoEscrito) {
     // 2. Claude responde, en streaming, y se va troceando por frases para que
     //    la voz empiece antes de que termine de escribir.
     modo("pensando", "Pensando…");
-    const cola = new ColaVoz(actual().voz ?? "narrador");
+    cola = new ColaVoz(actual().voz ?? "narrador");
     let respuesta = "";
     let pendiente = "";
 
@@ -996,6 +1172,7 @@ async function turno(blob, segundos, textoEscrito) {
   } finally {
     ocupado = false;
     enCurso = null;
+    cola = null;
     actualizarBotonHablar();
   }
 }
@@ -1045,7 +1222,11 @@ async function claudeStream(pregunta, alRecibir) {
       // y colar la trama aquí hace que el DJ empiece a narrar en vez de crear personajes.
       {
         type: "text",
-        text: A.sesionCero ? `${GUIA}\n\n${GUIA_CERO}` : `${GUIA}\n\n${TRAMA[A.aventura]}`,
+        text: [
+          GUIA,
+          A.cachondeo ? GUIA_CACHONDEO : "",
+          A.sesionCero ? GUIA_CERO : TRAMA[A.aventura],
+        ].filter(Boolean).join("\n\n"),
         cache_control: { type: "ephemeral" },
       },
       { type: "text", text: contexto },
@@ -1114,8 +1295,26 @@ class ColaVoz {
     const pedir = this.sintetizar(frase); // arranca ya, en paralelo
     this.cadena = this.cadena.then(async () => {
       const url = await pedir;
-      if (url) await reproducir(url);
+      if (!url || this.cortada) { if (url) URL.revokeObjectURL(url); return; }
+      await this.reproducir(url);
     });
+  }
+
+  /** Reproduce y se guarda el audio en curso, para poder callar al cancelar. */
+  reproducir(url) {
+    return new Promise((res) => {
+      const a = new Audio(url);
+      this.suena = a;
+      const fin = () => { URL.revokeObjectURL(url); if (this.suena === a) this.suena = null; res(); };
+      a.onended = fin; a.onerror = fin;
+      a.play().catch(fin);
+    });
+  }
+
+  /** Callar ya: para lo que suena y descarta lo que quedaba en la cola. */
+  cortar() {
+    this.cortada = true;
+    if (this.suena) { this.suena.pause(); this.suena = null; }
   }
   async sintetizar(texto) {
     // Con límite, y si falla se devuelve null: la frase se queda sin voz pero el texto ya está
@@ -1150,14 +1349,6 @@ class ColaVoz {
   terminar() { return this.cadena; }
 }
 
-function reproducir(url) {
-  return new Promise((res) => {
-    const a = new Audio(url);
-    const fin = () => { URL.revokeObjectURL(url); res(); };
-    a.onended = fin; a.onerror = fin;
-    a.play().catch(fin);
-  });
-}
 
 // ── Arranque ─────────────────────────────────────────────────────────────────
 pintarTodo();
