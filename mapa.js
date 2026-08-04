@@ -197,18 +197,22 @@ const ESTILOS = `<style>
   .m-ignota .m-dibujo { opacity:.66; }
 
   /* Estáis aquí: un pulso lento sobre el suelo, lo justo para encontrarlo de un vistazo. */
-  @keyframes m-pulso { 0%,100% { r:26; opacity:.75 } 55% { r:52; opacity:0 } 100% { opacity:0 } }
+  @keyframes m-pulso { 0% { r:46; opacity:.85 } 70%,100% { r:82; opacity:0 } }
   @keyframes m-brillo { 0%,100% { opacity:.95 } 50% { opacity:.45 } }
-  .m-pulso { fill:none; stroke:${C.oro}; stroke-width:4;
+  .m-pulso { fill:none; stroke:#FFD98A; stroke-width:5;
              animation:m-pulso 2.8s ease-out infinite; }
-  .m-aro-aqui { fill:none; stroke:${C.oro}; stroke-width:3.4; opacity:.95;
+  .m-aro-aqui { fill:none; stroke:${C.oro}; stroke-width:4.4; opacity:.95;
                 animation:m-brillo 2.8s ease-in-out infinite; }
   @media (prefers-reduced-motion:reduce) {
     .m-pulso, .m-aro-aqui { animation:none; }
     .m-pulso { opacity:.5; }
   }
 
-  .m-lugar:hover .m-aro-toque, .m-lugar:focus-visible .m-aro-toque { opacity:.85; }
+  /* Todo lo decorativo deja pasar el toque: si no, el grano y el marco se comen los clics
+     y los nodos data-ir nunca reciben el evento. */
+  .m-mar, .m-tierra, .m-sendas, .m-vineta, .m-grano, .m-marco, .m-rosa, .m-escala
+    { pointer-events:none; }
+  .m-lugar:hover .m-aro-toque, .m-lugar:focus .m-aro-toque { opacity:.85; }
   .m-aro-toque { fill:none; stroke:${C.oro}; stroke-width:2.6; stroke-dasharray:7 6;
                  opacity:0; transition:opacity .18s ease; }
 
@@ -242,11 +246,10 @@ const ESTILOS = `<style>
                                         stroke:${C.caminoIgnoto}; stroke-dasharray:15 12; }
 
   .m-costa-ink { fill:none; stroke:${C.tinta}; stroke-width:3.2; opacity:.95; }
-  .m-costa-arena { fill:none; stroke:${C.arena}; stroke-width:13; opacity:.9; }
+  .m-costa-arena { fill:none; stroke:${C.arena}; stroke-width:10; opacity:.85; }
   .m-eco { fill:none; stroke:${C.espuma}; stroke-width:1.8; }
-  .m-ola { fill:none; stroke:${C.espuma}; stroke-width:1.6; opacity:.5; }
+  .m-ola { fill:none; stroke:${C.espuma}; stroke-width:1.7; opacity:.62; }
 
-  .m-rosa-oscuro { fill:${C.madera}; }
   .m-rosa-punta { fill:${C.crema}; stroke:${C.tinta}; stroke-width:1.4; }
   .m-rosa-punta-b { fill:${C.oroSuave}; stroke:${C.tinta}; stroke-width:1.4; }
   .m-rosa-aro { fill:none; stroke:${C.tinta}; stroke-width:2; }
@@ -419,7 +422,7 @@ function casita(cx, base, w, h, tejadoVuelo = 5) {
 
 const ICONOS = {
   iglesia: {
-    escala: 0.74,
+    escala: 0.9,
     d: () => `
       <ellipse class="m-sombra-suelo" cx="2" cy="3" rx="38" ry="8"/>
       <path class="m-ink" stroke-width="2" fill="${C.muro}" d="M-8 0 v-26 h38 v26 Z"/>
@@ -432,7 +435,7 @@ const ICONOS = {
       <circle fill="${C.arena}" stroke="${C.tinta}" stroke-width="1.2" cx="26" cy="-32" r="4"/>`,
   },
   aldea: {
-    escala: 0.82,
+    escala: 0.98,
     d: () => `
       <ellipse class="m-sombra-suelo" cx="1" cy="4" rx="42" ry="9"/>
       ${casita(-26, -2, 18, 13)}
@@ -442,7 +445,7 @@ const ICONOS = {
       <path class="m-junco" stroke="${C.tinta}" opacity=".5" d="M-14 3 q10 -5 20 0"/>`,
   },
   casa: {
-    escala: 0.95,
+    escala: 1.12,
     d: () => `
       <ellipse class="m-sombra-suelo" cx="2" cy="3" rx="27" ry="7"/>
       ${casita(0, 0, 30, 20, 6)}
@@ -452,7 +455,7 @@ const ICONOS = {
       <path fill="${C.arena}" stroke="${C.tinta}" stroke-width="1.2" d="M-11 -14 h7 v7 h-7 Z"/>`,
   },
   pozo: {
-    escala: 0.95,
+    escala: 1.12,
     d: () => `
       <ellipse class="m-sombra-suelo" cx="2" cy="3" rx="25" ry="7"/>
       <path class="m-ink" stroke-width="2" fill="${C.roca}"
@@ -465,7 +468,7 @@ const ICONOS = {
       <path class="m-ink" stroke-width="1.5" fill="${C.tronco}" d="M-5 -31 h10 v7 h-10 Z"/>`,
   },
   vado: {
-    escala: 1,
+    escala: 1.2,
     d: () => `
       <path fill="${C.arena}" opacity=".85" d="M-34 -20 q16 -5 34 0 t34 0 v-7 q-18 5 -34 0 t-34 0 Z"/>
       <path fill="${C.arena}" opacity=".85" d="M-34 4 q16 -5 34 0 t34 0 v6 q-18 -5 -34 0 t-34 0 Z"/>
@@ -481,15 +484,15 @@ const ICONOS = {
       </g>`,
   },
   circulo: {
-    escala: 0.92,
+    escala: 1.05,
     d: () => {
       const piedras = [];
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * TAU + 0.34;
-        const x = Math.cos(a) * 30;
-        const y = -8 + Math.sin(a) * 13;
-        const h = 15 + (Math.sin(a) + 1) * 6;
-        const w = 5.4 + (Math.sin(a) + 1) * 1.4;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU + 0.42;
+        const x = Math.cos(a) * 33;
+        const y = -8 + Math.sin(a) * 15;
+        const h = 17 + (Math.sin(a) + 1) * 8;
+        const w = 6.4 + (Math.sin(a) + 1) * 1.8;
         piedras.push({
           y,
           s:
@@ -510,7 +513,7 @@ const ICONOS = {
     },
   },
   arbol: {
-    escala: 0.78,
+    escala: 1.08,
     d: () => `
       <ellipse class="m-sombra-suelo" cx="4" cy="3" rx="32" ry="8"/>
       <path class="m-ink" stroke-width="1.8" fill="${C.tronco}"
@@ -525,16 +528,16 @@ const ICONOS = {
       <circle fill="${C.verde4}" cx="4" cy="-66" r="7.5" opacity=".9"/>`,
   },
   mojon: {
-    escala: 0.95,
+    escala: 1.12,
     d: () => `
       <ellipse class="m-sombra-suelo" cx="2" cy="3" rx="26" ry="7"/>
       <path class="m-ink" stroke-width="1.9" fill="${C.roca}"
             d="M-20 0 v-13 q0 -10 9 -10 q9 0 9 10 v13 Z"/>
       <path fill="${C.rocaSombra}" opacity=".55" d="M-6 0 v-14 q0 -7 -4 -9 q9 0 9 10 v13 Z"/>
       <path class="m-ink" stroke-width="2.6" fill="none" d="M12 2 v-38"/>
-      <path class="m-ink" stroke-width="1.8" fill="${C.maderaClara}"
+      <path class="m-ink" stroke-width="1.8" fill="#9A7038"
             d="M12 -36 h22 l7 7 -7 7 h-22 Z"/>
-      <path fill="${C.crema}" opacity=".55" d="M16 -32 h16 v2 h-16 Z M16 -27 h11 v2 h-11 Z"/>
+      <path fill="${C.tinta}" opacity=".65" d="M16 -32 h18 v2.2 h-18 Z M16 -27 h12 v2.2 h-12 Z"/>
       <ellipse class="m-ink" stroke-width="1.4" fill="${C.roca}" cx="-24" cy="-3" rx="7" ry="4.5"/>`,
   },
 };
@@ -720,24 +723,25 @@ export function pintarMapaEn(svg, localizaciones, estado) {
   // ── 5. Montañas: las cotas más altas, lejos de nodos y caminos ──────────────
   const montes = [];
   for (const q of [...cand].sort((a, b) => b.alt - a.alt)) {
-    if (montes.length >= 10) break;
+    if (montes.length >= 9) break;
     if (q.dCentro > 0.82) continue;
-    if (!lejosDeNodos(q.x, q.y, 84) || !lejosDeSendas(q.x, q.y, 46)) continue;
-    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 74)) continue;
+    if (!lejosDeNodos(q.x, q.y, 82) || !lejosDeSendas(q.x, q.y, 44)) continue;
+    if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 84)) continue;
     montes.push(q);
   }
   // Cada cumbre arrastra dos o tres hermanas más bajas: así se lee como cordillera.
   const dibujos = [];
   for (const m of montes) {
     const s = 0.78 + azar() * 0.32;
-    dibujos.push({ y: m.y, s: monte(m.x, m.y, s) });
-    const n = 2 + Math.floor(azar() * 2);
+    dibujos.push({ y: m.y, s: monte(m.x, m.y, s, Math.floor(azar() * 3)) });
+    const n = 1 + Math.floor(azar() * 2);
     for (let k = 0; k < n; k++) {
       const lado = k % 2 === 0 ? -1 : 1;
       const hx = m.x + lado * (24 + azar() * 22) * s;
       const hy = m.y + (3 + azar() * 14);
+      const v = Math.floor(azar() * 3);
       if (!enTierra(hx, hy, 0.9) || !lejosDeNodos(hx, hy, 66) || !lejosDeSendas(hx, hy, 34)) continue;
-      dibujos.push({ y: hy, s: monte(hx, hy, s * (0.5 + azar() * 0.26)) });
+      dibujos.push({ y: hy, s: monte(hx, hy, s * (0.5 + azar() * 0.26), v) });
     }
   }
 
@@ -789,19 +793,29 @@ export function pintarMapaEn(svg, localizaciones, estado) {
   // ── 7. Turbera: charcas alargadas en el curso bajo del río ──────────────────
   const turba = [];
   const zonasTurba = [];
-  for (let k = 0; k < 9; k++) {
-    const t = 0.42 + (k / 9) * 0.56;
+  // Cuántas charcas: según lo que mida el río, para no encharcar un mapa pequeño.
+  let largoRio = 0;
+  for (let s = 0; s < cauce.length - 1; s++)
+    largoRio += Math.hypot(cauce[s + 1].x - cauce[s].x, cauce[s + 1].y - cauce[s].y);
+  const nCharcas = lim(Math.round(largoRio / 120), 4, 8);
+  for (let k = 0; k < nCharcas; k++) {
+    const t = 0.42 + (k / nCharcas) * 0.56;
     const idx = lim(Math.round(t * (cauce.length - 1)), 1, cauce.length - 1);
     const base = cauce[idx];
     const lado = k % 2 === 0 ? 1 : -1;
-    const bx = base.x + lado * (34 + azar() * 44);
-    const by = base.y + (azar() - 0.5) * 50;
-    const rx = 40 + azar() * 34;
-    const ry = 20 + azar() * 14;
-    if (!enTierra(bx, by, 0.86) || !lejosDeNodos(bx, by, 62)) continue;
-    if (montes.some((m) => Math.hypot(m.x - bx, m.y - by) < 78)) continue;
-    zonasTurba.push({ x: bx, y: by, rx, ry });
-    turba.push(charca(bx, by, rx, ry, azar, sufijo));
+    const rx = 42 + azar() * 34;
+    const ry = 21 + azar() * 14;
+    // Hasta cuatro tanteos por charca: si el primer sitio no vale, se prueba más cerca del cauce.
+    for (let intento = 0; intento < 4; intento++) {
+      const bx = base.x + lado * (30 + azar() * 46) * (1 - intento * 0.22);
+      const by = base.y + (azar() - 0.5) * 54 * (1 - intento * 0.2);
+      if (!enTierra(bx, by, 0.87) || !lejosDeNodos(bx, by, 56)) continue;
+      if (montes.some((m) => Math.hypot(m.x - bx, m.y - by) < 66)) continue;
+      if (zonasTurba.some((z) => Math.hypot(z.x - bx, z.y - by) < 56)) continue;
+      zonasTurba.push({ x: bx, y: by, rx, ry });
+      turba.push(charca(bx, by, rx, ry, azar, sufijo));
+      break;
+    }
   }
   const enTurbera = (x, y, holgura = 10) =>
     zonasTurba.some((z) => {
@@ -820,19 +834,19 @@ export function pintarMapaEn(svg, localizaciones, estado) {
     if (colinas.some((h) => Math.hypot(h.x - q.x, h.y - q.y) < 46)) continue;
     if (enTurbera(q.x, q.y, 20)) continue;
     colinas.push(q);
-    dibujos.push({ y: q.y, s: colina(q.x, q.y, 0.85 + azar() * 0.5) });
+    dibujos.push({ y: q.y, s: colina(q.x, q.y, 0.85 + azar() * 0.5, Math.floor(azar() * 3)) });
   }
 
   // ── 9. Bosque: matas de copas superpuestas donde la espesura manda ──────────
   const matas = [];
   for (const q of [...cand].sort((a, b) => b.esp - a.esp)) {
-    if (matas.length >= 185) break;
+    if (matas.length >= 215) break;
     if (!lejosDeNodos(q.x, q.y, 54) || !lejosDeSendas(q.x, q.y, 21)) continue;
     if (montes.some((m) => Math.hypot(m.x - q.x, m.y - q.y) < 48)) continue;
     if (colinas.some((h) => Math.hypot(h.x - q.x, h.y - q.y) < 34)) continue;
     if (matas.some((t) => Math.hypot(t.x - q.x, t.y - q.y) < 17)) continue;
     if (enTurbera(q.x, q.y, 4)) continue; // en la turbera no crece bosque
-    if (q.esp < 0.42) continue;
+    if (q.esp < 0.37) continue;
     matas.push(q);
     dibujos.push({ y: q.y, s: mata(q.x, q.y, 0.7 + azar() * 0.55, q.esp, azar) });
   }
@@ -899,11 +913,12 @@ export function pintarMapaEn(svg, localizaciones, estado) {
     // Estáis aquí: resplandor cálido, aro que late en el suelo y banderola.
     const marca =
       p.id === aqui
-        ? `<ellipse cx="${r1(p.px)}" cy="${r1(p.py - 20)}" rx="64" ry="54"
+        ? `<ellipse cx="${r1(p.px)}" cy="${r1(p.py - 16)}" rx="74" ry="60"
                     fill="url(#${sufijo}-aqui)"/>
-           <g transform="translate(${r1(p.px)} ${r1(p.py + 2)}) scale(1 0.4)">
-             <circle class="m-pulso" cx="0" cy="0" r="26"/>
-             <circle class="m-aro-aqui" cx="0" cy="0" r="32"/>
+           <g transform="translate(${r1(p.px)} ${r1(p.py + 4)}) scale(1 0.38)">
+             <circle cx="0" cy="0" r="46" fill="none" stroke="#4A3208" stroke-width="8" opacity=".4"/>
+             <circle class="m-aro-aqui" cx="0" cy="0" r="46"/>
+             <circle class="m-pulso" cx="0" cy="0" r="46"/>
            </g>
            <path class="m-ink" stroke-width="2.4" fill="none"
                  d="M${r1(p.px + 30)} ${r1(p.py - 2)} v-52"/>
@@ -923,7 +938,7 @@ export function pintarMapaEn(svg, localizaciones, estado) {
     </g>`;
   }).join("");
 
-  // ── 9. Rosa de los vientos y escala: en las esquinas con más mar ────────────
+  // ── 12. Rosa de los vientos y escala: en las esquinas con más mar ───────────
   const esquinas = [
     { x: INT.x0 + 112, y: INT.y0 + 112 },
     { x: INT.x1 - 112, y: INT.y0 + 112 },
@@ -937,7 +952,7 @@ export function pintarMapaEn(svg, localizaciones, estado) {
   const eRosa = esquinas[0];
   const eEscala = esquinas[1];
 
-  // ── 10. Montaje ─────────────────────────────────────────────────────────────
+  // ── 13. Montaje ─────────────────────────────────────────────────────────────
   svg.innerHTML = `${ESTILOS}
 ${defs(sufijo, costa, azar)}
 <g class="m-mar">
@@ -979,24 +994,55 @@ ${marco()}`;
 }
 
 // ── Piezas del relieve ────────────────────────────────────────────────────────
-/** Montaña con cara al sol, flanco en sombra y roca clara en la cumbre. */
-function monte(x, y, s) {
+/**
+ * Montaña con cara al sol, flanco en sombra y roca clara en la cumbre.
+ * `v` (0, 1 o 2) cambia el tono de la roca y el perfil, para que la sierra no sea un molde.
+ */
+function monte(x, y, s, v = 0) {
+  const cuerpo = [C.roca, "#8E8068", "#A8987A"][v % 3];
+  const sombra = [C.rocaSombra, "#5E5540", "#77694F"][v % 3];
+  const perfil =
+    v % 3 === 1
+      ? "M-38 6 L-14 -30 Q-9 -37 -3 -30 L3 -22 L10 -38 Q15 -45 20 -38 L38 6 Z"
+      : "M-36 6 L-6 -42 Q0 -50 6 -42 L36 6 Z";
+  const cumbre =
+    v % 3 === 1
+      ? "M-14 -30 Q-9 -37 -3 -30 L1 -24 L-6 -27 L-11 -22 Z M10 -38 Q15 -45 20 -38 L23 -32 L16 -35 L12 -31 Z"
+      : "M-6 -42 Q0 -50 6 -42 L12 -31 L3 -35 L-3 -28 L-9 -33 Z";
   return `<g transform="translate(${r1(x)} ${r1(y)}) scale(${r1(s)})">
     <ellipse class="m-sombra-suelo" cx="6" cy="6" rx="40" ry="9"/>
-    <path class="m-monte-cuerpo" d="M-36 6 L-6 -42 Q0 -50 6 -42 L36 6 Z"/>
-    <path class="m-monte-sombra" d="M3 -45 L36 6 L14 6 Z"/>
-    <path class="m-monte-luz" d="M-6 -42 Q0 -50 6 -42 L12 -31 L3 -35 L-3 -28 L-9 -33 Z"/>
-    <path class="m-monte-grieta" d="M-2 -30 L-12 -8 M4 -26 L12 -6"/>
+    <path class="m-monte-cuerpo" fill="${cuerpo}" d="${perfil}"/>
+    <path class="m-monte-sombra" fill="${sombra}"
+          d="${v % 3 === 1 ? "M18 -40 L38 6 L18 6 Z" : "M3 -45 L36 6 L14 6 Z"}"/>
+    <path class="m-monte-luz" d="${cumbre}"/>
+    <path class="m-monte-grieta" stroke="${sombra}" d="M-2 -30 L-12 -8 M4 -26 L12 -6"/>
+    <path fill="${C.verde2}" opacity=".3" d="M-36 6 q10 -8 22 -6 q14 3 24 -3 q14 4 26 9 Z"/>
   </g>`;
 }
 
-/** Colina: un lomo con su sombra. */
-function colina(x, y, s) {
+/** Colina: un lomo con su sombra. Tres perfiles distintos para que no se repita el molde. */
+function colina(x, y, s, v = 0) {
+  const verde = [C.prado, "#A3AC6C", "#B6BB7C"][v % 3];
+  const cuerpo = [
+    "M-30 5 Q-27 -14 -7 -19 Q14 -22 30 5 Z",
+    "M-32 5 Q-28 -11 -14 -14 Q-6 -15 -2 -8 Q4 -20 16 -18 Q28 -15 32 5 Z",
+    "M-26 5 Q-24 -19 -2 -21 Q20 -23 26 5 Z",
+  ][v % 3];
+  const sombra = [
+    "M7 -20 Q21 -14 30 5 L13 5 Z",
+    "M16 -18 Q28 -15 32 5 L18 5 Z",
+    "M4 -21 Q20 -18 26 5 L12 5 Z",
+  ][v % 3];
+  const brizna = [
+    "M-14 0 q6 -8 14 -10",
+    "M-20 0 q5 -6 11 -8 M2 1 q6 -7 12 -9",
+    "M-12 -2 q7 -9 16 -11",
+  ][v % 3];
   return `<g transform="translate(${r1(x)} ${r1(y)}) scale(${r1(s)})">
     <ellipse class="m-sombra-suelo" cx="4" cy="5" rx="30" ry="7"/>
-    <path class="m-colina-cuerpo" d="M-30 5 Q-27 -14 -7 -19 Q14 -22 30 5 Z"/>
-    <path class="m-colina-sombra" d="M7 -20 Q21 -14 30 5 L13 5 Z"/>
-    <path class="m-monte-grieta" stroke="${C.verde2}" opacity=".4" d="M-14 0 q6 -8 14 -10"/>
+    <path class="m-colina-cuerpo" fill="${verde}" d="${cuerpo}"/>
+    <path class="m-colina-sombra" d="${sombra}"/>
+    <path class="m-monte-grieta" stroke="${C.verde2}" opacity=".4" d="${brizna}"/>
   </g>`;
 }
 
@@ -1032,30 +1078,41 @@ function matojo(x, y, s, azar) {
   </g>`;
 }
 
-/** Charca de turbera: mancha irregular con rayado y juncos. */
+/** Charca de turbera: mancha irregular, rayado de turba, pozas de agua negra y juncos. */
 function charca(x, y, rx, ry, azar, sufijo) {
   const pts = [];
-  const n = 12;
+  const n = 14;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * TAU;
-    const k = 0.72 + azar() * 0.5;
+    const k = 0.58 + azar() * 0.72; // muy irregular: nada de píldoras
     pts.push({ x: x + Math.cos(a) * rx * k, y: y + Math.sin(a) * ry * k });
   }
   const d = curvaCerrada(pts);
-  const juncos = [];
-  for (let i = 0; i < 5; i++) {
+  // Pozas de agua estancada dentro de la turbera.
+  const pozas = [];
+  for (let i = 0; i < 3; i++) {
     const a = azar() * TAU;
-    const jx = x + Math.cos(a) * rx * 0.85;
-    const jy = y + Math.sin(a) * ry * 0.95;
+    const px = x + Math.cos(a) * rx * 0.42;
+    const py = y + Math.sin(a) * ry * 0.42;
+    pozas.push(
+      `<ellipse cx="${r1(px)}" cy="${r1(py)}" rx="${r1(5 + azar() * 8)}"
+                ry="${r1(3 + azar() * 4)}" fill="#26301F" opacity=".72"/>`,
+    );
+  }
+  const juncos = [];
+  for (let i = 0; i < 7; i++) {
+    const a = azar() * TAU;
+    const jx = x + Math.cos(a) * rx * (0.55 + azar() * 0.4);
+    const jy = y + Math.sin(a) * ry * (0.6 + azar() * 0.45);
     juncos.push(
-      `<path class="m-junco" d="M${r1(jx)} ${r1(jy)} q-2 -8 -5 -11 M${r1(jx)} ${r1(jy)} q1 -9 3 -12"/>`,
+      `<path class="m-junco" d="M${r1(jx)} ${r1(jy)} q-2 -9 -6 -13 M${r1(jx)} ${r1(jy)} q1 -10 4 -14"/>`,
     );
   }
   return `<g class="m-turba">
     <path class="m-turba-base" d="${d}"/>
-    <path d="${d}" fill="url(#${sufijo}-turba)" opacity=".85"/>
-    <path d="${d}" fill="none" stroke="${C.tierraAlta}" stroke-width="1.4" opacity=".35"
-          transform="translate(1.5 2)"/>
+    <path d="${d}" fill="url(#${sufijo}-turba)" opacity="1"/>
+    <path d="${d}" fill="none" stroke="${C.turberaHonda}" stroke-width="2.4" opacity=".55"/>
+    ${pozas.join("")}
     ${juncos.join("")}
   </g>`;
 }
@@ -1070,9 +1127,9 @@ function defs(sufijo, costa, azar) {
     <stop offset="1" stop-color="#17353E"/>
   </linearGradient>
   <radialGradient id="${sufijo}-tierra" cx="0.4" cy="0.34" r="0.78">
-    <stop offset="0" stop-color="${C.tierraAlta}"/>
-    <stop offset="0.62" stop-color="${C.tierraBaja}"/>
-    <stop offset="1" stop-color="#A99570"/>
+    <stop offset="0" stop-color="#CFC48D"/>
+    <stop offset="0.62" stop-color="#B7B078"/>
+    <stop offset="1" stop-color="#A29A6A"/>
   </radialGradient>
   <radialGradient id="${sufijo}-vineta" cx="0.5" cy="0.48" r="0.72">
     <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
@@ -1084,6 +1141,11 @@ function defs(sufijo, costa, azar) {
     <stop offset="0.5" stop-color="${C.madera}"/>
     <stop offset="1" stop-color="#170F09"/>
   </linearGradient>
+  <radialGradient id="${sufijo}-aqui" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#FFD98A" stop-opacity=".8"/>
+    <stop offset="0.45" stop-color="${C.oro}" stop-opacity=".42"/>
+    <stop offset="1" stop-color="${C.oro}" stop-opacity="0"/>
+  </radialGradient>
   <radialGradient id="m-grad-rosa" cx="0.4" cy="0.35" r="0.75">
     <stop offset="0" stop-color="#EADFBE" stop-opacity=".95"/>
     <stop offset="1" stop-color="#C9B692" stop-opacity=".8"/>
@@ -1094,11 +1156,11 @@ function defs(sufijo, costa, azar) {
     <path class="m-ola" d="M34 30 q9 -7 18 0 t18 0"/>
     <path class="m-ola" d="M-8 34 q9 -7 18 0" opacity=".3"/>
   </pattern>
-  <pattern id="${sufijo}-turba" width="16" height="16" patternUnits="userSpaceOnUse"
-           patternTransform="rotate(14)">
-    <path d="M0 4 h16" stroke="${C.turberaHonda}" stroke-width="1.5" opacity=".55"/>
-    <path d="M0 11 h9" stroke="${C.turberaHonda}" stroke-width="1.3" opacity=".4"/>
-    <circle cx="12" cy="12" r="1.4" fill="${C.turberaHonda}" opacity=".45"/>
+  <pattern id="${sufijo}-turba" width="15" height="15" patternUnits="userSpaceOnUse"
+           patternTransform="rotate(16)">
+    <path d="M0 3.5 h15" stroke="${C.turberaHonda}" stroke-width="2" opacity=".8"/>
+    <path d="M0 10 h8" stroke="${C.turberaHonda}" stroke-width="1.7" opacity=".6"/>
+    <circle cx="11.5" cy="11.5" r="1.7" fill="${C.turberaHonda}" opacity=".6"/>
   </pattern>
 
   <filter id="${sufijo}-suave" x="-20%" y="-20%" width="140%" height="140%">

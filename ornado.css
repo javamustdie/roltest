@@ -30,7 +30,7 @@
   --laton: #8A6A28;
   --pergamino: #241F13;
   --pergamino-alto: #332C1B;
-  --hueco: #0B0D07;   /* fondo de todo lo que va hundido: ranuras, casillas, surcos */
+  --hueco: #0B0D07;   /* fondo de lo que va hundido: la bandeja de la bolsa, el marcador de PG */
   --tinta: #070804;   /* el negro de los contornos; nunca #000, que corta demasiado */
 
   /* Grano de fibra de pergamino. feTurbulence desaturado y en gris: se mezcla con `overlay`
@@ -60,8 +60,8 @@
      mismo, sin necesidad de recortar la línea en dos trozos. */
   --losange: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13'%3E%3Cpath d='M6.5 1 L12 6.5 L6.5 12 L1 6.5 Z' fill='%23C79A3E' stroke='%23241F13' stroke-width='2'/%3E%3C/svg%3E");
 
-  /* Chapa de metal, de arriba a abajo: reflejo, cuerpo, sombra. Una sola variable porque la
-     usan el marco del retrato y varios botones, y así el metal es el mismo en toda la ficha. */
+  /* Chapa de metal: reflejo, cuerpo y sombra en un solo degradado, inclinado para que parezca
+     iluminada desde arriba a la izquierda como todo lo demás. La lleva la banda del retrato. */
   --chapa-oro: linear-gradient(160deg, #F0DCA8 0%, #B98E33 26%, #6E5320 52%, #C79A3E 74%, #4A3714 100%);
 }
 
@@ -150,6 +150,17 @@
   letter-spacing: .01em;
   text-shadow: 0 1px 0 #000, 0 0 22px #D9A04A30;
 }
+/* Regla bajo el nombre: sin ella el nombre y la clase eran dos líneas de texto suelto, y con
+   ella el bloque se lee como el rótulo de la lámina. Se desvanece a la derecha para no chocar
+   con el borde del panel cuando el nombre es corto. */
+.ficha .ficha-caja h3::after {
+  content: "";
+  display: block;
+  height: 2px;
+  margin: 7px 0 1px;
+  background: linear-gradient(90deg, #C79A3E, #8A6A2860 46%, #8A6A2800 88%);
+  box-shadow: 0 1px 0 #00000080;
+}
 .ficha .ficha-caja .sub {
   font: 500 .64rem/1.3 var(--mono);
   letter-spacing: .16em;
@@ -190,6 +201,12 @@
    marco ornamentado sobre una imagen sin envolverla en un div que no existe en el marcado. */
 .ficha .retrato-grande {
   width: clamp(136px, 25vw, 200px);
+  /* Retrato vertical, no cuadrado: al lado hay dos filas de medallones y con un cuadrado
+     quedaba media columna de pergamino vacía bajo la foto. 2:3 es la proporción de retrato de
+     toda la vida, y `object-position` alto mantiene la cara dentro al recortar una foto
+     cuadrada. */
+  aspect-ratio: 2 / 3;
+  object-position: 50% 22%;
   border: 2px solid var(--tinta);
   border-radius: 2px;
   box-shadow:
@@ -221,8 +238,8 @@
     inset 0 0 0 7px var(--tinta),
     inset 0 0 38px #000000B0,
     0 10px 26px #000000AA;
-  color: #6A7048;
-  text-shadow: 0 2px 0 #000;
+  color: #8E9764;   /* las iniciales tienen que leerse con poca luz, no ser una marca de agua */
+  text-shadow: 0 2px 0 #000, 0 0 20px #00000090;
   position: relative;
 }
 .ficha .retrato-grande.sin-foto::before {
@@ -317,15 +334,17 @@
   letter-spacing: -.02em;
   font-variant-numeric: tabular-nums;
   color: #F5E6B8;
-  /* Luz alta arriba a la izquierda: es lo que convierte el círculo plano en una moneda. */
-  background: radial-gradient(68% 68% at 32% 26%, #453C24 0%, #241F13 56%, #12100A 100%);
+  /* Luz alta arriba a la izquierda: es lo que convierte el círculo plano en una moneda. Los
+     aros van con `box-shadow` sin desenfoque, que con `border-radius:50%` salen redondos y no
+     hacen falta ni un elemento extra ni un SVG. */
+  background: radial-gradient(72% 72% at 30% 24%, #524628 0%, #2A2415 52%, #141109 100%);
   box-shadow:
     0 0 0 1px var(--tinta),
-    0 0 0 3px var(--laton),
-    0 0 0 4px var(--tinta),
-    inset 0 2px 7px #000000B0,
-    inset 0 0 0 1px #F0DCA826,
-    0 5px 12px #00000090;
+    0 0 0 4px #A98436,
+    0 0 0 5px var(--tinta),
+    inset 0 3px 8px #000000B0,
+    inset 0 1px 0 #F0DCA83A,
+    0 5px 13px #000000A0;
   text-shadow: 0 1px 0 #000, 0 0 14px #D9A04A45;
 }
 /* La plaquita que cuelga. `margin-top` negativo para que muerda el disco; z-index por encima
@@ -343,7 +362,7 @@
   letter-spacing: .1em;
   text-transform: uppercase;
   color: #D3C293;
-  background: linear-gradient(#332C1B, #1A1508);
+  background: linear-gradient(var(--pergamino-alto), #1A1508);
   box-shadow: 0 0 0 1px var(--tinta), inset 0 1px 0 #C79A3E40, 0 2px 4px #00000080;
 }
 
@@ -365,11 +384,13 @@
 .ficha .pxbar i {
   position: relative;   /* el ancho lo pone app.js en línea; aquí sólo el relieve */
   overflow: hidden;
-  background: linear-gradient(#E0B45E 0%, #C8823C 42%, #8A5620 100%);
+  /* Ámbar quemado, no ámbar claro: el rótulo va centrado ENCIMA del relleno (lo pinta así
+     app.js), y sobre un naranja claro las letras blancas desaparecían. */
+  background: linear-gradient(#C8823C 0%, #9A5F26 45%, #6A3D14 100%);
   box-shadow:
-    inset 0 1px 0 #FFE9B8A0,
-    inset 0 -2px 4px #00000070,
-    1px 0 0 #F0DCA850;
+    inset 0 1px 0 #F0C88EA0,
+    inset 0 -2px 4px #00000080,
+    1px 0 0 #F0DCA860;
 }
 .ficha .pxbar i::after {
   content: "";
@@ -432,7 +453,7 @@
   font: 500 1.34rem/1 var(--mono);
   color: var(--ambar);
   background: radial-gradient(120% 150% at 50% -20%, #22261500, #0A0B07 70%);
-  background-color: #0A0B07;
+  background-color: var(--hueco);
   box-shadow:
     inset 0 0 0 1px var(--tinta),
     inset 0 0 0 2px var(--oro-bajo),
@@ -441,8 +462,9 @@
   text-shadow: 0 0 12px #D9A04A66, 0 1px 0 #000;
 }
 /* Los botones se distinguen por el signo del propio dato (`data-d`), no por su posición: si
-   algún día se reordenan en app.js, el color sigue al daño. */
-.ficha .pg-fila button { flex: 1; min-height: 46px; font-size: 1.12rem; }
+   algún día se reordenan en app.js, el color sigue al daño. `min-width:0` porque con el ancho
+   automático los cinco elementos sumaban 3px más que la fila en un móvil de 420px. */
+.ficha .pg-fila button { flex: 1; min-width: 0; min-height: 46px; padding: 12px 8px; font-size: 1.12rem; }
 .ficha .pg-fila button[data-d^="-"] {
   background: linear-gradient(#4A2118, #2A1310 62%, #1E0E0B);
   box-shadow: inset 0 1px 0 #C4705C55, inset 0 0 0 1px #00000070, 0 1px 0 #000;
@@ -456,17 +478,24 @@
   color: #DCE6BE;
 }
 
-/* ═══ 8. El muñeco (panel de equipo, a la Diablo) ══════════════════════════════════════════ */
+/* ═══ 8. El muñeco (panel de equipo, a la Diablo) ══════════════════════════════════════════
+   Una sola columna a cualquier ancho: muñeco arriba, bolsa debajo, que es la disposición del
+   inventario de Diablo III. Y hay una razón de fondo además del parecido: a dos columnas el
+   muñeco se quedaba en 294px para un lienzo de 304 unidades, o sea menos de 1px por unidad,
+   con lo que las ranuras eran diana de 23px y los nombres del equipo se salían del viewBox por
+   la izquierda. A ancho completo el muñeco mide 460px, las ranuras pasan de 30px y las
+   etiquetas caben. */
 .ficha .muneco-caja {
   position: relative;
-  grid-template-columns: minmax(214px, 1.05fr) minmax(186px, 1fr);
-  gap: 14px;
+  grid-template-columns: 1fr;
+  gap: 16px;
   margin-top: 12px;
 }
 /* El nicho: piedra oscura con el foco justo detrás de la figura, marco de hierro remachado y
    viñeta fuerte en los cantos. La figura tiene que salir del fondo por luz, no por línea. */
 .ficha svg.muneco {
-  max-width: 400px;
+  max-width: 460px;
+  margin-inline: auto;
   border: 12px solid transparent;
   border-image: var(--marco-hierro) 12 / 12px / 0 round;
   background-color: #0C0E08;
@@ -511,13 +540,36 @@
 /* Halo negro alrededor del texto (`paint-order:stroke`) para que la etiqueta se lea sobre la
    piedra y sobre el marco sin depender de dónde caiga. */
 .ficha .muneco .ranura .etiq {
-  font: 500 9px var(--mono);
-  fill: #A8AD8C;
+  font: 500 8.4px var(--mono);
+  fill: #B2B795;
   paint-order: stroke;
   stroke: #050603;
   stroke-width: 2.6px;
   stroke-linejoin: round;
 }
+/* Las seis ranuras de los lados: app.js las ancla hacia fuera (`end` a la izquierda, `start` a
+   la derecha) y un nombre de 22 caracteres —el máximo que deja `recortar`— se salía del viewBox
+   y quedaba cortado a media palabra. Centrarlas reparte el texto a los dos lados del ancla, que
+   es exactamente lo que hace que «Camisote de malla remendado» quepa, y el desplazamiento
+   vertical las saca de encima de su propio aro. `text-anchor` es propiedad CSS, así que se
+   corrige sin tocar el marcado.
+   Los números son a ojo sobre las coordenadas de MUNECO en app.js: si allí se mueve una ranura,
+   hay que volver a mirar esto. */
+.ficha .muneco .ranura[data-hueco="capa"] .etiq,
+.ficha .muneco .ranura[data-hueco="manos"] .etiq,
+.ficha .muneco .ranura[data-hueco="diestra"] .etiq,
+.ficha .muneco .ranura[data-hueco="zurda"] .etiq,
+.ficha .muneco .ranura[data-hueco="anillo1"] .etiq,
+.ficha .muneco .ranura[data-hueco="anillo2"] .etiq { text-anchor: middle; }
+/* hombros: la etiqueta sube por encima del aro */
+.ficha .muneco .ranura[data-hueco="capa"] .etiq  { transform: translate(-10px, -22px); }
+.ficha .muneco .ranura[data-hueco="manos"] .etiq { transform: translate(-6px, -24px); }
+/* manos: baja, en el hueco entre el puño y el anillo */
+.ficha .muneco .ranura[data-hueco="diestra"] .etiq,
+.ficha .muneco .ranura[data-hueco="zurda"] .etiq { transform: translate(0, 22px); }
+/* anillos: más abajo aún, por debajo de la etiqueta de las piernas */
+.ficha .muneco .ranura[data-hueco="anillo1"] .etiq,
+.ficha .muneco .ranura[data-hueco="anillo2"] .etiq { transform: translate(0, 38px); }
 /* Ocupada: engaste de latón encendido, fondo cálido y brillo hacia fuera. */
 .ficha .muneco .ranura.puesta circle {
   fill: #3A2C10;
@@ -547,12 +599,12 @@
    lean como dos piezas del mismo mueble. */
 .ficha .bolsa {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 7px;
   padding: 9px;
   border: 12px solid transparent;
   border-image: var(--marco-hierro) 12 / 12px / 0 round;
-  background-color: #0A0C06;
+  background-color: var(--hueco);
   background-image:
     repeating-linear-gradient(45deg, #FFFFFF06 0 1px, #FFFFFF00 1px 7px),
     radial-gradient(100% 80% at 50% 0%, #1A1E1250, #0A0C0600 70%);
@@ -560,7 +612,9 @@
   background-clip: border-box;
   box-shadow: inset 0 0 22px #000000C0;
   align-content: start;
-  min-height: 132px;   /* la bandeja se ve como bandeja aunque lleve un solo objeto */
+  /* Sin `min-height`: la bandeja se ajusta a las filas que hay. Una altura fija dejaba abajo un
+     dedo de rayado que parecía media fila cortada. El rayado ya se ve en el hueco que sobra en
+     la última fila, que es lo que hace que se lea como bandeja y no como lista. */
 }
 /* Casilla cuadrada con bisel. El nombre del objeto es texto largo («Camisote de malla
    remendado») y no un icono, así que se recorta a cuatro líneas centradas: en mesa importa
@@ -776,8 +830,10 @@
 .ficha button:focus-visible { outline: 2px solid var(--oro-alto); outline-offset: 2px; }
 
 /* ═══ 14. Estrecho: la ficha a pantalla completa ═══════════════════════════════════════════
-   En vertical no hay sitio para el margen de la capa ni para dos columnas de equipo. El marco
-   adelgaza (16px de oro a cada lado se comen un móvil) y el muñeco se centra sobre la bolsa. */
+   En vertical no sobra ni el margen de la capa: la ficha ocupa la pantalla entera, el marco
+   adelgaza (16px de oro por lado se comen un móvil) y la cabecera se apila. El corte en 780px
+   es el mismo que usa index.html para el tablero, para que la app no cambie de criterio a
+   media pantalla. */
 @media (max-width: 780px) {
   .ficha[id] { padding: 0; }
   .ficha .ficha-caja {
@@ -795,13 +851,18 @@
   .ficha .ficha-cab { flex-direction: column; align-items: center; gap: 14px; }
   .ficha .ficha-quien { width: 100%; align-items: stretch; }
   .ficha .ficha-caja h3, .ficha .ficha-caja .sub { text-align: center; }
-  .ficha .retrato-grande { width: clamp(150px, 46vw, 210px); }
+  /* En vertical el retrato vuelve a ser cuadrado: encima del nombre y a 46vw de ancho, un 2:3
+     se comía media pantalla antes de llegar a los números. */
+  .ficha .retrato-grande { width: clamp(150px, 46vw, 210px); aspect-ratio: 1; }
   .ficha .ficha-rejilla { grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); }
-  .ficha .muneco-caja { grid-template-columns: 1fr; justify-items: center; }
-  .ficha svg.muneco { max-width: 340px; }
-  .ficha .mochila { width: 100%; }
-  .ficha .bolsa { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
-  .ficha .pg-fila .val { min-width: 5.2em; font-size: 1.2rem; }
+  /* El muñeco ya va en una columna a cualquier ancho; aquí sólo se ajusta al hueco que queda y
+     la etiqueta crece, porque a 360px de lienzo una letra de 8.4 unidades son 10px en pantalla
+     y con poca luz eso no se lee. */
+  .ficha .muneco-caja { grid-template-columns: 1fr; gap: 14px; }
+  .ficha svg.muneco { max-width: min(360px, 100%); }
+  .ficha .muneco .ranura .etiq { font-size: 9px; }
+  .ficha .bolsa { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+  .ficha .pg-fila .val { min-width: 4.8em; font-size: 1.16rem; padding: 10px 6px; }
 }
 
 /* Muy estrecho de verdad (móvil pequeño): el medallón encoge y la ✕ de la bolsa crece, que si

@@ -11,6 +11,7 @@
 import { CAMPANAS, CAMPANA_POR_DEFECTO } from "./campana.js";
 import { RETRATOS } from "./retratos.js";
 import { rasgosDe } from "./rasgos.js";
+import { pintarMapaEn } from "./mapa.js";
 
 /**
  * Muñeco de equipo. Una silueta humana en SVG con los huecos colocados donde van en el cuerpo,
@@ -1101,102 +1102,12 @@ function pintarGrupo() {
     .join("");
 }
 
-/**
- * Mapa dibujado, no tres círculos.
- *
- * Pergamino con manchas, bosque a base de matas de árboles, turbera rayada, los caminos como
- * trazo de tinta con dos pasadas para que parezcan a pluma, y cada localización con su icono
- * según lo que es. Todo generado del mismo `x`/`y` que ya tenía cada localización, así que
- * añadir una localización a la aventura la coloca sola.
- */
-const ICONO_LUGAR = (l) => {
-  const t = `${l.id} ${l.nombre}`.toLowerCase();
-  if (/iglesia|ermita|san /.test(t)) return "†";
-  if (/pozo/.test(t)) return "◎";
-  if (/choza|casa|alquer|herrer/.test(t)) return "⌂";
-  if (/vado|arroyo|r[ií]o/.test(t)) return "≈";
-  if (/c[ií]rculo|abedul|bosque|coraz/.test(t)) return "⁂";
-  if (/camino|desv[áa]n|sur/.test(t)) return "⌇";
-  return "✦";
-};
-
 function pintarMapa() {
-  const L = CAMPANA.localizaciones;
+  // El mapa lo dibuja mapa.js: un mapa pintado de verdad (mar, costa, cordillera, bosque,
+  // marco y rosa de los vientos), no cuatro círculos sobre un pergamino. Aquí solo se le pasan
+  // las localizaciones y el estado, y se enganchan los eventos por data-ir.
   const svg = $("#mapa");
-
-  // Semilla estable a partir de los ids: la decoración tiene que salir igual cada vez que se
-  // pinta, o el mapa "tiembla" al repintar.
-  let semilla = L.map((l) => l.id).join("").split("").reduce((a, c) => a + c.charCodeAt(0), 7);
-  const azar = () => ((semilla = (semilla * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-
-  // Manchas de pergamino
-  const manchas = Array.from({ length: 14 }, () => {
-    const x = azar() * 100, y = azar() * 100, r = 3 + azar() * 9;
-    return `<circle class="mancha" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}"/>`;
-  }).join("");
-
-  // Bosque: matas de tres copas, más densas donde están las localizaciones del Bosque.
-  const arboles = Array.from({ length: 90 }, () => {
-    const x = azar() * 100, y = azar() * 100;
-    // El bosque ocupa la mitad derecha y la franja de arriba; la aldea queda despejada.
-    const densidad = (x / 100) * 0.85 + (1 - y / 100) * 0.3;
-    if (azar() > densidad) return "";
-    if (L.some((l) => Math.hypot(l.x - x, l.y - y) < 7)) return "";
-    const e = 0.62 + azar() * 0.45;
-    return `<g class="arbol" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${e.toFixed(2)})">
-      <path d="M0 0 L0 -1.5"/><circle cx="0" cy="-2.6" r="1.5"/>
-      <circle cx="-1.3" cy="-1.7" r="1.1"/><circle cx="1.3" cy="-1.7" r="1.1"/></g>`;
-  }).join("");
-
-  // Turbera: rayas horizontales cortas en la franja baja izquierda.
-  const turba = Array.from({ length: 26 }, () => {
-    const x = azar() * 62, y = 58 + azar() * 40, w = 2 + azar() * 5;
-    return `<path class="turba" d="M${x.toFixed(1)} ${y.toFixed(1)} h${w.toFixed(1)}"/>`;
-  }).join("");
-
-  // Caminos: dos trazos ligeramente desviados, para que parezcan de pluma.
-  const hechas = new Set();
-  const caminos = [];
-  for (const a of L) {
-    for (const bId of a.conecta) {
-      const clave = [a.id, bId].sort().join("-");
-      if (hechas.has(clave)) continue;
-      hechas.add(clave);
-      const b = L.find((x) => x.id === bId);
-      if (!b) continue;
-      const conocida = E.visitadas.includes(a.id) && E.visitadas.includes(bId);
-      // Curva: el punto de control se desplaza perpendicular a la recta.
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-      const off = (azar() - 0.5) * len * 0.22;
-      const cx = mx - (dy / len) * off, cy = my + (dx / len) * off;
-      const d = `M${a.x} ${a.y} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x} ${b.y}`;
-      caminos.push(
-        `<path class="camino ${conocida ? "conocida" : "ignota"}" d="${d}"/>` +
-          `<path class="camino2 ${conocida ? "conocida" : "ignota"}" d="${d}"/>`,
-      );
-    }
-  }
-
-  const nodos = L.map((l) => {
-    const clase = l.id === E.local ? "actual" : E.visitadas.includes(l.id) ? "visitada" : "ignota";
-    return `<g class="lugar ${clase}" data-ir="${l.id}" role="button" tabindex="0"
-               aria-label="${esc(l.nombre)}${l.id === E.local ? ", estáis aquí" : ""}">
-      <circle class="halo" cx="${l.x}" cy="${l.y}" r="5.6"/>
-      <circle class="punto" cx="${l.x}" cy="${l.y}" r="3.4"/>
-      <text class="glifo" x="${l.x}" y="${l.y + 1.5}">${ICONO_LUGAR(l)}</text>
-      <text class="rotulo-mapa" x="${l.x}" y="${l.y - 7.4}">${esc(l.nombre)}</text>
-    </g>`;
-  }).join("");
-
-  svg.innerHTML = `
-    <rect class="pergamino" x="0" y="0" width="100" height="100"/>
-    ${manchas}${turba}${arboles}
-    <g class="rosa" transform="translate(90 91)">
-      <path d="M0 -5 L1.4 0 L0 5 L-1.4 0 Z"/><path d="M-5 0 L0 1.2 L5 0 L0 -1.2 Z"/>
-      <text y="-6.4">N</text>
-    </g>
-    ${caminos.join("")}${nodos}`;
+  pintarMapaEn(svg, CAMPANA.localizaciones, { local: E.local, visitadas: E.visitadas });
 
   for (const g of svg.querySelectorAll("g[data-ir]")) {
     const ir = () => moverA(g.dataset.ir);
@@ -1235,9 +1146,81 @@ function pintarRegistro() {
          Todavía nada. El DJ va anotando aquí lo que pasa.</li>`;
 }
 
+/**
+ * Estadísticas del cierre de sesión.
+ *
+ * Todo sale de cosas que ya se llevaban: el registro que va anotando el DJ con
+ * `registrar_accion`, los suministros iniciales de la aventura frente a los que quedan, y las
+ * heridas y el agotamiento de cada ficha. No hay contadores nuevos que mantener sincronizados.
+ */
+function estadisticas() {
+  const reg = E.registro ?? [];
+  const porPj = E.partida.map((p) => {
+    const suyas = reg.filter((x) => x.pj && buscarPj(x.pj) === p);
+    return {
+      pj: p.pj,
+      // La clase tal cual la lleva la ficha, no `claseCorta`: esa normaliza al masculino para
+      // poder buscar el icono, y aquí eso se lee como «Elara, Explorador».
+      clase: p.clase,
+      acciones: suyas.length,
+      tiradas: suyas.filter((x) => x.tipo === "tirada").length,
+      combate: suyas.filter((x) => x.tipo === "combate").length,
+      pg: `${p.pg}/${p.pgMax}`,
+      heridas: p.heridas ?? [],
+      agotamiento: p.agotamiento ?? 0,
+      px: p.px ?? 0,
+    };
+  });
+
+  // Lo gastado se deduce de la diferencia con lo que llevaba el grupo al empezar. Si alguien
+  // ha subido un suministro por encima del inicial (han encontrado antorchas), sale 0 y no un
+  // número negativo, que en un resumen no significa nada.
+  const gastado = Object.entries(CAMPANA.suministrosIniciales)
+    .map(([k, v0]) => [k, Math.max(0, v0 - (E.suministros[k] ?? 0))])
+    .filter(([, n]) => n > 0);
+
+  return {
+    porPj,
+    gastado,
+    acciones: reg.length,
+    sitios: E.visitadas.length,
+    deSitios: CAMPANA.localizaciones.length,
+    noche: E.noche,
+    caidos: porPj.filter((x) => x.heridas.length).map((x) => x.pj),
+  };
+}
+
+function pintarCierre() {
+  const s = estadisticas();
+  $("#cierre-tabla").innerHTML = s.porPj.map((x) => `
+    <div class="fila-cierre">
+      <b>${esc(x.pj)}</b>
+      <span class="cls">${esc(x.clase)}</span>
+      <span class="num" title="Acciones anotadas">${x.acciones} acc.</span>
+      <span class="num" title="Pruebas de habilidad">${x.tiradas} tir.</span>
+      <span class="num" title="Golpes en combate">${x.combate} comb.</span>
+      <span class="num">${esc(x.pg)} PG</span>
+      <span class="num">${x.px} px</span>
+      ${x.heridas.length ? `<span class="mal">${esc(x.heridas.join(", "))}</span>` : ""}
+      ${x.agotamiento ? `<span class="mal">agotamiento ${x.agotamiento}</span>` : ""}
+    </div>`).join("");
+
+  $("#cierre-resumen-datos").innerHTML =
+    `<li>${s.acciones} cosas anotadas en el registro.</li>` +
+    `<li>${s.sitios} de ${s.deSitios} localizaciones visitadas.</li>` +
+    (CAMPANA.reloj ? `<li>Noche ${s.noche} de ${CAMPANA.reloj.noches}.</li>` : "") +
+    (s.gastado.length
+      ? `<li>Gastado: ${s.gastado.map(([k, n]) => `${n} ${k.toLowerCase()}`).join(", ")}.</li>`
+      : `<li>No se ha gastado ni un suministro. Sospechoso.</li>`) +
+    (s.caidos.length
+      ? `<li>Sale tocado del asunto: ${s.caidos.join(", ")}.</li>`
+      : `<li>Nadie sale con una herida persistente.</li>`);
+}
+
 function pintarTodo() {
   pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarBanda();
-  pintarMapa(); pintarGasto(); pintarArrancar(); pintarRegistro();
+  pintarMapa(); pintarGasto(); pintarArrancar(); pintarRegistro(); pintarCierre();
+  pintarResumen();
 }
 
 const esc = (s) =>
@@ -2272,6 +2255,184 @@ class ColaVoz {
   }
   terminar() { return this.cadena; }
 }
+
+
+// ── Cierre de sesión: resumen escrito y audio para mandar por WhatsApp ───────
+/**
+ * El resumen NO se inventa: se le pasa a Claude el registro que el DJ ha ido anotando durante la
+ * partida, más los números del cierre. Así lo que sale es lo que pasó de verdad, con nombres, y
+ * no una redacción genérica de aventureros en un bosque.
+ *
+ * Va aparte de `claudeStream` a propósito: aquí no hacen falta herramientas, ni historial, ni
+ * streaming —el texto no se lee en voz alta a medida que llega—, y el prompt del DJ tiraría
+ * hacia narrar la escena en vez de resumir la sesión.
+ */
+function guionDelResumen() {
+  const s = estadisticas();
+  const reg = (E.registro ?? []).map((x) =>
+    `${x.n}. [${x.tipo}]${x.pj ? ` ${x.pj}:` : ""} ${x.que}`).join("\n");
+  return [
+    `Aventura: ${CAMPANA.titulo}.`,
+    `Grupo: ${s.porPj.map((x) => `${x.pj} (${x.clase}, acaba con ${x.pg} PG${
+      x.heridas.length ? `, herido: ${x.heridas.join(" y ")}` : ""
+    })`).join("; ")}.`,
+    `Localizaciones visitadas: ${E.visitadas.join(", ")}.`,
+    s.gastado.length
+      ? `Gastado: ${s.gastado.map(([k, n]) => `${n} ${k.toLowerCase()}`).join(", ")}.`
+      : "",
+    "",
+    reg ? `Lo que quedó anotado, en orden:\n${reg}` : "No quedó nada anotado en el registro.",
+  ].filter((x) => x !== null).join("\n");
+}
+
+const PROMPT_RESUMEN =
+  "Eres el director de juego de una partida de rol de mesa que acaba de terminar. Escribe el " +
+  "resumen de la sesión para mandárselo al grupo por WhatsApp, para que se lo escuchen.\n\n" +
+  "Reglas:\n" +
+  "- En español de España, en pasado, entre 110 y 150 palabras. Ni una más.\n" +
+  "- Nombra a los personajes por su nombre y di qué hizo cada uno. Si alguien no hizo nada " +
+  "reseñable, dilo con gracia en vez de inventarle una hazaña.\n" +
+  "- Tono de crónica de taberna: con humor y algo de pique, pero sin insultar de verdad.\n" +
+  "- Solo lo que esté en los datos. Nada de inventarse hechos, criaturas ni finales.\n" +
+  "- Es para ESCUCHAR: frases cortas, sin listas, sin títulos, sin emojis, sin markdown. " +
+  "Números en palabras cuando queden raros leídos en voz alta.\n" +
+  "- Acaba con una frase que deje ganas de la siguiente sesión.";
+
+let resumenEnCurso = false;
+
+async function generarResumen() {
+  if (resumenEnCurso) return;
+  if (!A.claveCl) return avisar("Falta la clave de Claude. Está en Ajustes.");
+  if (!(E.registro ?? []).length &&
+      !confirm("El registro está vacío, así que el resumen va a ser muy pobre. ¿Lo hago igual?")) {
+    return;
+  }
+  resumenEnCurso = true;
+  limpiarAviso();
+  const b = $("#cierre-hacer");
+  b.disabled = true;
+  b.querySelector("span:last-child").textContent = "escribiendo el resumen…";
+
+  const lim = conLimite(90_000, "el resumen");
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: cabecerasClaude(),
+      signal: lim.señal,
+      body: JSON.stringify({
+        model: A.modelo,
+        max_tokens: 700,
+        system: PROMPT_RESUMEN,
+        messages: [{ role: "user", content: guionDelResumen() }],
+        // Pensar aquí solo añade espera: es un texto corto con los datos delante.
+        ...(/sonnet-5|opus-5/.test(A.modelo) ? { thinking: { type: "disabled" } } : {}),
+      }),
+    });
+    if (!r.ok) throw new Error(explicar("Claude", r.status));
+    const j = await r.json();
+    E.gasto.entrada += j.usage?.input_tokens ?? 0;
+    E.gasto.salida += j.usage?.output_tokens ?? 0;
+    const texto = (j.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("").trim();
+    if (!texto) throw new Error("Claude ha contestado sin texto.");
+    E.resumen = texto;
+    guardarEstado();
+    pintarResumen();
+  } catch (e) {
+    avisar(e?.message ?? "El resumen no ha salido.");
+  } finally {
+    lim.listo();
+    resumenEnCurso = false;
+    b.disabled = false;
+    b.querySelector("span:last-child").textContent = "Escribir el resumen";
+    pintarGasto();
+  }
+}
+
+/**
+ * Convierte el resumen en un MP3 descargable.
+ *
+ * No se reproduce por la cola de voz: esto es un fichero para compartir, así que se deja como
+ * enlace de descarga con nombre de fichero decente y además un reproductor, para poder oírlo
+ * antes de mandarlo. El objeto URL anterior se revoca al hacer uno nuevo o la pestaña va
+ * acumulando MP3 en memoria.
+ */
+let urlAudioResumen = null;
+
+async function audioDelResumen() {
+  if (!E.resumen) return avisar("Primero hay que escribir el resumen.");
+  if (!A.clave11) return avisar("Falta la clave de ElevenLabs. Está en Ajustes.");
+  limpiarAviso();
+  const b = $("#cierre-audio");
+  b.disabled = true;
+  b.querySelector("span:last-child").textContent = "grabando la voz…";
+
+  const lim = conLimite(60_000, "el audio del resumen");
+  try {
+    const r = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${VOZ.narrador}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: { "xi-api-key": A.clave11, "content-type": "application/json" },
+        signal: lim.señal,
+        body: JSON.stringify({
+          text: E.resumen, model_id: A.vozModelo, language_code: "es",
+          voice_settings: { stability: 0.45, similarity_boost: 0.75, style: 0.35 },
+        }),
+      },
+    );
+    if (!r.ok) throw new Error(explicar("ElevenLabs", r.status));
+    const blob = await r.blob();
+    E.gasto.ttsCar += E.resumen.length;
+
+    if (urlAudioResumen) URL.revokeObjectURL(urlAudioResumen);
+    urlAudioResumen = URL.createObjectURL(blob);
+
+    const nombre = `${CAMPANA.titulo.replace(/[^\wáéíóúñÁÉÍÓÚÑ ]/g, "").replace(/\s+/g, "-")
+      .toLowerCase()}-resumen.mp3`;
+    const a = $("#cierre-descargar");
+    a.href = urlAudioResumen;
+    a.download = nombre;
+    a.hidden = false;
+    const au = $("#cierre-reproductor");
+    au.src = urlAudioResumen;
+    au.hidden = false;
+    $("#cierre-peso").textContent = `${(blob.size / 1024).toFixed(0)} KB · ${nombre}`;
+  } catch (e) {
+    avisar(e?.message ?? "El audio no ha salido. El texto sí está, se puede copiar.");
+  } finally {
+    lim.listo();
+    b.disabled = false;
+    b.querySelector("span:last-child").textContent = "Grabar el audio";
+    pintarGasto();
+  }
+}
+
+function pintarResumen() {
+  const hay = !!E.resumen;
+  $("#cierre-texto").textContent = E.resumen ?? "";
+  $("#cierre-texto").hidden = !hay;
+  $("#cierre-audio").hidden = !hay;
+  $("#cierre-copiar").hidden = !hay;
+  if (!hay) {
+    $("#cierre-descargar").hidden = true;
+    $("#cierre-reproductor").hidden = true;
+    $("#cierre-peso").textContent = "";
+  }
+}
+
+$("#cierre-hacer").addEventListener("click", generarResumen);
+$("#cierre-audio").addEventListener("click", audioDelResumen);
+$("#cierre-copiar").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(E.resumen ?? "");
+    ponEstado("Resumen copiado.", "bien");
+  } catch {
+    // Sin permiso de portapapeles (pasa en http): se selecciona para que copiar sea un gesto.
+    const n = $("#cierre-texto");
+    getSelection().selectAllChildren(n);
+    ponEstado("Selecciónalo y cópialo a mano: el navegador no deja hacerlo solo.", "");
+  }
+});
 
 
 // ── Arranque ─────────────────────────────────────────────────────────────────

@@ -6,6 +6,10 @@
 <meta name="theme-color" content="#12140E">
 <title>El Diezmo de Corvalar</title>
 <link rel="manifest" href="manifest.webmanifest">
+<!-- Estilo ornamentado de la ficha y el inventario. No importa que vaya antes del <style> de
+     abajo: todos sus selectores empiezan por .ficha, así que ganan por especificidad. Si esta
+     hoja no llega a cargar, la ficha sigue siendo usable con el estilo base. -->
+<link rel="stylesheet" href="ornado.css">
 <link rel="icon" href="icono.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icono.svg">
 <style>
@@ -137,44 +141,36 @@
   .sumin [data-vacio="si"] b { color:var(--herrumbre); }
   .sumin button { min-height:32px; min-width:32px; padding:0 9px; font-size:1rem; }
 
+  /* ── Cierre de sesión ─────────────────────────────────────────────── */
+  .cierre { display:flex; flex-direction:column; gap:7px; }
+  .fila-cierre { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;
+                 padding:8px 11px; background:var(--musgo-alto);
+                 border:1px solid var(--liquen); border-left:2px solid var(--sebo); }
+  .fila-cierre b { font:400 1rem/1 var(--serif); }
+  .fila-cierre .cls { font-size:.74rem; font-style:italic; color:var(--tiza-baja); }
+  .fila-cierre .num { margin-left:auto; font:500 .72rem/1 var(--mono);
+                      color:var(--tiza-baja); font-variant-numeric:tabular-nums; }
+  .fila-cierre .num + .num { margin-left:0; }
+  .fila-cierre .mal { font:500 .68rem/1 var(--mono); color:#C4705C; }
+
+  .resumen { margin:0; padding:12px 15px; background:var(--musgo-alto);
+             border:1px solid var(--liquen); border-left:2px solid var(--sebo);
+             font-size:.96rem; line-height:1.62; white-space:pre-wrap; }
+  /* Es un <a download>, no un <button>: hereda el aspecto a mano porque los botones de arriba
+     están estilados por elemento y un enlace no entra en esa regla. */
+  .descargar { display:flex; align-items:center; justify-content:center; gap:9px;
+               min-height:52px; padding:12px 16px; text-decoration:none;
+               font:400 .98rem/1 var(--serif); color:var(--tiza);
+               background:var(--musgo-alto); border:1px solid var(--sebo); }
+  .descargar .icono { color:var(--sebo); font-size:1.15rem; }
+  .descargar:active { background:#2C331E; }
+
   /* ── Mapa ─────────────────────────────────────────────────────────────
-     Dibujado: pergamino manchado, bosque de matas, turbera rayada y los caminos a dos trazos
-     para que parezcan de pluma. Tres círculos y unas líneas no eran un mapa. */
-  svg.mapa { width:100%; max-width:680px; height:auto; margin:0 auto;
-             border:1px solid var(--liquen); display:block; }
-  svg.mapa .pergamino { fill:#1C1A12; }
-  svg.mapa .mancha { fill:#25211533; }
-  svg.mapa .turba { stroke:#2E2A1C; stroke-width:.5; stroke-linecap:round; }
-  svg.mapa .arbol { fill:#26301D; stroke:#26301D; stroke-width:.3; }
-  svg.mapa .arbol path { stroke:#2A2417; }
-
-  svg.mapa .camino  { fill:none; stroke:#4A422C; stroke-width:.75; stroke-linecap:round; }
-  svg.mapa .camino2 { fill:none; stroke:#4A422C; stroke-width:.35; stroke-linecap:round;
-                      transform:translate(.35px,.4px); opacity:.7; }
-  svg.mapa .camino.conocida, svg.mapa .camino2.conocida { stroke:var(--sebo); opacity:.75; }
-  svg.mapa .camino.ignota, svg.mapa .camino2.ignota { stroke-dasharray:1.6 1.8; opacity:.4; }
-
-  svg.mapa .lugar { cursor:pointer; }
-  svg.mapa .halo { fill:#1C1A12; stroke:none; }
-  svg.mapa .punto { fill:#2A2617; stroke:#5A5238; stroke-width:.7; }
-  svg.mapa .glifo { font-size:2.6px; text-anchor:middle; fill:#6E6549; }
-  svg.mapa .rotulo-mapa { font:400 2.5px var(--serif); text-anchor:middle; fill:#8A8166; }
-
-  svg.mapa .visitada .punto { fill:#3A3520; stroke:var(--sebo); }
-  svg.mapa .visitada .glifo { fill:var(--sebo); }
-  svg.mapa .visitada .rotulo-mapa { fill:var(--tiza); }
-  svg.mapa .actual .punto { fill:var(--sebo); stroke:#F0C97A; stroke-width:1.1; }
-  svg.mapa .actual .glifo { fill:#17140F; }
-  svg.mapa .actual .rotulo-mapa { fill:var(--ambar); font-weight:500; }
-  /* Estáis aquí: un pulso lento, lo justo para encontrarlo de un vistazo. */
-  @keyframes aqui { 0%,100% { r:5.6; opacity:.35 } 50% { r:7.4; opacity:.08 } }
-  svg.mapa .actual .halo { fill:var(--ambar); opacity:.35; animation:aqui 2.6s ease-in-out infinite; }
-  svg.mapa .ignota .rotulo-mapa { fill:#5C5642; font-style:italic; }
-  svg.mapa .lugar:hover .punto, svg.mapa .lugar:focus .punto { stroke:var(--ambar); }
-  svg.mapa .lugar:focus { outline:none; }
-
-  svg.mapa .rosa { fill:#4A422C; }
-  svg.mapa .rosa text { font:400 2.6px var(--serif); text-anchor:middle; fill:#6E6549; }
+     Lo pinta app/mapa.js, y se pinta a sí mismo: los estilos van en un <style> DENTRO del SVG
+     (clases con prefijo `m-`) para que el módulo sea autónomo. Aquí solo se le da el tamaño.
+     Ojo si se añaden reglas: `svg.mapa .algo` tiene más especificidad que la `.algo` interna
+     del SVG y le ganaría, así que no se estilan sus tripas desde fuera. */
+  svg.mapa { width:100%; max-width:760px; height:auto; margin:0 auto; display:block; }
 
   /* ── Panel de mesa: lo que está siempre abajo ─────────────────────── */
   .panel { flex:none; background:var(--turba); border-top:1px solid var(--liquen);
@@ -470,6 +466,21 @@
   .muneco .ranura circle { fill:#151910; stroke:#39412B; stroke-width:1.6; }
   .muneco .ranura .ico { font-size:11px; text-anchor:middle; opacity:.45; }
   .muneco .ranura .etiq { font:400 8.4px var(--mono); fill:var(--tiza-baja); }
+  /* Las seis ranuras de los lados: app.js las ancla hacia fuera, y un nombre largo se salía del
+     viewBox cortado a media palabra. Centrarlas reparte el texto a los dos lados del ancla, y el
+     desplazamiento vertical las quita de encima de su propio aro. `text-anchor` es propiedad CSS,
+     así que se corrige sin tocar el marcado. ornado.css repite estas reglas con su propia
+     especificidad; esto es lo que se ve si esa hoja no carga. */
+  .muneco .ranura[data-hueco="capa"] .etiq, .muneco .ranura[data-hueco="manos"] .etiq,
+  .muneco .ranura[data-hueco="diestra"] .etiq, .muneco .ranura[data-hueco="zurda"] .etiq,
+  .muneco .ranura[data-hueco="anillo1"] .etiq,
+  .muneco .ranura[data-hueco="anillo2"] .etiq { text-anchor:middle; }
+  .muneco .ranura[data-hueco="capa"] .etiq  { transform:translate(-10px,-22px); }
+  .muneco .ranura[data-hueco="manos"] .etiq { transform:translate(-6px,-24px); }
+  .muneco .ranura[data-hueco="diestra"] .etiq,
+  .muneco .ranura[data-hueco="zurda"] .etiq { transform:translate(0,22px); }
+  .muneco .ranura[data-hueco="anillo1"] .etiq,
+  .muneco .ranura[data-hueco="anillo2"] .etiq { transform:translate(0,38px); }
   .muneco .ranura.puesta circle { fill:#2A2415; stroke:var(--sebo); stroke-width:2; }
   .muneco .ranura.puesta .ico { opacity:1; }
   .muneco .ranura.puesta .etiq { fill:var(--tiza); }
@@ -626,7 +637,8 @@
     </section>
     <section>
       <h2>Dónde estáis</h2>
-      <svg class="mapa" id="mapa" viewBox="0 0 100 100" role="img"
+      <!-- El viewBox lo pone mapa.js al pintar (1000×800); aquí no se fija. -->
+      <svg class="mapa" id="mapa" role="img"
            aria-label="Mapa de localizaciones de la aventura"></svg>
       <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
         Toca una localización para moveros allí. Las que no habéis visitado salen apagadas.
@@ -635,6 +647,28 @@
     <section>
       <h2>Lo que ha pasado</h2>
       <ol class="registro" id="registro"></ol>
+    </section>
+    <!-- Cierre de sesión: los números del grupo y el resumen para mandar por WhatsApp. -->
+    <section>
+      <h2>Cierre de la sesión</h2>
+      <div id="cierre-tabla" class="cierre"></div>
+      <ul class="sabeis" id="cierre-resumen-datos"></ul>
+      <div class="fila">
+        <button id="cierre-hacer"><span class="icono">✒</span><span>Escribir el resumen</span></button>
+        <button id="cierre-audio" hidden><span class="icono">🔊</span><span>Grabar el audio</span></button>
+        <button id="cierre-copiar" hidden><span class="icono">⧉</span><span>Copiar el texto</span></button>
+      </div>
+      <blockquote id="cierre-texto" class="resumen" hidden></blockquote>
+      <audio id="cierre-reproductor" controls preload="metadata" hidden
+             style="width:100%"></audio>
+      <a id="cierre-descargar" class="descargar" hidden download>
+        <span class="icono">⤓</span><span>Descargar el MP3 para WhatsApp</span>
+      </a>
+      <p id="cierre-peso" style="margin:0;font:400 .76rem/1.4 var(--mono);color:var(--tiza-baja)"></p>
+      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
+        El resumen sale de lo que el DJ ha ido anotando durante la partida, así que no se inventa
+        nada. Repásalo antes de mandarlo.
+      </p>
     </section>
     <section>
       <h2 id="reloj-titulo">El reloj</h2>
