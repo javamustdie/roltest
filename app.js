@@ -10,6 +10,131 @@
 
 import { CAMPANAS, CAMPANA_POR_DEFECTO } from "./campana.js";
 import { RETRATOS } from "./retratos.js";
+import { rasgosDe } from "./rasgos.js";
+
+/**
+ * Muñeco de equipo. Una silueta humana en SVG con los huecos colocados donde van en el cuerpo,
+ * en vez de una lista de campos de texto.
+ *
+ * Las coordenadas son sobre un lienzo de 200×300 y están puestas a mano: es un muñeco, no un
+ * layout automático, y colocarlo a ojo sobre la silueta es justo lo que lo hace legible.
+ */
+const MUNECO = {
+  cabeza:  { x: 100, y: 30,  lado: "arriba" },
+  amuleto: { x: 100, y: 78,  lado: "arriba" },
+  pecho:   { x: 100, y: 118, lado: "centro" },
+  capa:    { x: 40,  y: 108, lado: "izq" },
+  diestra: { x: 26,  y: 168, lado: "izq" },
+  zurda:   { x: 174, y: 168, lado: "der" },
+  manos:   { x: 174, y: 118, lado: "der" },
+  anillo1: { x: 24,  y: 210, lado: "izq" },
+  anillo2: { x: 176, y: 210, lado: "der" },
+  piernas: { x: 100, y: 214, lado: "centro" },
+  pies:    { x: 100, y: 276, lado: "abajo" },
+};
+
+/** La silueta. Trazos sueltos, no un dibujo cerrado: encaja con el tono del resto. */
+const SILUETA = `
+  <g class="cuerpo">
+    <ellipse cx="100" cy="36" rx="17" ry="21"/>
+    <path d="M100 57 L100 74"/>
+    <path d="M70 80 Q100 70 130 80 L134 150 Q100 158 66 150 Z"/>
+    <path d="M70 82 L44 104 L38 152"/>
+    <path d="M130 82 L156 104 L162 152"/>
+    <path d="M38 152 L34 196"/>
+    <path d="M162 152 L166 196"/>
+    <path d="M78 156 L74 226 L70 272"/>
+    <path d="M122 156 L126 226 L130 272"/>
+    <path d="M60 278 L84 278"/>
+    <path d="M116 278 L140 278"/>
+  </g>`;
+
+/** Dibuja el muñeco con lo que lleva puesto en cada hueco. */
+function pintarMuneco(p, i) {
+  const eq = p.equipo ?? {};
+  const puntos = HUECOS.map((h) => {
+    const m = MUNECO[h.k];
+    if (!m) return "";
+    const puesto = !!eq[h.k]?.trim();
+    // La etiqueta se coloca al lado que le toca para no cruzar la silueta.
+    const dx = m.lado === "izq" ? -14 : m.lado === "der" ? 14 : 0;
+    const anclaje = m.lado === "izq" ? "end" : m.lado === "der" ? "start" : "middle";
+    const dy = m.lado === "arriba" ? -16 : m.lado === "abajo" ? 22 : m.lado === "centro" ? 22 : 4;
+    return `<g class="ranura${puesto ? " puesta" : ""}" data-hueco="${h.k}" data-i="${i}"
+               role="button" tabindex="0"
+               aria-label="${h.n}: ${puesto ? esc(eq[h.k]) : "vacío"}">
+      <circle cx="${m.x}" cy="${m.y}" r="11"/>
+      <text class="ico" x="${m.x}" y="${m.y + 4}">${h.i}</text>
+      <text class="etiq" x="${m.x + dx}" y="${m.y + dy}" text-anchor="${anclaje}">${
+        puesto ? esc(recortar(eq[h.k], 22)) : h.n.toLowerCase()
+      }</text>
+    </g>`;
+  }).join("");
+
+  const mochila = (p.mochila ?? []).filter((x) => x?.trim());
+  return `
+    <div class="muneco-caja">
+      <svg class="muneco" viewBox="-52 -8 304 318" role="img" aria-label="Equipo de ${esc(p.pj)}">
+        ${SILUETA}${puntos}
+      </svg>
+      <div class="mochila">
+        <h2>🎒 Mochila</h2>
+        <ul class="bolsa">${
+          mochila.length
+            ? mochila.map((x, j) =>
+                `<li><span>${esc(x)}</span><button data-quitarbolsa="${i}" data-j="${j}"
+                   title="Quitar">✕</button></li>`).join("")
+            : `<li class="nada">Vacía.</li>`
+        }</ul>
+        <form class="escribir" data-bolsa="${i}">
+          <input autocomplete="off" placeholder="añadir a la mochila">
+          <button type="submit">＋</button>
+        </form>
+      </div>
+    </div>`;
+}
+
+const recortar = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1) + "…" : String(t));
+
+/**
+ * Icono y nombre corto por clase. Se saca del texto libre de la ficha («Guerrero 2») porque la
+ * clase la escribe el DJ y no hay un campo aparte: pedirle uno más sería una forma de que se
+ * desincronizaran.
+ */
+const CLASES = [
+  { re: /guerrer/i, i: "⚔", n: "Guerrero" },
+  { re: /explorador|ranger|explorad/i, i: "🏹", n: "Explorador" },
+  { re: /pícar|picar|ladr/i, i: "🗝", n: "Pícaro" },
+  { re: /clérig|clerig|cléri|sacerd/i, i: "✝", n: "Clérigo" },
+  { re: /druid/i, i: "🍂", n: "Druida" },
+  { re: /mag[oa]|hechicer/i, i: "✶", n: "Mago" },
+  { re: /bárbar|barbar/i, i: "🪓", n: "Bárbaro" },
+  { re: /bard/i, i: "🎵", n: "Bardo" },
+  { re: /paladí|paladi/i, i: "🛡", n: "Paladín" },
+  { re: /monj/i, i: "☯", n: "Monje" },
+  { re: /bruj/i, i: "👁", n: "Brujo" },
+];
+const claseDe = (t) => CLASES.find((c) => c.re.test(String(t ?? "")));
+const ICONO_CLASE = (t) => claseDe(t)?.i ?? "◇";
+/** El nombre sin el nivel: en un marco de 100 px no cabe «Exploradora 2». */
+const claseCorta = (t) =>
+  claseDe(t)?.n ?? (String(t ?? "").replace(/\s*\d+\s*$/, "").trim() || "—");
+
+/**
+ * Nivel por puntos de experiencia, con los umbrales del SRD recortados a 1-4. No se pasa de 4:
+ * es el dial que sostiene el tono, así que la tabla se corta ahí a propósito.
+ */
+const UMBRALES = [0, 300, 900, 2700];
+const nivelDe = (px) => {
+  let n = 1;
+  for (let i = 0; i < UMBRALES.length; i++) if ((px | 0) >= UMBRALES[i]) n = i + 1;
+  return n;
+};
+/** Cuánto falta para el siguiente nivel, o null si ya está en el 4. */
+const faltaPara = (px) => {
+  const n = nivelDe(px);
+  return n >= 4 ? null : UMBRALES[n] - (px | 0);
+};
 
 /**
  * Huecos de equipo, como en cualquier CRPG. El orden es el de la ficha, no alfabético: se lee
@@ -581,10 +706,16 @@ function pintarCharla() {
       <p>Toca el botón de abajo, habla, y vuelve a tocarlo para enviar. O escríbeme aquí.</p></div>`;
     return;
   }
+  const desde = Math.max(0, E.charla.length - 12);
   c.innerHTML = E.charla
-    .slice(-12)
-    .map((t) => `<div class="turno" data-de="${t.de}">
-        <div class="quien">${t.de === "mesa" ? "la mesa" : "director de juego"}</div>
+    .slice(desde)
+    .map((t, k) => `<div class="turno" data-de="${t.de}">
+        <div class="quien">${t.de === "mesa" ? "la mesa" : "director de juego"}${
+          t.de === "dj"
+            ? `<button class="repe" data-repetir="${desde + k}" data-suena="no"
+                 title="Repetir en voz. Vuelve a tocarlo para parar."><span>▶</span></button>`
+            : ""
+        }</div>
         <p>${esc(t.texto)}</p>${
           t.hechos?.length
             ? `<ul class="hechos">${t.hechos.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`
@@ -606,6 +737,33 @@ function estadoPj(p) {
 const iniciales = (n) =>
   n.trim().split(/\s+/).slice(0, 2).map((x) => x[0] ?? "").join("").toUpperCase() || "?";
 
+/**
+ * La capa que anima la cara: párpados sobre los ojos y boca sobre la boca, con las coordenadas
+ * medidas de cada retrato. Es SVG en un lienzo de 0 a 1, escalado al recuadro.
+ *
+ * Los párpados bajan desde arriba (`scaleY` desde el borde superior del ojo), así que en reposo
+ * tienen altura cero y no se ven. La boca es una elipse oscura que crece al bostezar. Y para el
+ * gesto de dolor, dos trazos que fruncen las cejas.
+ */
+function capaCara(idRetrato) {
+  const r = rasgosDe(idRetrato);
+  const ojo = ([x, y], clase) => `
+    <g class="ojo ${clase}" style="transform-origin:${x}px ${y - r.ojoRy}px">
+      <ellipse class="lid" cx="${x}" cy="${y}" rx="${r.ojoRx}" ry="${r.ojoRy}"/>
+      <path class="pestana" d="M${x - r.ojoRx} ${y + r.ojoRy * 0.15} Q${x} ${y + r.ojoRy * 1.1} ${x + r.ojoRx} ${y + r.ojoRy * 0.15}"/>
+    </g>`;
+  const [bx, by] = r.boca;
+  const [cix, ciy] = r.ojoIzq, [cdx, cdy] = r.ojoDer;
+  return `<svg class="capacara" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+    ${ojo(r.ojoIzq, "izq")}${ojo(r.ojoDer, "der")}
+    <ellipse class="bocota" cx="${bx}" cy="${by}" rx="${r.bocaRx}" ry="0.001"/>
+    <g class="ceno">
+      <path d="M${cix - r.ojoRx} ${ciy - r.ojoRy * 2.6} L${cix + r.ojoRx} ${ciy - r.ojoRy * 1.4}"/>
+      <path d="M${cdx + r.ojoRx} ${cdy - r.ojoRy * 2.6} L${cdx - r.ojoRx} ${cdy - r.ojoRy * 1.4}"/>
+    </g>
+  </svg>`;
+}
+
 function pintarBanda() {
   $("#banda").innerHTML = E.partida
     .map((p, i) => {
@@ -622,29 +780,75 @@ function pintarBanda() {
                  aria-label="${esc(p.pj)}, ${p.pg} de ${p.pgMax} puntos de golpe${
                    agot ? `, agotamiento ${agot} de 6` : ""
                  }">
-        <span class="marco"><span class="cara">${cara}</span><span class="vidrio"></span></span>
+        <span class="marco"><span class="cara">${cara}</span>
+          ${p.retrato ? capaCara(p.retrato) : ""}
+          <span class="vidrio"></span></span>
         <span class="nom">${esc(p.pj)}</span>
+        <span class="oficio"><i>${ICONO_CLASE(p.clase)}</i>${esc(claseCorta(p.clase))}</span>
         <span class="medidor">
           <span class="pgbar"><i style="width:${pct}%"></i></span>
           <span class="agotbar"><i style="width:${(agot / 6) * 100}%"></i></span>
         </span>
         <span class="pgnum">${p.pg}/${p.pgMax}${agot ? ` · ago ${agot}` : ""}</span>
+        <span class="px">${p.px ?? 0} px · niv ${nivelDe(p.px ?? 0)}</span>
       </button>`;
     })
     .join("");
+  reaccionarAlDano();
 }
 
-// Un tic cada pocos segundos en una cara al azar. Es lo que hace que la banda parezca viva
-// en vez de cuatro fotos respirando en bucle: el bucle se nota, lo aleatorio no.
-setInterval(() => {
-  if (document.hidden) return; // no gastar animaciones con la app en segundo plano
+/**
+ * Gestos. Cada pocos segundos, una cara al azar parpadea, bosteza o ladea la cabeza.
+ *
+ * Es aleatorio a propósito: cuatro bucles CSS sincronizados se notan a la primera mirada, y lo
+ * que se quiere es que parezca que están ahí esperando, no que son un GIF. El bostezo es raro
+ * —una de cada seis veces— porque bostezar cada tres segundos parece narcolepsia.
+ */
+const GESTOS = [
+  { attr: "data-parpadea", ms: 260, peso: 6 },
+  { attr: "data-tic", ms: 800, peso: 3 },
+  { attr: "data-bosteza", ms: 1600, peso: 1 },
+];
+const RULETA = GESTOS.flatMap((g) => Array(g.peso).fill(g));
+
+function gesto() {
+  if (document.hidden) return; // con la app en segundo plano no se gasta nada
+  // Los caídos no gesticulan: están inconscientes.
   const caras = [...document.querySelectorAll('.pj-banda:not([data-estado="caido"]) .marco')];
-  if (!caras.length) return;
-  const m = caras[Math.floor(Math.random() * caras.length)];
-  if (m.hasAttribute("data-tic")) return;
-  m.setAttribute("data-tic", "");
-  setTimeout(() => m.removeAttribute("data-tic"), 800);
-}, 4200);
+  const libres = caras.filter((m) => !m.hasAttribute("data-golpe") && ![...m.attributes]
+    .some((a) => a.name.startsWith("data-p") || a.name === "data-tic" || a.name === "data-bosteza"));
+  if (!libres.length) return;
+  const m = libres[Math.floor(Math.random() * libres.length)];
+  const g = RULETA[Math.floor(Math.random() * RULETA.length)];
+  m.setAttribute(g.attr, "");
+  setTimeout(() => m.removeAttribute(g.attr), g.ms);
+}
+setInterval(gesto, 2600);
+
+/**
+ * Reacción al daño. Se llama al repintar la banda comparando con los PG anteriores, así que se
+ * dispara igual si el golpe viene del DJ, de la ficha o de la pestaña Grupo.
+ */
+let pgAnteriores = null;
+function reaccionarAlDano() {
+  const ahora = E.partida.map((p) => p.pg);
+  if (pgAnteriores) {
+    for (let i = 0; i < ahora.length; i++) {
+      const antes = pgAnteriores[i];
+      if (antes === undefined || antes === ahora[i]) continue;
+      const m = document.querySelectorAll(".pj-banda")[i]?.querySelector(".marco");
+      if (!m) continue;
+      const attr = ahora[i] < antes ? "data-golpe" : "data-cura";
+      m.removeAttribute("data-golpe"); m.removeAttribute("data-cura");
+      // Un reflow forzado, o el navegador no vuelve a lanzar la animación si el atributo
+      // se quita y se pone en el mismo fotograma.
+      void m.offsetWidth;
+      m.setAttribute(attr, "");
+      setTimeout(() => m.removeAttribute(attr), attr === "data-golpe" ? 550 : 650);
+    }
+  }
+  pgAnteriores = ahora;
+}
 
 $("#banda").addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-pjbanda]");
@@ -676,11 +880,21 @@ function abrirFicha(i) {
         <div class="sub">${esc(p.clase)}</div>
         ${p.pulla ? `<p class="pulla">«${esc(p.pulla)}»<span>— el director de juego</span></p>` : ""}
         <div class="ficha-rejilla">
-          <div><span>vida</span><b>${p.pg} / ${p.pgMax}</b></div>
-          <div><span>armadura</span><b>${p.ca}</b></div>
-          <div><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
-          <div><span>heridas</span><b>${p.heridas.length}</b></div>
+          <div><i>❤</i><span>vida</span><b>${p.pg} / ${p.pgMax}</b></div>
+          <div><i>🛡</i><span>armadura</span><b>${p.ca}</b></div>
+          <div><i>🌙</i><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
+          <div><i>🩸</i><span>heridas</span><b>${p.heridas.length}</b></div>
+          <div><i>✶</i><span>experiencia</span><b>${p.px ?? 0}</b></div>
+          <div><i>${ICONO_CLASE(p.clase)}</i><span>nivel</span><b>${nivelDe(p.px ?? 0)}</b></div>
         </div>
+        ${(() => {
+          const px = p.px ?? 0, falta = faltaPara(px), n = nivelDe(px);
+          if (falta === null) return `<p class="vacio">Nivel 4, el techo de la campaña.</p>`;
+          const base = UMBRALES[n - 1], meta = UMBRALES[n];
+          const pct = Math.max(0, Math.min(100, ((px - base) / (meta - base)) * 100));
+          return `<div class="pxbar" title="${falta} px para el nivel ${n + 1}">
+            <i style="width:${pct}%"></i><span>${falta} px para el nivel ${n + 1}</span></div>`;
+        })()}
       </div>
     </div>
 
@@ -695,14 +909,8 @@ function abrirFicha(i) {
     </div>
 
     <div><h2>Equipo</h2>
-      <div class="huecos">${HUECOS.map((h) => {
-        const v = p.equipo[h.k] ?? "";
-        return `<label class="hueco${v ? " puesto" : ""}">
-          <span class="etq"><i>${h.i}</i>${h.n}</span>
-          <input data-eq="${h.k}" data-i="${i}" value="${esc(v)}" autocomplete="off"
-                 placeholder="vacío">
-        </label>`;
-      }).join("")}</div>
+      <p class="vacio">Toca una ranura del muñeco para poner o cambiar lo que lleva ahí.</p>
+      ${pintarMuneco(p, i)}
     </div>
 
     ${p.heridas.length
@@ -779,6 +987,28 @@ $("#ficha").addEventListener("click", (ev) => {
     abrirFicha(+quitar.dataset.fherida);
     return;
   }
+  // Ranura del muñeco: se pregunta qué se pone. Un prompt es feo, pero en mesa es un toque y
+  // escribir, y un panel de inventario completo sería otra pantalla que atravesar.
+  const ranura = ev.target.closest(".ranura");
+  if (ranura) {
+    const pj = E.partida[+ranura.dataset.i];
+    const h = HUECOS.find((x) => x.k === ranura.dataset.hueco);
+    pj.equipo ??= {};
+    const v = prompt(`${h.n} de ${pj.pj}:`, pj.equipo[h.k] ?? "");
+    if (v !== null) {
+      pj.equipo[h.k] = v.trim();
+      guardarEstado();
+      abrirFicha(+ranura.dataset.i);
+    }
+    return;
+  }
+  const quitarB = ev.target.closest("button[data-quitarbolsa]");
+  if (quitarB) {
+    const pj = E.partida[+quitarB.dataset.quitarbolsa];
+    pj.mochila?.splice(+quitarB.dataset.j, 1);
+    guardarEstado(); abrirFicha(+quitarB.dataset.quitarbolsa);
+    return;
+  }
   const entr = ev.target.closest("button[data-entrevista]");
   if (entr) { editarEntrevista(+entr.dataset.entrevista); return; }
   const volver = ev.target.closest("button[data-volver]");
@@ -793,6 +1023,26 @@ $("#ficha").addEventListener("click", (ev) => {
 
 // El equipo y la entrevista se guardan al teclear. La ficha NO se repinta: reescribirla
 // perdería el foco a cada letra, que es el fallo clásico de un formulario que se autoguarda.
+$("#ficha-caja").addEventListener("submit", (ev) => {
+  const f = ev.target.closest("form[data-bolsa]");
+  if (!f) return;
+  ev.preventDefault();
+  const i = +f.dataset.bolsa;
+  const c = f.querySelector("input");
+  const v = c.value.trim();
+  if (!v) return;
+  E.partida[i].mochila ??= [];
+  E.partida[i].mochila.push(v);
+  c.value = "";
+  guardarEstado(); abrirFicha(i);
+});
+
+// Teclado: una ranura es un botón, así que Enter y espacio tienen que abrirla.
+$("#ficha-caja").addEventListener("keydown", (ev) => {
+  const r = ev.target.closest(".ranura");
+  if (r && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); r.dispatchEvent(new Event("click", { bubbles: true })); }
+});
+
 $("#ficha-caja").addEventListener("input", (ev) => {
   const c = ev.target;
   const p = E.partida[+c.dataset.i];
@@ -851,34 +1101,104 @@ function pintarGrupo() {
     .join("");
 }
 
+/**
+ * Mapa dibujado, no tres círculos.
+ *
+ * Pergamino con manchas, bosque a base de matas de árboles, turbera rayada, los caminos como
+ * trazo de tinta con dos pasadas para que parezcan a pluma, y cada localización con su icono
+ * según lo que es. Todo generado del mismo `x`/`y` que ya tenía cada localización, así que
+ * añadir una localización a la aventura la coloca sola.
+ */
+const ICONO_LUGAR = (l) => {
+  const t = `${l.id} ${l.nombre}`.toLowerCase();
+  if (/iglesia|ermita|san /.test(t)) return "†";
+  if (/pozo/.test(t)) return "◎";
+  if (/choza|casa|alquer|herrer/.test(t)) return "⌂";
+  if (/vado|arroyo|r[ií]o/.test(t)) return "≈";
+  if (/c[ií]rculo|abedul|bosque|coraz/.test(t)) return "⁂";
+  if (/camino|desv[áa]n|sur/.test(t)) return "⌇";
+  return "✦";
+};
+
 function pintarMapa() {
   const L = CAMPANA.localizaciones;
-  const aristas = [];
+  const svg = $("#mapa");
+
+  // Semilla estable a partir de los ids: la decoración tiene que salir igual cada vez que se
+  // pinta, o el mapa "tiembla" al repintar.
+  let semilla = L.map((l) => l.id).join("").split("").reduce((a, c) => a + c.charCodeAt(0), 7);
+  const azar = () => ((semilla = (semilla * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+
+  // Manchas de pergamino
+  const manchas = Array.from({ length: 14 }, () => {
+    const x = azar() * 100, y = azar() * 100, r = 3 + azar() * 9;
+    return `<circle class="mancha" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}"/>`;
+  }).join("");
+
+  // Bosque: matas de tres copas, más densas donde están las localizaciones del Bosque.
+  const arboles = Array.from({ length: 90 }, () => {
+    const x = azar() * 100, y = azar() * 100;
+    // El bosque ocupa la mitad derecha y la franja de arriba; la aldea queda despejada.
+    const densidad = (x / 100) * 0.85 + (1 - y / 100) * 0.3;
+    if (azar() > densidad) return "";
+    if (L.some((l) => Math.hypot(l.x - x, l.y - y) < 7)) return "";
+    const e = 0.62 + azar() * 0.45;
+    return `<g class="arbol" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${e.toFixed(2)})">
+      <path d="M0 0 L0 -1.5"/><circle cx="0" cy="-2.6" r="1.5"/>
+      <circle cx="-1.3" cy="-1.7" r="1.1"/><circle cx="1.3" cy="-1.7" r="1.1"/></g>`;
+  }).join("");
+
+  // Turbera: rayas horizontales cortas en la franja baja izquierda.
+  const turba = Array.from({ length: 26 }, () => {
+    const x = azar() * 62, y = 58 + azar() * 40, w = 2 + azar() * 5;
+    return `<path class="turba" d="M${x.toFixed(1)} ${y.toFixed(1)} h${w.toFixed(1)}"/>`;
+  }).join("");
+
+  // Caminos: dos trazos ligeramente desviados, para que parezcan de pluma.
   const hechas = new Set();
+  const caminos = [];
   for (const a of L) {
     for (const bId of a.conecta) {
       const clave = [a.id, bId].sort().join("-");
       if (hechas.has(clave)) continue;
       hechas.add(clave);
-      const b = loc(bId);
+      const b = L.find((x) => x.id === bId);
       if (!b) continue;
       const conocida = E.visitadas.includes(a.id) && E.visitadas.includes(bId);
-      aristas.push(
-        `<line class="arista ${conocida ? "conocida" : ""}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`,
+      // Curva: el punto de control se desplaza perpendicular a la recta.
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+      const off = (azar() - 0.5) * len * 0.22;
+      const cx = mx - (dy / len) * off, cy = my + (dx / len) * off;
+      const d = `M${a.x} ${a.y} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x} ${b.y}`;
+      caminos.push(
+        `<path class="camino ${conocida ? "conocida" : "ignota"}" d="${d}"/>` +
+          `<path class="camino2 ${conocida ? "conocida" : "ignota"}" d="${d}"/>`,
       );
     }
   }
 
   const nodos = L.map((l) => {
-    const clase = l.id === E.local ? "actual" : E.visitadas.includes(l.id) ? "visitada" : "";
-    return `<g data-ir="${l.id}" role="button" tabindex="0" aria-label="${esc(l.nombre)}">
-      <circle class="nodo ${clase}" cx="${l.x}" cy="${l.y}" r="3.4"/>
-      <text x="${l.x}" y="${l.y - 5.2}">${esc(l.nombre)}</text>
+    const clase = l.id === E.local ? "actual" : E.visitadas.includes(l.id) ? "visitada" : "ignota";
+    return `<g class="lugar ${clase}" data-ir="${l.id}" role="button" tabindex="0"
+               aria-label="${esc(l.nombre)}${l.id === E.local ? ", estáis aquí" : ""}">
+      <circle class="halo" cx="${l.x}" cy="${l.y}" r="5.6"/>
+      <circle class="punto" cx="${l.x}" cy="${l.y}" r="3.4"/>
+      <text class="glifo" x="${l.x}" y="${l.y + 1.5}">${ICONO_LUGAR(l)}</text>
+      <text class="rotulo-mapa" x="${l.x}" y="${l.y - 7.4}">${esc(l.nombre)}</text>
     </g>`;
   }).join("");
 
-  $("#mapa").innerHTML = aristas.join("") + nodos;
-  for (const g of $("#mapa").querySelectorAll("g[data-ir]")) {
+  svg.innerHTML = `
+    <rect class="pergamino" x="0" y="0" width="100" height="100"/>
+    ${manchas}${turba}${arboles}
+    <g class="rosa" transform="translate(90 91)">
+      <path d="M0 -5 L1.4 0 L0 5 L-1.4 0 Z"/><path d="M-5 0 L0 1.2 L5 0 L0 -1.2 Z"/>
+      <text y="-6.4">N</text>
+    </g>
+    ${caminos.join("")}${nodos}`;
+
+  for (const g of svg.querySelectorAll("g[data-ir]")) {
     const ir = () => moverA(g.dataset.ir);
     g.addEventListener("click", ir);
     g.addEventListener("keydown", (e) => {
@@ -1307,6 +1627,7 @@ bHablar.addEventListener("click", () => {
   // Mientras piensa o habla, el botón CANCELA. Es la salida cuando algo tarda demasiado, y
   // evita el único estado del que antes no se podía salir sin recargar la página.
   if (ocupado) {
+    cola?.cortar();
     enCurso?.ac.abort(new Error("cancelado por la mesa"));
     return;
   }
@@ -1314,10 +1635,47 @@ bHablar.addEventListener("click", () => {
   grabadora ? pararGrabacion() : empezarGrabacion();
 });
 
+// ── Repetir lo que dijo el DJ ────────────────────────────────────────────────
+// Un icono por mensaje. En mesa se pierde una frase constantemente —alguien tosió, alguien
+// preguntó algo— y hasta ahora la única forma de recuperarla era leerla.
+let colaRepe = null;
+
+function pararRepeticion() {
+  colaRepe?.cortar();
+  colaRepe = null;
+  for (const b of document.querySelectorAll("button[data-repetir]")) b.dataset.suena = "no";
+}
+
+async function repetir(indice, boton) {
+  // Si ya está sonando esa misma, el botón para. Un icono que solo empieza es medio icono.
+  if (boton.dataset.suena === "si") { pararRepeticion(); return; }
+  pararRepeticion();
+  if (!A.clave11) { avisar("Falta la clave de ElevenLabs en Ajustes para repetir en voz."); return; }
+  const t = E.charla[indice];
+  if (!t?.texto) return;
+
+  boton.dataset.suena = "si";
+  const c = new ColaVoz(actual().voz ?? "narrador");
+  colaRepe = c;
+  // Se trocea por frases igual que al hablar: así empieza a sonar sin esperar el párrafo entero.
+  for (const frase of t.texto.split(/(?<=[.!?…])\s+/)) if (frase.trim()) c.encolar(frase.trim());
+  try { await c.terminar(); } finally {
+    if (colaRepe === c) colaRepe = null;
+    boton.dataset.suena = "no";
+    if (c.fallo) avisar(c.fallo);
+  }
+}
+
+$("#charla").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-repetir]");
+  if (b) repetir(+b.dataset.repetir, b);
+});
+
 // ── Cancelar ─────────────────────────────────────────────────────────────────
 // Botón propio y visible. Antes cancelar era «vuelve a tocar el botón de hablar», que nadie
 // adivina y que además no se distinguía de empezar a grabar otra vez.
 $("#cancelar").addEventListener("click", () => {
+  pararRepeticion();
   if (!ocupado) return;
   cola?.cortar();
   enCurso?.ac.abort(new Error("cancelado por la mesa"));

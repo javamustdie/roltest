@@ -1,0 +1,822 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   ornado.css — la piel de la ficha de personaje y del inventario
+
+   Va aparte de index.html a propósito: esto es SOLO apariencia de la capa `.ficha`, y separarlo
+   deja el bloque <style> del index para la estructura de la app. Nada de aquí sale de `.ficha`,
+   así que la mesa (escena, grupo, mapa) no se toca.
+
+   Referencias: la ficha de Baldur's Gate 3 (pergamino, marcos dorados, características en
+   medallones con la etiqueta colgando) y el inventario de Diablo (nicho oscuro con el muñeco,
+   ranuras metálicas y la rejilla de la bolsa debajo).
+
+   Dos reglas que se siguen en TODO el fichero:
+
+   1. Sin fuentes ni imágenes externas: hay CSP estricta. Los marcos son `border-image` con SVG
+      en línea, y los relieves son `box-shadow`. Las texturas son data URI SVG.
+   2. Todos los selectores llevan `.ficha` (o un atributo extra) por delante. No es adorno: así
+      ganan por especificidad al <style> de index.html y da igual dónde se enganche el <link>.
+      Si algún día se mueve el <link> arriba, esto sigue funcionando.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Añadidos a la paleta de la app ───────────────────────────────────────────────────────
+     La paleta base es verde turbera; una ficha de pergamino necesita el eje cálido que falta.
+     El oro no es amarillo puro: un dorado saturado sobre fondo oscuro parece plástico, así que
+     va desde el latón sucio (--oro-bajo) al reflejo (--oro-alto) y el relieve se hace con los
+     tres, nunca con uno solo. */
+  --oro: #C79A3E;
+  --oro-alto: #F0DCA8;
+  --oro-bajo: #5C4519;
+  --laton: #8A6A28;
+  --pergamino: #241F13;
+  --pergamino-alto: #332C1B;
+  --hueco: #0B0D07;   /* fondo de todo lo que va hundido: ranuras, casillas, surcos */
+  --tinta: #070804;   /* el negro de los contornos; nunca #000, que corta demasiado */
+
+  /* Grano de fibra de pergamino. feTurbulence desaturado y en gris: se mezcla con `overlay`
+     sobre el fondo, así que aclara donde hay luz y oscurece donde hay sombra, que es como se
+     comporta el papel de verdad. 160px de baldosa con stitchTiles para que no se vean costuras. */
+  --grano: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='.38'/%3E%3C/svg%3E");
+
+  /* Marco dorado del panel. 48×48 con corte de 16, y se pinta con `border-width:16px`: fuente y
+     destino miden lo mismo, así que las líneas de 1px caen sobre un píxel entero y no se ven
+     lavadas. Los rectángulos concéntricos dan el bisel (negro → latón oscuro → oro con reflejo →
+     surco → hilo de latón) y los rombos de las cuatro esquinas caen dentro del cuadrado de corte,
+     que es lo que hace que el 9-slice los coloque como remaches y no los estire. El rombo del
+     centro de cada lado es lo que se repite a lo largo del canto. */
+  --marco-oro: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cg fill='none'%3E%3Crect x='.5' y='.5' width='47' height='47' stroke='%23070804'/%3E%3Crect x='2' y='2' width='44' height='44' stroke='%235C4519' stroke-width='2'/%3E%3Crect x='4.25' y='4.25' width='39.5' height='39.5' stroke='%23C79A3E' stroke-width='2.5'/%3E%3Crect x='3.35' y='3.35' width='41.3' height='41.3' stroke='%23F0DCA8' stroke-width='.7'/%3E%3Crect x='6.25' y='6.25' width='35.5' height='35.5' stroke='%231A1508' stroke-width='1.5'/%3E%3Crect x='7.5' y='7.5' width='33' height='33' stroke='%238A6A28'/%3E%3Crect x='11.5' y='11.5' width='25' height='25' stroke='%230A0B07'/%3E%3Crect x='12.5' y='12.5' width='23' height='23' stroke='%236E5320' stroke-width='.8'/%3E%3C/g%3E%3Cg fill='%23C79A3E' stroke='%231A1508'%3E%3Cpath d='M8 2.4 L13.6 8 L8 13.6 L2.4 8 Z'/%3E%3Cpath d='M40 2.4 L45.6 8 L40 13.6 L34.4 8 Z'/%3E%3Cpath d='M8 34.4 L13.6 40 L8 45.6 L2.4 40 Z'/%3E%3Cpath d='M40 34.4 L45.6 40 L40 45.6 L34.4 40 Z'/%3E%3C/g%3E%3Cg fill='%23F0DCA8'%3E%3Cpath d='M8 5.6 L10.4 8 L8 10.4 L5.6 8 Z'/%3E%3Cpath d='M40 5.6 L42.4 8 L40 10.4 L37.6 8 Z'/%3E%3Cpath d='M8 37.6 L10.4 40 L8 42.4 L5.6 40 Z'/%3E%3Cpath d='M40 37.6 L42.4 40 L40 42.4 L37.6 40 Z'/%3E%3C/g%3E%3Cg fill='%238A6A28'%3E%3Cpath d='M24 5.9 L26.1 8 L24 10.1 L21.9 8 Z'/%3E%3Cpath d='M24 37.9 L26.1 40 L24 42.1 L21.9 40 Z'/%3E%3Cpath d='M5.9 24 L8 26.1 L5.9 28.2 L3.8 26.1 Z'/%3E%3Cpath d='M42.1 24 L44.2 26.1 L42.1 28.2 L40 26.1 Z'/%3E%3C/g%3E%3C/svg%3E");
+
+  /* Marco de hierro para los paneles de dentro (el nicho del muñeco y la bolsa). Mismo truco,
+     36×36 con corte de 12, pero en verde hierro y con remache redondo: si los paneles interiores
+     llevaran el mismo oro que el marco grande, la jerarquía se perdería. */
+  --marco-hierro: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cg fill='none'%3E%3Crect x='.5' y='.5' width='35' height='35' stroke='%23070804'/%3E%3Crect x='2' y='2' width='32' height='32' stroke='%232E3420' stroke-width='2'/%3E%3Crect x='3.6' y='3.6' width='28.8' height='28.8' stroke='%23566046' stroke-width='1.2'/%3E%3Crect x='5.5' y='5.5' width='25' height='25' stroke='%2312140E' stroke-width='2'/%3E%3Crect x='7.5' y='7.5' width='21' height='21' stroke='%236E5320' stroke-width='.9'/%3E%3C/g%3E%3Cg fill='%236E5320' stroke='%23070804' stroke-width='.9'%3E%3Ccircle cx='6' cy='6' r='3.4'/%3E%3Ccircle cx='30' cy='6' r='3.4'/%3E%3Ccircle cx='6' cy='30' r='3.4'/%3E%3Ccircle cx='30' cy='30' r='3.4'/%3E%3C/g%3E%3Cg fill='%23D9A04A'%3E%3Ccircle cx='5.3' cy='5.3' r='1.1'/%3E%3Ccircle cx='29.3' cy='5.3' r='1.1'/%3E%3Ccircle cx='5.3' cy='29.3' r='1.1'/%3E%3Ccircle cx='29.3' cy='29.3' r='1.1'/%3E%3C/g%3E%3C/svg%3E");
+
+  /* Remache de latón suelto, para clavar las esquinas de los bloques con un pseudoelemento.
+     Es simétrico a propósito: así una sola imagen sirve para las cuatro esquinas y no hacen
+     falta cuatro data URI espejadas. */
+  --rivete: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Ccircle cx='6' cy='6' r='5.2' fill='%23070804'/%3E%3Ccircle cx='6' cy='6' r='4.2' fill='%238A6A28'/%3E%3Ccircle cx='6' cy='6' r='2.6' fill='%23D9A04A'/%3E%3Ccircle cx='5.1' cy='5.1' r='1.1' fill='%23F0DCA8'/%3E%3C/svg%3E");
+
+  /* Rombo con contorno del color del pergamino: se planta encima de una línea y la corta él
+     mismo, sin necesidad de recortar la línea en dos trozos. */
+  --losange: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13'%3E%3Cpath d='M6.5 1 L12 6.5 L6.5 12 L1 6.5 Z' fill='%23C79A3E' stroke='%23241F13' stroke-width='2'/%3E%3C/svg%3E");
+
+  /* Chapa de metal, de arriba a abajo: reflejo, cuerpo, sombra. Una sola variable porque la
+     usan el marco del retrato y varios botones, y así el metal es el mismo en toda la ficha. */
+  --chapa-oro: linear-gradient(160deg, #F0DCA8 0%, #B98E33 26%, #6E5320 52%, #C79A3E 74%, #4A3714 100%);
+}
+
+/* ═══ 1. La capa de fondo ═══════════════════════════════════════════════════════════════════
+   `.ficha[id]` en vez de `.ficha`: sube la especificidad sin inventarse clases nuevas (el
+   marcado real es `<div class="ficha" id="ficha">`), y así no depende del orden del <link>. */
+.ficha[id] {
+  /* Viñeta: oscurece las esquinas y deja el centro un grado más claro, de modo que el ojo cae
+     en el panel aunque la mesa siga viéndose detrás. El tinte cálido del centro es el que hace
+     que el pergamino no parezca gris. */
+  background:
+    radial-gradient(120% 100% at 50% 42%, #14110A66 0%, #0A0B07E6 58%, #05060388 100%),
+    #0A0B07EE;
+  padding: clamp(12px, 2.4vh, 26px);
+}
+
+/* ═══ 2. El panel ══════════════════════════════════════════════════════════════════════════ */
+.ficha .ficha-caja {
+  max-width: 680px;
+
+  /* El marco: borde transparente de 16px relleno con el 9-slice dorado. `round` en el canto
+     hace que los rombos del lado se repitan un número entero de veces, sin medio rombo cortado
+     en las esquinas. El fondo se pinta bajo el borde (border-box) para que el pergamino asome
+     entre los aros y el marco parezca clavado en la piel, no pegado encima. */
+  border: 16px solid transparent;
+  border-image: var(--marco-oro) 16 / 16px / 0 round;
+  background-origin: border-box;
+  background-clip: border-box;
+
+  /* Pergamino oscuro: grano de fibra + luz de vela desde arriba + dos manchas de humedad.
+     El `overlay` del grano es lo que le da tacto; con `normal` quedaría un velo gris plano. */
+  background-color: var(--pergamino);
+  background-image:
+    var(--grano),
+    radial-gradient(140% 90% at 50% -12%, #40382250 0%, #24201300 58%),
+    radial-gradient(60% 42% at 14% 88%, #4A3A1E30, #4A3A1E00 72%),
+    radial-gradient(52% 38% at 88% 26%, #5A431E28, #5A431E00 72%),
+    linear-gradient(#2A2416 0%, #221D11 46%, #191509 100%);
+  background-blend-mode: overlay, normal, normal, normal, normal;
+
+  /* Fuera: contorno negro y sombra proyectada, que es lo que despega el panel de la mesa.
+     Dentro: el pergamino se oscurece hacia los cantos, como un papel abarquillado. */
+  box-shadow:
+    0 0 0 1px var(--tinta),
+    0 26px 70px #000000CC,
+    0 4px 14px #00000099,
+    inset 0 0 46px #00000070;
+
+  padding: 15px 16px 17px;
+  gap: 14px;
+  scrollbar-color: var(--laton) #0E100A;   /* la barra por defecto rompía el marco */
+}
+
+/* ── Rótulos y títulos ───────────────────────────────────────────────────────────────────── */
+/* Cada h2 es un renglón de sección: rombo, texto en versalitas y una regla que se desvanece.
+   La regla flexible resuelve sola el ancho de cualquier título, que en `abrirFicha` van del
+   corto («Equipo») al largo («Heridas persistentes»). */
+.ficha h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 500 .68rem/1 var(--mono);
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--oro);
+  text-shadow: 0 1px 0 #00000090;
+}
+.ficha h2::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--losange) center/contain no-repeat;
+}
+.ficha h2::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, #8A6A28AA, #8A6A2818 62%, #8A6A2800);
+  box-shadow: 0 1px 0 #00000060;
+}
+
+.ficha .ficha-caja h3 {
+  font: 400 clamp(1.3rem, 3.4vw, 1.62rem)/1.15 var(--serif);
+  color: #F2E9CD;
+  letter-spacing: .01em;
+  text-shadow: 0 1px 0 #000, 0 0 22px #D9A04A30;
+}
+.ficha .ficha-caja .sub {
+  font: 500 .64rem/1.3 var(--mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  font-style: normal;
+  color: var(--oro);
+  opacity: .9;
+}
+
+/* ═══ 3. Cabecera: retrato + quién es ══════════════════════════════════════════════════════ */
+.ficha .ficha-cab {
+  position: relative;
+  gap: 18px;
+  padding-bottom: 6px;
+}
+/* Filigrana que cierra la cabecera. Va en absolute justamente para NO ser un ítem flex más:
+   `.ficha-cab` es flex, y un pseudoelemento en flujo se colaría como tercera columna. */
+.ficha .ficha-cab::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -10px;
+  height: 13px;
+  pointer-events: none;
+  background:
+    var(--losange) center/13px 13px no-repeat,
+    linear-gradient(90deg, #8A6A2800, #8A6A28 18%, #C79A3E 50%, #8A6A28 82%, #8A6A2800)
+      center/100% 1px no-repeat;
+}
+
+.ficha .ficha-quien { gap: 10px; }
+
+/* ── Marco de retrato ────────────────────────────────────────────────────────────────────── */
+/* Un <img> no admite pseudoelementos, así que el marco se dibuja con el fondo del propio img:
+   el `padding` deja una banda visible alrededor de la imagen (que se pinta en la caja de
+   contenido) y ahí van la chapa de metal y los cuatro remaches. Es el único modo de tener un
+   marco ornamentado sobre una imagen sin envolverla en un div que no existe en el marcado. */
+.ficha .retrato-grande {
+  width: clamp(136px, 25vw, 200px);
+  border: 2px solid var(--tinta);
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px #00000080,
+    0 10px 26px #000000AA,
+    inset 0 0 0 1px #00000070;
+}
+.ficha img.retrato-grande {
+  padding: 9px;
+  background-color: #1A1710;
+  background-image: var(--rivete), var(--rivete), var(--rivete), var(--rivete), var(--chapa-oro);
+  background-position: 0 0, 100% 0, 0 100%, 100% 100%, 0 0;
+  background-size: 11px 11px, 11px 11px, 11px 11px, 11px 11px, auto;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-clip: border-box;
+}
+/* Sin foto sí es un div, y ahí el marco sale mejor con aros de box-shadow: no hay imagen que
+   proteger, así que el hueco puede ir hundido de verdad y las iniciales flotan en el fondo. */
+.ficha .retrato-grande.sin-foto {
+  padding: 0;
+  background-color: #0C0E07;
+  background-image: radial-gradient(70% 60% at 50% 32%, #1E2214 0%, #0A0B07 78%);
+  box-shadow:
+    inset 0 0 0 1px var(--tinta),
+    inset 0 0 0 3px var(--laton),
+    inset 0 0 0 4px var(--tinta),
+    inset 0 0 0 6px var(--oro-bajo),
+    inset 0 0 0 7px var(--tinta),
+    inset 0 0 38px #000000B0,
+    0 10px 26px #000000AA;
+  color: #6A7048;
+  text-shadow: 0 2px 0 #000;
+  position: relative;
+}
+.ficha .retrato-grande.sin-foto::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  pointer-events: none;
+  background-image: var(--rivete), var(--rivete), var(--rivete), var(--rivete);
+  background-position: 0 0, 100% 0, 0 100%, 100% 100%;
+  background-size: 10px 10px;
+  background-repeat: no-repeat;
+}
+.ficha .retrato-grande.sin-foto small {
+  color: #9DA282;
+  letter-spacing: .1em;
+}
+
+/* ── La pulla del DJ ─────────────────────────────────────────────────────────────────────── */
+/* Tarjeta de pergamino claro con el canto izquierdo dorado: es una cita, y una cita necesita
+   verse como pieza aparte del resto de la ficha o se lee como si fuera dato de personaje. */
+.ficha .pulla {
+  position: relative;
+  padding: 9px 12px 9px 15px;
+  border: 1px solid #00000070;
+  border-left: 3px solid var(--oro);
+  background:
+    linear-gradient(90deg, #C79A3E14, #C79A3E00 42%),
+    linear-gradient(#2E2717, #221D11);
+  box-shadow: inset 0 1px 0 #F0DCA818, 0 2px 6px #00000070;
+  font: 400 .92rem/1.5 var(--serif);
+  font-style: italic;
+  color: #EBC782;
+  text-shadow: 0 1px 0 #00000090;
+}
+.ficha .pulla span {
+  margin-top: 5px;
+  text-align: right;
+  color: #9DA282;
+  letter-spacing: .14em;
+}
+
+/* ═══ 4. Medallones de características (el bloque de BG3) ══════════════════════════════════
+   El marcado da `<div><i>icono</i><span>etiqueta</span><b>número</b></div>` en ese orden. Con
+   flex + `order` se recoloca a icono arriba, disco en medio y etiqueta colgando debajo, sin
+   tocar app.js. La etiqueta solapada por abajo es justo el gesto de BG3: la plaquita del
+   modificador que cuelga del círculo. */
+.ficha .ficha-rejilla {
+  grid-template-columns: repeat(auto-fit, minmax(102px, 1fr));
+  gap: 14px 6px;
+  padding: 4px 0 2px;
+}
+.ficha .ficha-rejilla div {
+  /* Sin caja: los medallones flotan sobre el pergamino. Un recuadro alrededor de cada uno
+     competía con el círculo y era lo que los hacía parecer «cajitas». */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  position: relative;
+}
+/* Corona: el icono en un disco pequeño, mordiendo el borde de arriba del medallón. */
+.ficha .ficha-rejilla i {
+  order: 1;
+  position: static;
+  z-index: 2;               /* funciona sin position porque es un ítem flex */
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-bottom: -7px;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: .84rem;
+  line-height: 1;
+  opacity: 1;
+  background: radial-gradient(#2E2717, #12140C);
+  box-shadow: 0 0 0 1px var(--tinta), 0 0 0 2px var(--oro-bajo), 0 1px 3px #000000A0;
+}
+/* El disco. El número va centrado con grid para que «17 / 21» quede a plomo con «4». */
+.ficha .ficha-rejilla b {
+  order: 2;
+  display: grid;
+  place-items: center;
+  width: min(86px, 100%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  padding: 0 7px;
+  white-space: nowrap;
+  font: 500 1rem/1 var(--mono);
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  color: #F5E6B8;
+  /* Luz alta arriba a la izquierda: es lo que convierte el círculo plano en una moneda. */
+  background: radial-gradient(68% 68% at 32% 26%, #453C24 0%, #241F13 56%, #12100A 100%);
+  box-shadow:
+    0 0 0 1px var(--tinta),
+    0 0 0 3px var(--laton),
+    0 0 0 4px var(--tinta),
+    inset 0 2px 7px #000000B0,
+    inset 0 0 0 1px #F0DCA826,
+    0 5px 12px #00000090;
+  text-shadow: 0 1px 0 #000, 0 0 14px #D9A04A45;
+}
+/* La plaquita que cuelga. `margin-top` negativo para que muerda el disco; z-index por encima
+   del disco para que el aro de latón no la corte. */
+.ficha .ficha-rejilla span {
+  order: 3;
+  z-index: 3;
+  margin-top: -9px;
+  max-width: 100%;
+  padding: 3px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 .55rem/1.35 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #D3C293;
+  background: linear-gradient(#332C1B, #1A1508);
+  box-shadow: 0 0 0 1px var(--tinta), inset 0 1px 0 #C79A3E40, 0 2px 4px #00000080;
+}
+
+/* ═══ 5. Barra de experiencia ══════════════════════════════════════════════════════════════
+   Surco hundido con el relleno abombado dentro; el brillo que la recorre le da el aire de
+   «esto avanza» sin necesidad de más texto. */
+.ficha .pxbar {
+  height: 26px;
+  border: 1px solid var(--tinta);
+  background: linear-gradient(#070804, #101309);
+  background-color: #0A0B07;
+  box-shadow:
+    inset 0 2px 5px #000000C0,
+    inset 0 -1px 0 #FFFFFF0C,
+    0 0 0 1px var(--oro-bajo),
+    0 1px 0 #00000090;
+  overflow: hidden;
+}
+.ficha .pxbar i {
+  position: relative;   /* el ancho lo pone app.js en línea; aquí sólo el relieve */
+  overflow: hidden;
+  background: linear-gradient(#E0B45E 0%, #C8823C 42%, #8A5620 100%);
+  box-shadow:
+    inset 0 1px 0 #FFE9B8A0,
+    inset 0 -2px 4px #00000070,
+    1px 0 0 #F0DCA850;
+}
+.ficha .pxbar i::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 34%;
+  background: linear-gradient(90deg, #FFFFFF00, #FFF6DC70, #FFFFFF00);
+  animation: brillo-px 4.6s ease-in-out infinite;
+}
+@keyframes brillo-px {
+  0%, 12% { transform: translateX(-120%); }
+  100%    { transform: translateX(340%); }
+}
+.ficha .pxbar span {
+  font: 500 .64rem/1 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #F7EED4;
+  text-shadow: 0 1px 2px #000, 0 0 6px #000;
+}
+
+/* ═══ 6. Bloques de sección ════════════════════════════════════════════════════════════════
+   `abrirFicha` envuelve cada sección en un <div> sin clase. Se aprovecha eso para darles una
+   placa hundida en el pergamino, y así la ficha se lee como una lámina con piezas montadas
+   encima en vez de una columna de texto. `:not([class])` deja fuera `.ficha-cab` y `.fila`. */
+.ficha .ficha-caja > div:not([class]) {
+  position: relative;
+  padding: 12px 14px 14px;
+  background:
+    linear-gradient(#1E1A0F, #171308 100%),
+    radial-gradient(120% 80% at 50% 0%, #332C1B40, #332C1B00 60%);
+  background-color: #1B1710;
+  box-shadow:
+    inset 0 0 0 1px #00000090,
+    inset 0 0 0 2px #6E532038,
+    inset 0 2px 8px #00000070,
+    0 1px 0 #F0DCA810;
+}
+/* Cuatro remaches con una sola imagen y cuatro posiciones: un pseudoelemento en lugar de
+   cuatro, y así el bloque no necesita ::after para nada más. */
+.ficha .ficha-caja > div:not([class])::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  pointer-events: none;
+  background-image: var(--rivete), var(--rivete), var(--rivete), var(--rivete);
+  background-position: 0 0, 100% 0, 0 100%, 100% 100%;
+  background-size: 9px 9px;
+  background-repeat: no-repeat;
+}
+
+/* ═══ 7. Puntos de golpe ═══════════════════════════════════════════════════════════════════ */
+.ficha .pg-fila { gap: 8px; }
+/* El marcador central: lectura hundida, cifras ámbar con halo. Es el número que más se mira
+   en mesa, así que se le da el mayor contraste de la ficha. */
+.ficha .pg-fila .val {
+  flex: none;
+  min-width: 6.4em;
+  padding: 10px 12px;
+  font: 500 1.34rem/1 var(--mono);
+  color: var(--ambar);
+  background: radial-gradient(120% 150% at 50% -20%, #22261500, #0A0B07 70%);
+  background-color: #0A0B07;
+  box-shadow:
+    inset 0 0 0 1px var(--tinta),
+    inset 0 0 0 2px var(--oro-bajo),
+    inset 0 3px 9px #000000C0,
+    0 1px 0 #00000090;
+  text-shadow: 0 0 12px #D9A04A66, 0 1px 0 #000;
+}
+/* Los botones se distinguen por el signo del propio dato (`data-d`), no por su posición: si
+   algún día se reordenan en app.js, el color sigue al daño. */
+.ficha .pg-fila button { flex: 1; min-height: 46px; font-size: 1.12rem; }
+.ficha .pg-fila button[data-d^="-"] {
+  background: linear-gradient(#4A2118, #2A1310 62%, #1E0E0B);
+  box-shadow: inset 0 1px 0 #C4705C55, inset 0 0 0 1px #00000070, 0 1px 0 #000;
+  border-color: var(--tinta);
+  color: #F0BFAE;
+}
+.ficha .pg-fila button:not([data-d^="-"]) {
+  background: linear-gradient(#333C20, #1E2413 62%, #151A0C);
+  box-shadow: inset 0 1px 0 #8FA36455, inset 0 0 0 1px #00000070, 0 1px 0 #000;
+  border-color: var(--tinta);
+  color: #DCE6BE;
+}
+
+/* ═══ 8. El muñeco (panel de equipo, a la Diablo) ══════════════════════════════════════════ */
+.ficha .muneco-caja {
+  position: relative;
+  grid-template-columns: minmax(214px, 1.05fr) minmax(186px, 1fr);
+  gap: 14px;
+  margin-top: 12px;
+}
+/* El nicho: piedra oscura con el foco justo detrás de la figura, marco de hierro remachado y
+   viñeta fuerte en los cantos. La figura tiene que salir del fondo por luz, no por línea. */
+.ficha svg.muneco {
+  max-width: 400px;
+  border: 12px solid transparent;
+  border-image: var(--marco-hierro) 12 / 12px / 0 round;
+  background-color: #0C0E08;
+  background-image:
+    var(--grano),
+    radial-gradient(58% 46% at 50% 34%, #262B1A 0%, #14170E 52%, #08090500 100%),
+    radial-gradient(120% 100% at 50% 50%, #1A1E1200 40%, #05060A 100%),
+    linear-gradient(#141810, #0A0B07);
+  background-blend-mode: overlay, normal, normal, normal;
+  background-origin: border-box;
+  background-clip: border-box;
+  box-shadow: inset 0 0 34px #000000C0, 0 3px 10px #00000090;
+}
+/* La silueta grabada: trazo más claro que antes (se juega con poca luz) y una sombra de 1px
+   debajo, que es lo que da la sensación de bajorrelieve. */
+.ficha .muneco .cuerpo {
+  stroke: #596340;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 1.5px 0 #050603);
+}
+.ficha .muneco .cuerpo ellipse { fill: #1A1E12; }
+
+/* ── Ranuras de equipo ───────────────────────────────────────────────────────────────────── */
+/* En SVG no hay `box-shadow`, así que el bisel se finge con `drop-shadow` encadenados: sombra
+   arriba y luz abajo = hueco hundido (la luz del panel viene de arriba). `r` se toca por CSS,
+   que en SVG 2 es una propiedad: 12 es el máximo que cabe sin que el aro toque las etiquetas,
+   que app.js coloca a 14 unidades del centro. */
+.ficha .muneco .ranura { cursor: pointer; transition: filter 140ms; }
+.ficha .muneco .ranura circle {
+  r: 12px;
+  fill: #0A0C06;
+  stroke: #2C3220;
+  stroke-width: 3;
+  filter: drop-shadow(0 -1px 1px #000000C0) drop-shadow(0 1.5px 0 #5B6543);
+}
+.ficha .muneco .ranura .ico {
+  font-size: 12px;
+  text-anchor: middle;
+  opacity: .34;
+  filter: grayscale(1);   /* vacío = apagado; el emoji a todo color parecía ya equipado */
+}
+/* Halo negro alrededor del texto (`paint-order:stroke`) para que la etiqueta se lea sobre la
+   piedra y sobre el marco sin depender de dónde caiga. */
+.ficha .muneco .ranura .etiq {
+  font: 500 9px var(--mono);
+  fill: #A8AD8C;
+  paint-order: stroke;
+  stroke: #050603;
+  stroke-width: 2.6px;
+  stroke-linejoin: round;
+}
+/* Ocupada: engaste de latón encendido, fondo cálido y brillo hacia fuera. */
+.ficha .muneco .ranura.puesta circle {
+  fill: #3A2C10;
+  stroke: var(--ambar);
+  stroke-width: 2.6;
+  filter:
+    drop-shadow(0 0 5px #D9A04A90)
+    drop-shadow(0 0 1.5px #F0DCA8)
+    drop-shadow(0 1.5px 1px #00000090);
+}
+.ficha .muneco .ranura.puesta .ico { opacity: 1; filter: none; }
+.ficha .muneco .ranura.puesta .etiq { fill: #F2E4BC; }
+.ficha .muneco .ranura:hover circle,
+.ficha .muneco .ranura:focus circle {
+  stroke: var(--oro-alto);
+  filter: drop-shadow(0 0 7px #F0DCA8B0);
+}
+.ficha .muneco .ranura:focus { outline: none; }
+.ficha .muneco .ranura:hover .etiq,
+.ficha .muneco .ranura:focus .etiq { fill: #FFF4D6; }
+
+/* ═══ 9. Mochila: rejilla de inventario ════════════════════════════════════════════════════ */
+.ficha .mochila { gap: 10px; }
+.ficha .mochila h2 { color: var(--oro); }
+
+/* La bandeja: hueco hundido con marco de hierro, igual que el nicho del muñeco, para que se
+   lean como dos piezas del mismo mueble. */
+.ficha .bolsa {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+  padding: 9px;
+  border: 12px solid transparent;
+  border-image: var(--marco-hierro) 12 / 12px / 0 round;
+  background-color: #0A0C06;
+  background-image:
+    repeating-linear-gradient(45deg, #FFFFFF06 0 1px, #FFFFFF00 1px 7px),
+    radial-gradient(100% 80% at 50% 0%, #1A1E1250, #0A0C0600 70%);
+  background-origin: border-box;
+  background-clip: border-box;
+  box-shadow: inset 0 0 22px #000000C0;
+  align-content: start;
+  min-height: 132px;   /* la bandeja se ve como bandeja aunque lleve un solo objeto */
+}
+/* Casilla cuadrada con bisel. El nombre del objeto es texto largo («Camisote de malla
+   remendado») y no un icono, así que se recorta a cuatro líneas centradas: en mesa importa
+   reconocerlo de un vistazo, no leerlo entero, y para eso está la ficha de papel. */
+.ficha .bolsa li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 7px 6px;
+  gap: 0;
+  border: 1px solid var(--tinta);
+  background:
+    linear-gradient(150deg, #2C3120 0%, #1B1F14 46%, #12150C 100%);
+  box-shadow:
+    inset 0 1px 0 #6E7A4E60,
+    inset 0 0 0 1px #00000060,
+    inset 0 -6px 12px #00000070,
+    0 1px 0 #00000090;
+  transition: box-shadow 140ms, border-color 140ms;
+}
+.ficha .bolsa li:hover {
+  border-color: var(--oro);
+  box-shadow:
+    inset 0 1px 0 #F0DCA860,
+    inset 0 0 0 1px #00000060,
+    inset 0 0 14px #C79A3E28,
+    0 0 9px #C79A3E45;
+}
+.ficha .bolsa li span {
+  flex: initial;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  text-align: center;
+  font: 400 .7rem/1.3 var(--serif);
+  color: #E4DFC6;
+  text-shadow: 0 1px 0 #000;
+  overflow-wrap: anywhere;   /* «contravenenos» no puede desbordar una casilla de 84px */
+}
+/* La ✕ va siempre visible en una esquina: en tablet no hay hover que la descubra. */
+.ficha .bolsa li button {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-height: 22px;
+  min-width: 22px;
+  padding: 0;
+  border: 1px solid var(--tinta);
+  border-radius: 0 0 0 4px;
+  background: linear-gradient(#3A1A13, #24100C);
+  box-shadow: inset 0 1px 0 #C4705C40;
+  color: #E0A48E;
+  font-size: .68rem;
+  line-height: 1;
+}
+.ficha .bolsa li button:hover { background: linear-gradient(#5A2318, #35150F); color: #FFD9C8; }
+/* Bandeja vacía: una casilla que ocupa toda la fila, en punteado, sin cuadrar. */
+.ficha .bolsa .nada {
+  grid-column: 1 / -1;
+  aspect-ratio: auto;
+  min-height: 58px;
+  border: 1px dashed #4A5236;
+  background: #0A0C06;
+  box-shadow: inset 0 0 16px #000000A0;
+  color: #8E9377;
+  font: 400 .84rem/1.4 var(--serif);
+  font-style: italic;
+}
+
+/* ═══ 10. Campos de texto ══════════════════════════════════════════════════════════════════
+   El index no da estilo a `input`, así que salían los controles crudos del navegador: cajas
+   grises en medio del pergamino. Aquí van hundidos, con hilo de latón y foco dorado. */
+.ficha input {
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--tinta);
+  background: linear-gradient(#090B05, #131608);
+  box-shadow: inset 0 2px 6px #000000B0, inset 0 0 0 1px #6E532050, 0 1px 0 #F0DCA810;
+  color: #EFEAD2;
+  font: 400 .94rem/1.25 var(--serif);
+}
+.ficha input::placeholder { color: #757A5C; font-style: italic; }
+.ficha input:focus {
+  outline: none;
+  box-shadow:
+    inset 0 2px 6px #000000B0,
+    inset 0 0 0 1px var(--oro),
+    0 0 0 2px #C8823C40,
+    0 0 10px #C79A3E35;
+}
+.ficha .escribir { gap: 8px; }
+.ficha .escribir button {
+  flex: none;
+  min-width: 52px;
+  font-size: 1.24rem;
+  color: var(--oro-alto);
+  background: linear-gradient(#4A3A18, #2A2110 62%, #1C1509);
+  box-shadow: inset 0 1px 0 #F0DCA855, inset 0 0 0 1px #00000070, 0 1px 0 #000;
+  border-color: var(--tinta);
+}
+/* Las etiquetas del editor de la entrevista, que comparte esta misma capa. */
+.ficha label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 500 .62rem/1.4 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--oro);
+}
+.ficha label small {
+  font: 400 .74rem/1.4 var(--serif);
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #9DA282;
+}
+
+/* ═══ 11. Heridas ══════════════════════════════════════════════════════════════════════════
+   Fichas de cera roja: bisel oscuro, letra pequeña en versalitas y borde negro. Se separan de
+   los botones normales porque no son una acción cualquiera, son una marca que llevas encima. */
+.ficha .marcas { gap: 7px; }
+.ficha .marca {
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid var(--tinta);
+  background: linear-gradient(#4A2118, #2A1310 60%, #1C0D0A);
+  box-shadow:
+    inset 0 1px 0 #C4705C4D,
+    inset 0 0 0 1px #00000060,
+    inset 0 -5px 10px #00000070,
+    0 1px 0 #00000090;
+  color: #EFBBA9;
+  font: 500 .7rem/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 #00000090;
+}
+.ficha .marca:hover { border-color: var(--herrumbre); color: #FFD6C8; }
+
+/* ═══ 12. Quién es, notas y textos menores ═════════════════════════════════════════════════
+   Lista de rasgos al modo de las habilidades de BG3: renglones con cebra y regla fina. La
+   cebra va sin `column-gap` (el hueco lo pone el padding de dt) porque una franja partida en
+   dos por el hueco de la rejilla se ve como un error de pintado. */
+.ficha .entrevista {
+  grid-template-columns: minmax(7.6em, auto) 1fr;
+  gap: 0;
+  margin-top: 10px;
+  border-top: 1px solid #C79A3E28;
+}
+.ficha .entrevista dt,
+.ficha .entrevista dd {
+  padding: 7px 0;
+  border-bottom: 1px solid #C79A3E1F;
+}
+.ficha .entrevista dt {
+  padding-right: 14px;
+  padding-left: 8px;
+  font: 500 .6rem/1.7 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #C9A55E;
+}
+.ficha .entrevista dt::before { content: "◆ "; color: var(--oro-bajo); font-size: .78em; }
+.ficha .entrevista dd {
+  padding-right: 8px;
+  font: 400 .92rem/1.5 var(--serif);
+  color: #E7E2C8;
+}
+/* Cebra por nth-of-type: dt y dd se cuentan por separado, así que el par impar coincide. */
+.ficha .entrevista dt:nth-of-type(odd),
+.ficha .entrevista dd:nth-of-type(odd) { background: #F0DCA80A; }
+
+.ficha .vacio {
+  font: 400 .84rem/1.5 var(--serif);
+  font-style: italic;
+  color: #A2A788;
+}
+/* Lo que el DJ copió de la ficha de papel: nota clavada con hilo de latón a la izquierda. */
+.ficha .notas {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--laton);
+  background: linear-gradient(#2A2416, #1E1A0F);
+  box-shadow: inset 0 1px 0 #F0DCA814, 0 1px 4px #00000070;
+  font: 400 .9rem/1.6 var(--serif);
+  font-variant-numeric: tabular-nums;
+  color: #E7E2C8;
+}
+
+/* ═══ 13. Botones de la ficha ══════════════════════════════════════════════════════════════
+   Chapa de bronce oscuro: reflejo arriba, cuerpo, sombra abajo. Al pulsar se invierte el
+   degradado y la sombra se mete dentro, que es lo que se siente como «se ha hundido». */
+.ficha button {
+  border: 1px solid var(--tinta);
+  background: linear-gradient(#2E3420, #1B1F14 58%, #12150C);
+  box-shadow: inset 0 1px 0 #6E7A4E70, inset 0 0 0 1px #00000060, 0 1px 0 #00000090;
+  color: #E7E2C8;
+  font: 400 .95rem/1 var(--serif);
+}
+.ficha button .icono { color: var(--ambar); }
+.ficha button:hover {
+  border-color: var(--oro);
+  box-shadow: inset 0 1px 0 #F0DCA860, inset 0 0 0 1px #00000060, 0 0 10px #C79A3E33;
+}
+.ficha button:active:not(:disabled) {
+  background: linear-gradient(#101308, #232817);
+  box-shadow: inset 0 3px 7px #000000C0;
+}
+.ficha button:focus-visible { outline: 2px solid var(--oro-alto); outline-offset: 2px; }
+
+/* ═══ 14. Estrecho: la ficha a pantalla completa ═══════════════════════════════════════════
+   En vertical no hay sitio para el margen de la capa ni para dos columnas de equipo. El marco
+   adelgaza (16px de oro a cada lado se comen un móvil) y el muñeco se centra sobre la bolsa. */
+@media (max-width: 780px) {
+  .ficha[id] { padding: 0; }
+  .ficha .ficha-caja {
+    max-width: none;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-width: 11px;
+    border-image: var(--marco-oro) 16 / 11px / 0 round;
+    padding: 12px 12px max(14px, env(safe-area-inset-bottom));
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  /* La cabecera en columna: con 420px de ancho, retrato y medallones lado a lado dejaban los
+     medallones a 60px y el número no cabía. */
+  .ficha .ficha-cab { flex-direction: column; align-items: center; gap: 14px; }
+  .ficha .ficha-quien { width: 100%; align-items: stretch; }
+  .ficha .ficha-caja h3, .ficha .ficha-caja .sub { text-align: center; }
+  .ficha .retrato-grande { width: clamp(150px, 46vw, 210px); }
+  .ficha .ficha-rejilla { grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); }
+  .ficha .muneco-caja { grid-template-columns: 1fr; justify-items: center; }
+  .ficha svg.muneco { max-width: 340px; }
+  .ficha .mochila { width: 100%; }
+  .ficha .bolsa { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
+  .ficha .pg-fila .val { min-width: 5.2em; font-size: 1.2rem; }
+}
+
+/* Muy estrecho de verdad (móvil pequeño): el medallón encoge y la ✕ de la bolsa crece, que si
+   no queda un objetivo de 22px pegado al borde de la pantalla. */
+@media (max-width: 420px) {
+  .ficha .ficha-rejilla { grid-template-columns: repeat(3, 1fr); gap: 12px 4px; }
+  .ficha .ficha-rejilla b { width: min(76px, 100%); font-size: .9rem; }
+  .ficha .ficha-rejilla span { font-size: .5rem; letter-spacing: .06em; padding: 3px 5px; }
+  .ficha .bolsa li button { min-height: 26px; min-width: 26px; }
+}
+
+/* ═══ 15. Sin movimiento ═══════════════════════════════════════════════════════════════════
+   El index ya mata las transiciones; aquí se apaga lo único animado que añade este fichero.
+   No desaparece: se queda como reflejo fijo, para que la barra no pierda el relieve. */
+@media (prefers-reduced-motion: reduce) {
+  .ficha .pxbar i::after { animation: none; opacity: .25; }
+  .ficha .bolsa li, .ficha .muneco .ranura { transition: none; }
+}

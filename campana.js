@@ -210,6 +210,8 @@ const PRUEBA = {
       x: 80, y: 24,
       audio: "p3-nera",
       voz: "mirena",
+      arte: "p3-desvan",
+      pie: "El desván, y una cuna vacía desde febrero",
       sabeis: [
         "Nera bajó al pozo con su marido y subió sola.",
         "Toma llevaba nueve días apilando piedras en el patio.",

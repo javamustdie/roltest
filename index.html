@@ -137,52 +137,45 @@
   .sumin [data-vacio="si"] b { color:var(--herrumbre); }
   .sumin button { min-height:32px; min-width:32px; padding:0 9px; font-size:1rem; }
 
-  /* ── Mapa ─────────────────────────────────────────────────────────── */
-  svg.mapa { width:100%; height:auto; background:#0E100A; border:1px solid var(--liquen); }
-  svg.mapa .arista { stroke:var(--liquen); stroke-width:.5; }
-  svg.mapa .arista.conocida { stroke:var(--sebo); stroke-opacity:.55; }
-  svg.mapa .nodo { fill:var(--musgo-alto); stroke:var(--liquen); stroke-width:.6; }
-  svg.mapa .nodo.visitada { fill:#3A3520; stroke:var(--sebo); }
-  svg.mapa .nodo.actual { fill:var(--sebo); stroke:#E8C07A; stroke-width:1.1; }
-  svg.mapa text { fill:var(--tiza-baja); font-family:Georgia,serif; font-size:3.1px;
-                  text-anchor:middle; }
-  svg.mapa .visitada + text, svg.mapa .actual + text { fill:var(--tiza); }
-  svg.mapa g { cursor:pointer; }
+  /* ── Mapa ─────────────────────────────────────────────────────────────
+     Dibujado: pergamino manchado, bosque de matas, turbera rayada y los caminos a dos trazos
+     para que parezcan de pluma. Tres círculos y unas líneas no eran un mapa. */
+  svg.mapa { width:100%; max-width:680px; height:auto; margin:0 auto;
+             border:1px solid var(--liquen); display:block; }
+  svg.mapa .pergamino { fill:#1C1A12; }
+  svg.mapa .mancha { fill:#25211533; }
+  svg.mapa .turba { stroke:#2E2A1C; stroke-width:.5; stroke-linecap:round; }
+  svg.mapa .arbol { fill:#26301D; stroke:#26301D; stroke-width:.3; }
+  svg.mapa .arbol path { stroke:#2A2417; }
 
-  /* ── Conversación ─────────────────────────────────────────────────── */
-  .charla { display:flex; flex-direction:column; gap:9px; }
-  .turno { padding:10px 13px; border:1px solid var(--liquen); background:var(--musgo); }
-  .turno[data-de="mesa"] { background:var(--musgo-alto); border-left:3px solid var(--tiza-baja); }
-  .turno[data-de="dj"]   { border-left:3px solid var(--sebo); }
-  .turno .quien { font:500 .62rem/1 var(--mono); letter-spacing:.14em; text-transform:uppercase;
-                  color:var(--tiza-baja); margin-bottom:5px; }
-  .turno p { margin:0; font-size:.96rem; line-height:1.55; }
+  svg.mapa .camino  { fill:none; stroke:#4A422C; stroke-width:.75; stroke-linecap:round; }
+  svg.mapa .camino2 { fill:none; stroke:#4A422C; stroke-width:.35; stroke-linecap:round;
+                      transform:translate(.35px,.4px); opacity:.7; }
+  svg.mapa .camino.conocida, svg.mapa .camino2.conocida { stroke:var(--sebo); opacity:.75; }
+  svg.mapa .camino.ignota, svg.mapa .camino2.ignota { stroke-dasharray:1.6 1.8; opacity:.4; }
 
-  /* ── Ajustes ──────────────────────────────────────────────────────── */
-  label { display:flex; flex-direction:column; gap:6px; font-size:.86rem; }
-  label small { color:var(--tiza-baja); font-size:.76rem; font-style:italic; }
-  input, select { font:400 .92rem/1 var(--mono); background:#0E100A; color:var(--tiza);
-                  border:1px solid var(--liquen); padding:11px 12px; min-height:46px; width:100%; }
-  input:focus, select:focus { outline:2px solid var(--sebo); outline-offset:1px; }
-  /* Casilla de verificación: en fila, y con área de toque cómoda para una mesa con poca luz. */
-  label.casilla { flex-direction:row; align-items:flex-start; gap:11px; }
-  label.casilla input { width:26px; min-height:26px; height:26px; flex:none; margin-top:2px;
-                        accent-color:var(--sebo); }
-  label.casilla small { display:block; margin-top:3px; }
-  /* Editor del grupo: campos pequeños en cuadrícula, para caber en una fila por personaje. */
-  #editor { display:flex; flex-direction:column; gap:12px; }
-  .pj-edit { border:1px solid var(--liquen); background:#0E100A; padding:10px; display:flex;
-             flex-direction:column; gap:8px; }
-  .pj-edit .campos { display:grid; grid-template-columns:2fr 2fr; gap:8px; }
-  .pj-edit .numeros { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-  .pj-edit label { font-size:.72rem; color:var(--tiza-baja); gap:3px; }
-  .pj-edit input { min-height:42px; padding:8px 10px; }
-  .aviso-clave { font-size:.8rem; color:var(--tiza-baja); line-height:1.5;
-                 border-left:2px solid var(--sebo); padding-left:10px; }
-  .estado-linea { font:400 .82rem/1.4 var(--mono); }
-  .ok { color:#8FA86A; } .mal { color:#D4644A; } .neutro { color:var(--tiza-baja); }
+  svg.mapa .lugar { cursor:pointer; }
+  svg.mapa .halo { fill:#1C1A12; stroke:none; }
+  svg.mapa .punto { fill:#2A2617; stroke:#5A5238; stroke-width:.7; }
+  svg.mapa .glifo { font-size:2.6px; text-anchor:middle; fill:#6E6549; }
+  svg.mapa .rotulo-mapa { font:400 2.5px var(--serif); text-anchor:middle; fill:#8A8166; }
 
-  /* ── Botón de hablar, flotante ────────────────────────────────────── */
+  svg.mapa .visitada .punto { fill:#3A3520; stroke:var(--sebo); }
+  svg.mapa .visitada .glifo { fill:var(--sebo); }
+  svg.mapa .visitada .rotulo-mapa { fill:var(--tiza); }
+  svg.mapa .actual .punto { fill:var(--sebo); stroke:#F0C97A; stroke-width:1.1; }
+  svg.mapa .actual .glifo { fill:#17140F; }
+  svg.mapa .actual .rotulo-mapa { fill:var(--ambar); font-weight:500; }
+  /* Estáis aquí: un pulso lento, lo justo para encontrarlo de un vistazo. */
+  @keyframes aqui { 0%,100% { r:5.6; opacity:.35 } 50% { r:7.4; opacity:.08 } }
+  svg.mapa .actual .halo { fill:var(--ambar); opacity:.35; animation:aqui 2.6s ease-in-out infinite; }
+  svg.mapa .ignota .rotulo-mapa { fill:#5C5642; font-style:italic; }
+  svg.mapa .lugar:hover .punto, svg.mapa .lugar:focus .punto { stroke:var(--ambar); }
+  svg.mapa .lugar:focus { outline:none; }
+
+  svg.mapa .rosa { fill:#4A422C; }
+  svg.mapa .rosa text { font:400 2.6px var(--serif); text-anchor:middle; fill:#6E6549; }
+
   /* ── Panel de mesa: lo que está siempre abajo ─────────────────────── */
   .panel { flex:none; background:var(--turba); border-top:1px solid var(--liquen);
            padding-bottom:env(safe-area-inset-bottom); }
@@ -233,6 +226,12 @@
               flex-direction:column; align-items:center; gap:4px;
               font:inherit; color:var(--tiza); cursor:pointer; }
   .pj-banda .nom { text-shadow:0 1px 3px #000; }
+  .pj-banda .oficio { display:flex; align-items:center; gap:4px; font:500 .6rem/1 var(--mono);
+                      letter-spacing:.06em; text-transform:uppercase; color:var(--sebo);
+                      text-shadow:0 1px 3px #000; }
+  .pj-banda .oficio i { font-style:normal; font-size:.78rem; }
+  .pj-banda .px { font:500 .58rem/1 var(--mono); color:var(--tiza-baja);
+                  text-shadow:0 1px 3px #000; }
   .pj-banda .pgnum { text-shadow:0 1px 3px #000; }
 
   .marco { width:var(--marco); max-width:100%; aspect-ratio:1; position:relative;
@@ -269,15 +268,22 @@
   .pj-banda[data-estado="caido"]  .cara { filter:grayscale(1) brightness(.5); }
   .pj-banda[data-estado="caido"]  .nom { color:var(--tiza-baja); text-decoration:line-through; }
 
-  @keyframes latido { 0%,100% { transform:scale(1) } 48% { transform:scale(1.02) }
-                      /* el achatamiento rápido del final se lee como un parpadeo */
-                      95% { transform:scale(1.004) scaleY(.974) } 97% { transform:scale(1.004) } }
-  @keyframes mirar  { 0%,38% { object-position:50% 30% } 44%,54% { object-position:44% 29% }
-                      60%,72% { object-position:56% 31% } 78%,100% { object-position:50% 30% } }
-  @keyframes tic    { 0%,100% { transform:none } 25% { transform:rotate(-1.2deg) translateY(-1px) }
-                      65% { transform:rotate(.8deg) } }
+  /* ── Que las caras estén VIVAS ─────────────────────────────────────────
+     Con una sola imagen no se pueden dibujar párpados de verdad, así que se hacen con capas
+     encima del retrato: una barra oscura que baja desde arriba para el parpadeo, otra que sube
+     para el bostezo, y desplazamiento del encuadre para mirar a los lados. El resultado a
+     tamaño de marco se lee como una cara que respira, mira y se aburre.
 
-  .cara     { animation:latido 6.5s ease-in-out infinite; }
+     Y lo que se pidió y faltaba: cuando le pegan, la cara SE ENCOGE y se pone roja. Lo dispara
+     el JavaScript al bajar los PG, no un bucle, porque tiene que coincidir con el golpe. */
+
+  /* Respirar: lento, y con distinta duración por hueco para que no respiren a la vez. */
+  @keyframes latido { 0%,100% { transform:scale(1) } 48% { transform:scale(1.018) } }
+  /* Mirar: desplaza el encuadre. Se para en cada extremo, como quien echa un ojo y vuelve. */
+  @keyframes mirar  { 0%,30% { object-position:50% 30% } 36%,46% { object-position:41% 29% }
+                      52%,62% { object-position:59% 31% } 68%,100% { object-position:50% 30% } }
+
+  .cara { animation:latido 6.5s ease-in-out infinite; }
   .cara img { animation:mirar 17s ease-in-out infinite; }
   .pj-banda:nth-child(2) .cara { animation-duration:7.4s; animation-delay:-2.1s; }
   .pj-banda:nth-child(2) .cara img { animation-duration:21s; animation-delay:-6s; }
@@ -285,6 +291,66 @@
   .pj-banda:nth-child(3) .cara img { animation-duration:14s; animation-delay:-11s; }
   .pj-banda:nth-child(4) .cara { animation-duration:8.1s; animation-delay:-1.2s; }
   .pj-banda:nth-child(4) .cara img { animation-duration:19s; animation-delay:-3s; }
+
+  /* ── La capa que anima la cara ─────────────────────────────────────────
+     SVG encima del retrato, con los párpados justo sobre los ojos y la boca sobre la boca. Las
+     coordenadas de cada retrato están medidas a mano en app/rasgos.js.
+
+     El intento anterior era una franja oscura que bajaba por todo el recuadro: movía el marco y
+     dejaba la cara quieta, y se veía exactamente igual de mal que suena. */
+  .capacara { position:absolute; inset:3px; width:calc(100% - 6px); height:calc(100% - 6px);
+              pointer-events:none; overflow:visible; }
+  /* En reposo los párpados están recogidos (escala vertical cero): no se ven. */
+  .capacara .ojo { transform:scaleY(0); }
+  /* Tono de párpado: piel en penumbra. No es el color exacto de nadie, pero a este tamaño el
+     ojo lee «cerrado» por la forma y la línea de pestañas, no por el tono. */
+  .capacara .lid { fill:#8A6A52; }
+  .capacara .pestana { fill:none; stroke:#2A1C14; stroke-width:.006; }
+  .capacara .bocota { fill:#160C09; }
+  .capacara .ceno { stroke:#2A1C14; stroke-width:.012; stroke-linecap:round; opacity:0; }
+
+  @keyframes cerrar-ojos { 0%,100% { transform:scaleY(0) } 40%,60% { transform:scaleY(1) } }
+  .marco[data-parpadea] .capacara .ojo { animation:cerrar-ojos .24s ease-in-out; }
+  /* Los dos ojos no parpadean exactamente a la vez: 20 ms de desfase y ya parece natural. */
+  .marco[data-parpadea] .capacara .ojo.der { animation-delay:.02s; }
+
+  @keyframes bostezo-boca { 0%,100% { ry:.001 } 34% { ry:.055 } 64% { ry:.075 } 88% { ry:.02 } }
+  @keyframes bostezo-ojos { 0%,100% { transform:scaleY(0) } 26%,80% { transform:scaleY(.85) } }
+  .marco[data-bosteza] .capacara .bocota { animation:bostezo-boca 1.5s ease-in-out; }
+  .marco[data-bosteza] .capacara .ojo { animation:bostezo-ojos 1.5s ease-in-out; }
+
+  /* Dolor: ojos apretados, boca abierta un instante y las cejas fruncidas. */
+  @keyframes dolor-ojos { 0% { transform:scaleY(0) } 20%,70% { transform:scaleY(1) }
+                          100% { transform:scaleY(0) } }
+  @keyframes dolor-boca { 0%,100% { ry:.001 } 30%,60% { ry:.035 } }
+  @keyframes dolor-ceno { 0%,100% { opacity:0 } 25%,70% { opacity:.85 } }
+  .marco[data-golpe] .capacara .ojo { animation:dolor-ojos .5s ease-out; }
+  .marco[data-golpe] .capacara .bocota { animation:dolor-boca .5s ease-out; }
+  .marco[data-golpe] .capacara .ceno { animation:dolor-ceno .5s ease-out; }
+
+  /* Tic: una ladeada rápida de cabeza. */
+  @keyframes tic { 0%,100% { transform:none } 25% { transform:rotate(-1.4deg) translateY(-1px) }
+                   65% { transform:rotate(.9deg) } }
+
+  /* GOLPE: se encoge, se sacude y se tiñe de rojo. Lo dispara el daño, no un temporizador. */
+  @keyframes golpe { 0% { transform:none; filter:none }
+                     12% { transform:scale(.94) translateX(-3px); filter:brightness(1.5) saturate(2.2) }
+                     28% { transform:scale(.96) translateX(4px); filter:brightness(.8) }
+                     44% { transform:scale(.97) translateX(-3px) }
+                     70% { transform:scale(.99) translateX(2px) }
+                     100% { transform:none; filter:none } }
+  .marco[data-golpe] { animation:golpe .5s ease-out; }
+  .marco[data-golpe]::after { content:""; position:absolute; inset:0; pointer-events:none;
+                              background:#8D3524; mix-blend-mode:screen;
+                              animation:sangre .5s ease-out; }
+  @keyframes sangre { 0% { opacity:.55 } 100% { opacity:0 } }
+
+  /* CURA: un destello verde, para que curar también se note. */
+  @keyframes cura { 0% { opacity:.4 } 100% { opacity:0 } }
+  .marco[data-cura]::after { content:""; position:absolute; inset:0; pointer-events:none;
+                             background:#7C9455; mix-blend-mode:screen;
+                             animation:cura .6s ease-out; }
+
   .marco[data-tic] { animation:tic .75s ease-in-out; }
   /* Inconsciente no gesticula. */
   .pj-banda[data-estado="caido"] .cara,
@@ -322,10 +388,13 @@
 
   .dj { flex:none; display:flex; align-items:center; gap:10px; padding:9px 11px;
         border-bottom:1px solid var(--liquen); background:var(--musgo); }
-  .dj .cara-dj { width:54px; height:54px; flex:none; position:relative; overflow:hidden;
-                 border:1px solid #0A0B07; box-shadow:inset 0 0 0 1px #6E7A4E;
-                 background:#0B0D07; }
-  .dj .cara-dj img { width:100%; height:100%; object-fit:cover; object-position:50% 30%; }
+  .dj .cara-dj { width:58px; height:58px; flex:none; position:relative; overflow:hidden;
+                 border:1px solid #0A0B07; box-shadow:inset 0 0 0 1px #2E3422;
+                 background:#0B0D07; transition:box-shadow 180ms, filter 180ms; }
+  .dj .cara-dj img { width:100%; height:100%; object-fit:cover; object-position:50% 30%;
+                     transition:filter 180ms; }
+  /* En reposo, apagado: si brilla siempre, brillar no significa nada. */
+  .dj[data-estado="listo"] .cara-dj img { filter:grayscale(.75) brightness(.62); }
   .dj .quien-dj { min-width:0; }
   .dj .quien-dj b { display:block; font:400 .92rem/1.2 var(--serif); }
   .dj .quien-dj span { font:500 .64rem/1.3 var(--mono); color:var(--tiza-baja);
@@ -333,13 +402,24 @@
   /* Se ilumina cuando habla: es la señal de que le toca a él y no a la mesa. */
   @keyframes brillo { 0%,100% { box-shadow:inset 0 0 0 1px var(--ambar), 0 0 10px #D9A04A55 }
                       50% { box-shadow:inset 0 0 0 1px #F0C97A, 0 0 22px #D9A04A99 } }
-  .dj[data-estado="hablando"] { background:#2A2415; }
-  .dj[data-estado="hablando"] .cara-dj { animation:brillo 1.5s ease-in-out infinite; }
-  .dj[data-estado="pensando"] .cara-dj { box-shadow:inset 0 0 0 1px var(--sebo); opacity:.75; }
+  .dj[data-estado="hablando"] { background:#2E2716; }
+  .dj[data-estado="hablando"] .cara-dj { animation:brillo 1.4s ease-in-out infinite; }
+  .dj[data-estado="hablando"] .cara-dj img { filter:brightness(1.15) saturate(1.1); }
+  .dj[data-estado="pensando"] .cara-dj { box-shadow:inset 0 0 0 1px var(--sebo); }
+  .dj[data-estado="pensando"] .cara-dj img { filter:grayscale(.3) brightness(.85); }
   .dj[data-estado="grabando"] { background:#2A1512; }
-  .dj[data-estado="grabando"] .cara-dj { opacity:.5; }
+  .dj[data-estado="grabando"] .cara-dj { box-shadow:inset 0 0 0 1px var(--herrumbre); }
+  .dj[data-estado="grabando"] .cara-dj img { filter:grayscale(1) brightness(.5); }
 
   /* Lo que el DJ ha cambiado, bajo su turno: PG, heridas, suministros, escena. */
+  .turno .quien { display:flex; align-items:center; gap:7px; }
+  .repe { min-height:0; padding:2px 7px; border:1px solid var(--liquen); background:#0E100A;
+          font:400 .66rem/1.4 var(--mono); color:var(--sebo); }
+  .repe[data-suena="si"] { border-color:var(--ambar); color:var(--ambar); background:#2A2415; }
+  .repe[data-suena="si"] span::before { content:"■ parar"; }
+  .repe[data-suena="si"] span { font-size:0; }
+  .repe[data-suena="si"] span::before { font-size:.66rem; }
+
   .hechos { margin:7px 0 0; padding-left:1.05em; display:flex; flex-direction:column; gap:3px; }
   .hechos li { font:500 .72rem/1.35 var(--mono); color:var(--sebo); }
   .hechos li::marker { color:var(--liquen); }
@@ -377,6 +457,41 @@
   .pulla span { display:block; font-style:normal; font:500 .6rem/1.6 var(--mono);
                 letter-spacing:.1em; text-transform:uppercase; color:var(--tiza-baja); }
 
+  /* ── Muñeco de equipo ─────────────────────────────────────────────────
+     Una silueta con las ranuras donde van en el cuerpo, en vez de una lista de campos. Se toca
+     una ranura y se escribe lo que lleva. */
+  .muneco-caja { display:grid; grid-template-columns:minmax(200px,1fr) minmax(160px,1fr);
+                 gap:14px; margin-top:10px; align-items:start; }
+  .muneco { width:100%; max-width:360px; aspect-ratio:304/318; background:#0E100A;
+            border:1px solid var(--liquen); }
+  .muneco .cuerpo { fill:none; stroke:#39412B; stroke-width:2.4; stroke-linecap:round; }
+  .muneco .cuerpo ellipse { fill:#151910; }
+  .muneco .ranura { cursor:pointer; }
+  .muneco .ranura circle { fill:#151910; stroke:#39412B; stroke-width:1.6; }
+  .muneco .ranura .ico { font-size:11px; text-anchor:middle; opacity:.45; }
+  .muneco .ranura .etiq { font:400 8.4px var(--mono); fill:var(--tiza-baja); }
+  .muneco .ranura.puesta circle { fill:#2A2415; stroke:var(--sebo); stroke-width:2; }
+  .muneco .ranura.puesta .ico { opacity:1; }
+  .muneco .ranura.puesta .etiq { fill:var(--tiza); }
+  .muneco .ranura:hover circle, .muneco .ranura:focus circle { stroke:var(--ambar); }
+  .muneco .ranura:focus { outline:none; }
+
+  .mochila { display:flex; flex-direction:column; gap:8px; }
+  .bolsa { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px; }
+  .bolsa li { display:flex; align-items:center; gap:8px; background:#0E100A;
+              border:1px solid var(--liquen); padding:5px 6px 5px 10px; font-size:.86rem; }
+  .bolsa li span { flex:1; min-width:0; }
+  .bolsa li button { min-height:26px; padding:0 8px; border:none; background:none;
+                     color:var(--tiza-baja); font-size:.8rem; }
+  .bolsa .nada { color:var(--tiza-baja); font-style:italic; border-style:dashed; }
+
+  /* Barra de experiencia hacia el siguiente nivel. */
+  .pxbar { position:relative; height:20px; background:#0E100A; border:1px solid var(--liquen); }
+  .pxbar i { display:block; height:100%; background:linear-gradient(#3C4A6A,#2A3350); }
+  .pxbar span { position:absolute; inset:0; display:flex; align-items:center;
+                justify-content:center; font:500 .62rem/1 var(--mono); letter-spacing:.06em;
+                color:var(--tiza); text-shadow:0 1px 2px #000; }
+
   /* Huecos de equipo. Dos columnas en ancho, una en estrecho. */
   .huecos { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:7px;
             margin-top:8px; }
@@ -400,9 +515,11 @@
   .notas { margin:6px 0 0; font-size:.88rem; white-space:pre-wrap; }
   .ficha-caja h3 { margin:0; font:400 1.3rem/1.2 var(--serif); }
   .ficha-caja .sub { font:400 .8rem/1.3 var(--serif); font-style:italic; color:var(--tiza-baja); }
-  .ficha-rejilla { display:grid; grid-template-columns:repeat(auto-fit,minmax(88px,1fr)); gap:8px; }
+  .ficha-rejilla { display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:8px; }
   .ficha-rejilla div { background:var(--musgo-alto); border:1px solid var(--liquen);
-                       padding:8px 10px; }
+                       padding:8px 10px; position:relative; }
+  .ficha-rejilla i { position:absolute; top:6px; right:8px; font-style:normal; font-size:.9rem;
+                     opacity:.5; }
   .ficha-rejilla b { display:block; font:500 1.1rem/1 var(--mono);
                      font-variant-numeric:tabular-nums; color:var(--sebo); }
   .ficha-rejilla span { font:500 .6rem/1.4 var(--mono); letter-spacing:.1em;
@@ -412,6 +529,7 @@
   @media (max-width: 780px) {
     .tablero { flex-direction:column; }
     .escenario { flex:none; height:44%; }
+    .muneco-caja { grid-template-columns:1fr; }
     .lateral { width:auto; flex:1; border-left:none; border-top:1px solid var(--liquen); }
     .pie-escena { display:none; }
   }
@@ -428,6 +546,7 @@
   @media (prefers-reduced-motion:reduce) {
     * { transition:none !important; }
     .cara, .cara img, .marco[data-tic] { animation:none !important; }
+    .capacara * { animation:none !important; }
   }
 </style>
 </head>
@@ -483,13 +602,14 @@
 
       <!-- Cantar una tirada es lo que más se hace en mesa: un campo y ya. -->
       <form class="tirada" id="tirada-forma">
-        <input id="tirada" inputmode="numeric" autocomplete="off" placeholder="tirada">
-        <button type="submit">🎲 Canto</button>
+        <input id="tirada" inputmode="numeric" autocomplete="off"
+               placeholder="tu resultado del d20">
+        <button type="submit" title="Le dices al DJ lo que has sacado">🎲 Cantar</button>
       </form>
 
       <div class="fila">
-        <button id="acc-narracion"><span class="icono">▶</span><span>Narración</span></button>
-        <button id="acc-antorcha"><span class="icono">🔥</span><span>−1 antorcha</span></button>
+        <button id="acc-narracion" title="Reproduce la narración grabada de esta escena"><span class="icono">▶</span><span>Narrar escena</span></button>
+        <button id="acc-antorcha" title="Descuenta una antorcha de los suministros del grupo"><span class="icono">🔥</span><span>Gastar antorcha</span></button>
       </div>
       <audio id="esc-audio" preload="metadata"></audio>
       <p style="margin:0;font-size:.72rem;color:var(--tiza-baja)" id="esc-nota-audio"></p>
