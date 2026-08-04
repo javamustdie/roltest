@@ -309,7 +309,7 @@ function pintarCharla() {
   const c = $("#charla");
   if (!E.charla.length) {
     c.innerHTML = `<div class="turno" data-de="dj"><div class="quien">director de juego</div>
-      <p>Aprieta el botón de abajo y pregúntame lo que quieras. Suéltalo cuando acabes.</p></div>`;
+      <p>Toca el botón de abajo, habla, y vuelve a tocarlo para enviar. O escríbeme aquí.</p></div>`;
     return;
   }
   c.innerHTML = E.charla
@@ -342,12 +342,20 @@ function pintarBanda() {
              onerror="this.replaceWith(Object.assign(document.createElement('span'),
                       {className:'inicial',textContent:${JSON.stringify(iniciales(p.pj))}}))">`
         : `<span class="inicial">${esc(iniciales(p.pj))}</span>`;
+      // La segunda barra es el agotamiento, en el sitio donde el original ponía los puntos de
+      // hechizo. Se llena al empeorar, al contrario que la vida, y a 6 mata.
+      const agot = Math.max(0, Math.min(6, p.agotamiento ?? 0));
       return `<button class="pj-banda" data-estado="${estadoPj(p)}" data-pjbanda="${i}"
-                 aria-label="${esc(p.pj)}, ${p.pg} de ${p.pgMax} puntos de golpe">
+                 aria-label="${esc(p.pj)}, ${p.pg} de ${p.pgMax} puntos de golpe${
+                   agot ? `, agotamiento ${agot} de 6` : ""
+                 }">
         <span class="marco"><span class="cara">${cara}</span><span class="vidrio"></span></span>
         <span class="nom">${esc(p.pj)}</span>
-        <span class="pgbar"><i style="width:${pct}%"></i></span>
-        <span class="pgnum">${p.pg}/${p.pgMax}</span>
+        <span class="medidor">
+          <span class="pgbar"><i style="width:${pct}%"></i></span>
+          <span class="agotbar"><i style="width:${(agot / 6) * 100}%"></i></span>
+        </span>
+        <span class="pgnum">${p.pg}/${p.pgMax}${agot ? ` · ago ${agot}` : ""}</span>
       </button>`;
     })
     .join("");
@@ -472,7 +480,7 @@ function pintarGasto() {
 
 function pintarTodo() {
   pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarBanda();
-  pintarMapa(); pintarGasto();
+  pintarMapa(); pintarGasto(); pintarArrancar();
 }
 
 const esc = (s) =>
@@ -596,7 +604,7 @@ $("#restaurar-pj").addEventListener("click", () => {
 });
 
 $("#charla-limpiar").addEventListener("click", () => {
-  E.charla = []; guardarEstado(); pintarCharla();
+  E.charla = []; guardarEstado(); pintarCharla(); pintarArrancar();
 });
 
 $("#gasto-reset").addEventListener("click", () => {
@@ -643,6 +651,7 @@ $("#aventura").addEventListener("change", (ev) => cambiarAventura(ev.target.valu
 $("#sesion-cero").addEventListener("change", (ev) => {
   A.sesionCero = ev.target.checked;
   guardarAjustes();
+  pintarArrancar();
   ponEstado(
     A.sesionCero
       ? "Modo sesión cero. Aprieta el botón de hablar y el DJ empieza por las líneas y velos."
@@ -718,7 +727,22 @@ function ponEstado(txt, clase) {
   e.textContent = txt;
   e.className = `estado-linea ${clase}`;
 }
-function avisar(txt) { ponEstado(txt, "mal"); }
+/**
+ * Un aviso que se VE, en el panel de abajo, esté la mesa en la pestaña que esté.
+ *
+ * Antes esto escribía solo en la línea de estado de Ajustes, así que cualquier fallo durante la
+ * partida —micrófono denegado, clave rechazada, sin saldo— era un fallo invisible: la app no
+ * hacía nada y no decía por qué. Se sigue escribiendo también en Ajustes, que es donde se
+ * comprueban las claves.
+ */
+function avisar(txt) {
+  ponEstado(txt, "mal");
+  const a = $("#aviso");
+  a.textContent = txt;
+  a.hidden = false;
+}
+function limpiarAviso() { $("#aviso").hidden = true; }
+$("#aviso").addEventListener("click", limpiarAviso);
 
 function cabecerasClaude() {
   return {
@@ -731,8 +755,24 @@ function cabecerasClaude() {
 }
 
 // ── Voz: micrófono → texto → Claude → voz ────────────────────────────────────
+/**
+ * El botón FUNCIONA POR TOQUES, no manteniéndolo pulsado, y eso es una corrección.
+ *
+ * Con mantener-pulsado la primera vez no funcionaba nunca: el navegador abre el diálogo de
+ * permiso del micrófono, tú sueltas el botón para poder darle a «Permitir», y cuando
+ * `getUserMedia` por fin resuelve ya nadie está pulsando — la grabación arrancaba huérfana y
+ * no la paraba nada. Con ratón era aún peor, porque salirse un píxel del botón la cortaba.
+ *
+ * Tocar para empezar y tocar para enviar se comporta igual con dedo, ratón y teclado, y el
+ * permiso se puede pedir tranquilamente antes, en su propio paso.
+ *
+ * El micro se mantiene abierto entre turnos: pedirlo en cada pregunta añade medio segundo y
+ * en algunos navegadores vuelve a preguntar.
+ */
 const bHablar = $("#hablar"), tHablar = $("#hablar-txt");
 let grabadora = null, trozos = [], inicioGrab = 0, ocupado = false;
+let micro = null; // MediaStream reutilizado
+let cronometro = null;
 
 function modo(m, txt) {
   bHablar.dataset.modo = m;
@@ -740,64 +780,170 @@ function modo(m, txt) {
 }
 function actualizarBotonHablar() {
   const falta = !A.clave11 || !A.claveCl;
+  // Ocupado NO desactiva el botón: mientras piensa sirve para cancelar.
   bHablar.disabled = falta;
-  modo("listo", falta ? "Pon las claves en Ajustes" : "Mantén pulsado para hablar");
+  if (falta) return modo("listo", "Pon las claves en Ajustes");
+  if (ocupado) return;
+  modo("listo", grabadora ? "Enviar" : "Toca para hablar");
 }
 
-async function empezar() {
-  if (ocupado || bHablar.disabled) return;
+/** Pide el micrófono una vez y se queda con el flujo. Devuelve null si no se puede. */
+async function pedirMicro() {
+  if (micro?.active) return micro;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    avisar(
+      "Este navegador no da acceso al micrófono. Suele ser porque la página no está en https. " +
+        "Escribe tu turno en el recuadro de abajo mientras lo arreglamos.",
+    );
+    return null;
+  }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    trozos = [];
-    grabadora = new MediaRecorder(stream);
-    grabadora.ondataavailable = (e) => e.data.size && trozos.push(e.data);
-    grabadora.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      procesar(new Blob(trozos, { type: grabadora.mimeType || "audio/webm" }));
-    };
-    grabadora.start();
-    inicioGrab = Date.now();
-    modo("grabando", "Suelta cuando acabes");
-    if (navigator.vibrate) navigator.vibrate(18);
-  } catch {
-    avisar("No he podido acceder al micrófono. Dale permiso al navegador.");
+    micro = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return micro;
+  } catch (e) {
+    // Distinguir los tres fallos: el navegador los llama distinto y se arreglan distinto.
+    const n = e?.name ?? "";
+    avisar(
+      n === "NotAllowedError"
+        ? "Has denegado el micrófono (o el navegador lo bloquea). Toca el candado de la barra de " +
+            "direcciones, permite el micrófono y recarga. Mientras, escribe tu turno abajo."
+        : n === "NotFoundError"
+          ? "No encuentro ningún micrófono conectado. Escribe tu turno abajo."
+          : `No he podido abrir el micrófono (${n || "error desconocido"}). Escribe tu turno abajo.`,
+    );
+    return null;
   }
 }
 
-function parar() {
-  if (grabadora?.state === "recording") grabadora.stop();
-  grabadora = null;
+async function empezarGrabacion() {
+  const stream = await pedirMicro();
+  if (!stream) return;
+  trozos = [];
+  grabadora = new MediaRecorder(stream);
+  grabadora.ondataavailable = (e) => e.data.size && trozos.push(e.data);
+  grabadora.onstop = () => procesar(new Blob(trozos, { type: grabadora?.mimeType || "audio/webm" }));
+  grabadora.start();
+  inicioGrab = Date.now();
+  modo("grabando", "Grabando 0 s · toca para enviar");
+  cronometro = setInterval(() => {
+    modo("grabando", `Grabando ${Math.round((Date.now() - inicioGrab) / 1000)} s · toca para enviar`);
+  }, 1000);
+  if (navigator.vibrate) navigator.vibrate(18);
 }
 
-for (const [ini, fin] of [["pointerdown", "pointerup"], ["pointercancel", null]]) {
-  bHablar.addEventListener(ini, (e) => { e.preventDefault(); ini === "pointerdown" ? empezar() : parar(); });
-  if (fin) bHablar.addEventListener(fin, (e) => { e.preventDefault(); parar(); });
+function pararGrabacion() {
+  clearInterval(cronometro);
+  const g = grabadora;
+  grabadora = null;
+  if (g?.state === "recording") g.stop();
+  else actualizarBotonHablar();
 }
-bHablar.addEventListener("pointerleave", parar);
-bHablar.addEventListener("contextmenu", (e) => e.preventDefault());
+
+bHablar.addEventListener("click", () => {
+  // Mientras piensa o habla, el botón CANCELA. Es la salida cuando algo tarda demasiado, y
+  // evita el único estado del que antes no se podía salir sin recargar la página.
+  if (ocupado) {
+    enCurso?.ac.abort(new Error("cancelado por la mesa"));
+    return;
+  }
+  if (bHablar.disabled) return;
+  grabadora ? pararGrabacion() : empezarGrabacion();
+});
+
+// ── Escribir el turno, en vez de hablarlo ────────────────────────────────────
+// No es un adorno: si el micrófono falla —permiso denegado, sin https, portátil sin micro— sin
+// esto no se puede jugar en absoluto. Y para dictar nombres propios va mejor.
+$("#escribir-forma").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const c = $("#escribir");
+  const texto = c.value.trim();
+  if (!texto || ocupado) return;
+  if (!A.claveCl) { avisar("Falta la clave de Anthropic en Ajustes."); return; }
+  c.value = "";
+  await turno(null, 0, texto);
+});
+
+// ── Botón de empezar ─────────────────────────────────────────────────────────
+// Antes había que adivinar que el arranque era mantener pulsado el botón de hablar y decir algo.
+// Esto manda el primer turno ya escrito, así que la partida empieza con un toque y sin micrófono.
+function pintarArrancar() {
+  const cero = !!A.sesionCero;
+  $("#arrancar-txt").textContent = cero ? "Empezar la sesión cero" : "Empezar la escena";
+  $("#arrancar-nota").textContent = cero
+    ? "El DJ empieza por las líneas y velos, luego el mundo y los arquetipos, y después os " +
+      "pregunta a cada uno. No hace falta micrófono: puedes contestar escribiendo."
+    : "El DJ describe dónde estáis y qué se puede hacer. Para crear personajes, marca «Modo " +
+      "sesión cero» en Ajustes.";
+  $("#sec-arrancar").hidden = E.charla.length > 0;
+}
+
+$("#arrancar").addEventListener("click", async () => {
+  if (ocupado) return;
+  if (!A.claveCl) { avisar("Falta la clave de Anthropic en Ajustes."); return; }
+  await turno(
+    null,
+    0,
+    A.sesionCero
+      ? "Somos la mesa y es nuestra primera vez. Empieza la sesión cero por el paso uno."
+      : "Empezamos. Descríbenos la escena y qué vemos.",
+  );
+});
 
 async function procesar(blob) {
   const segundos = (Date.now() - inicioGrab) / 1000;
-  if (segundos < 0.4) { actualizarBotonHablar(); return; }
+  if (segundos < 0.4) {
+    avisar("Ha sido demasiado corto. Toca, habla, y vuelve a tocar para enviar.");
+    actualizarBotonHablar();
+    return;
+  }
+  await turno(blob, segundos);
+}
 
+/**
+ * Aborta una petición que no contesta.
+ *
+ * Sin esto, un `fetch` que se queda colgado —wifi de mesa que se cae a medias, servicio que no
+ * responde— dejaba `ocupado` en true PARA SIEMPRE: el botón de hablar, el recuadro de escribir y
+ * el de empezar quedaban muertos y la única salida era recargar la página. Era el fallo que
+ * hacía parecer que el micrófono no funcionaba.
+ */
+function conLimite(ms, queEs) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(new Error(`${queEs} no ha contestado en ${ms / 1000} s`)), ms);
+  return { señal: ac.signal, listo: () => clearTimeout(t), abortar: () => ac.abort(), ac };
+}
+
+/** Petición en curso, para poder cancelarla desde el botón. */
+let enCurso = null;
+
+/** Envía un turno a Claude: desde el micrófono (blob) o escrito (texto). */
+async function turno(blob, segundos, textoEscrito) {
+  limpiarAviso();
   ocupado = true;
-  modo("pensando", "Transcribiendo…");
+  modo("pensando", (textoEscrito ? "Pensando…" : "Transcribiendo…") + " · toca para cancelar");
+  actualizarBotonHablar();
   try {
-    // 1. Lo que habéis dicho → texto
-    const fd = new FormData();
-    fd.append("file", blob, "voz.webm");
-    fd.append("model_id", "scribe_v1");
-    fd.append("language_code", "spa");
-    const rs = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
-      method: "POST", headers: { "xi-api-key": A.clave11 }, body: fd,
-    });
-    if (!rs.ok) throw new Error(`transcripción falló (${rs.status})`);
-    const dicho = (await rs.json()).text?.trim();
-    E.gasto.sttSeg += segundos;
-    if (!dicho) { throw new Error("no he entendido nada"); }
+    let dicho = textoEscrito?.trim();
+
+    // 1. Lo que habéis dicho → texto (si vino por voz)
+    if (!dicho) {
+      const fd = new FormData();
+      fd.append("file", blob, "voz.webm");
+      fd.append("model_id", "scribe_v1");
+      fd.append("language_code", "spa");
+      const lim = conLimite(30_000, "la transcripción");
+      enCurso = lim;
+      const rs = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+        method: "POST", headers: { "xi-api-key": A.clave11 }, body: fd, signal: lim.señal,
+      }).finally(lim.listo);
+      if (!rs.ok) throw new Error(`no he podido transcribir. ${explicar("ElevenLabs", rs.status)}`);
+      dicho = (await rs.json()).text?.trim();
+      E.gasto.sttSeg += segundos;
+      if (!dicho) throw new Error("no he entendido nada. Prueba a hablar más cerca, o escríbelo abajo");
+    }
 
     E.charla.push({ de: "mesa", texto: dicho });
-    guardarEstado(); pintarCharla();
+    guardarEstado(); pintarCharla(); pintarArrancar();
 
     // 2. Claude responde, en streaming, y se va troceando por frases para que
     //    la voz empiece antes de que termine de escribir.
@@ -814,7 +960,7 @@ async function procesar(blob) {
         const frase = pendiente.slice(0, corte + 1).trim();
         pendiente = pendiente.slice(corte + 1);
         cola.encolar(frase);
-        modo("hablando", "Hablando…");
+        modo("hablando", "Hablando… · toca para cancelar");
       }
     });
     if (pendiente.trim()) cola.encolar(pendiente.trim());
@@ -822,12 +968,15 @@ async function procesar(blob) {
     E.charla.push({ de: "dj", texto: respuesta.trim() || "(silencio)" });
     guardarEstado(); pintarCharla(); pintarGasto();
 
-    modo("hablando", "Hablando…");
+    modo("hablando", "Hablando… · toca para cancelar");
     await cola.terminar();
+    if (cola.fallo) avisar(cola.fallo);
   } catch (e) {
-    avisar(`No ha salido: ${e.message}`);
+    const m = e?.name === "AbortError" ? (e.message || "cancelado") : e.message;
+    avisar(`No ha salido: ${m}`);
   } finally {
     ocupado = false;
+    enCurso = null;
     actualizarBotonHablar();
   }
 }
@@ -883,16 +1032,29 @@ async function claudeStream(pregunta, alRecibir) {
   // Sonnet 5 y Opus 5 piensan por defecto; en voz eso añade segundos.
   if (/sonnet-5|opus-5/.test(A.modelo)) cuerpo.thinking = { type: "disabled" };
 
+  // Dos límites distintos: uno corto para que conteste ALGO, y uno largo para el total. Un
+  // stream que se corta a medias dejaría la app colgada igual que si no contestara nunca.
+  const lim = conLimite(90_000, "el DJ");
+  enCurso = lim;
+  const primerByte = setTimeout(() => lim.ac.abort(new Error("el DJ no ha contestado en 25 s")), 25_000);
+
   const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST", headers: cabecerasClaude(), body: JSON.stringify(cuerpo),
+    method: "POST", headers: cabecerasClaude(), body: JSON.stringify(cuerpo), signal: lim.señal,
+  }).catch((e) => {
+    clearTimeout(primerByte); lim.listo();
+    throw new Error(e?.name === "AbortError" ? String(e.message || "cancelado") : explicar("Claude", 0, e));
   });
+  clearTimeout(primerByte);
+
   if (!r.ok) {
     const d = await r.text().catch(() => "");
-    throw new Error(`Claude ${r.status}${d.includes("credit") ? " (sin saldo)" : ""}`);
+    lim.listo();
+    throw new Error(`${explicar("Claude", r.status)}${d.includes("credit") ? " Sin saldo." : ""}`);
   }
 
   const lector = r.body.getReader(), dec = new TextDecoder();
   let resto = "";
+  try {
   while (true) {
     const { done, value } = await lector.read();
     if (done) break;
@@ -911,6 +1073,9 @@ async function claudeStream(pregunta, alRecibir) {
       }
     }
   }
+  } finally {
+    lim.listo();
+  }
 }
 
 /** Convierte frases en voz y las reproduce en orden, sin solaparse. */
@@ -928,6 +1093,9 @@ class ColaVoz {
     });
   }
   async sintetizar(texto) {
+    // Con límite, y si falla se devuelve null: la frase se queda sin voz pero el texto ya está
+    // en la conversación, así que la partida sigue. Una frase muda es mucho mejor que colgarse.
+    const lim = conLimite(25_000, "la voz");
     try {
       const r = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${this.voz}?output_format=mp3_22050_32`,
@@ -938,12 +1106,21 @@ class ColaVoz {
             text: texto, model_id: A.vozModelo, language_code: "es",
             voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 },
           }),
+          signal: lim.señal,
         },
       );
-      if (!r.ok) return null;
+      if (!r.ok) {
+        this.fallo ??= explicar("ElevenLabs", r.status);
+        return null;
+      }
       E.gasto.ttsCar += texto.length;
       return URL.createObjectURL(await r.blob());
-    } catch { return null; }
+    } catch (e) {
+      this.fallo ??= `la voz no ha salido (${e?.name ?? "error"}). El texto sí está arriba.`;
+      return null;
+    } finally {
+      lim.listo();
+    }
   }
   terminar() { return this.cadena; }
 }

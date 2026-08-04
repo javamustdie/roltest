@@ -18,6 +18,9 @@
     --serif: Georgia,"Iowan Old Style",Palatino,"Book Antiqua",serif;
     --mono: ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
     --barra: 68px;
+    /* Tamaño del marco de retrato. Escala con la pantalla: en un móvil no puede comerse la
+       mitad, y en una tablet o una tele tiene que verse la cara de verdad. */
+    --marco: clamp(80px, 14vh, 158px);
     color-scheme: dark;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -53,19 +56,17 @@
   .reloj[data-urgente="si"] b { color:var(--ambar); }
 
   /* ── Vistas ───────────────────────────────────────────────────────── */
-  main { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
-         padding:14px 16px calc(var(--barra) + 96px); }
+  main { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+         padding:14px 16px 18px; }
   .vista { display:none; flex-direction:column; gap:14px; }
-  /* Hueco al final para el botón flotante de hablar: está fijo sobre el contenido y sin esto
-     tapa la última línea de cada vista (el aviso de la narración, la nota del reloj…). */
-  .vista[data-activa] { display:flex; padding-bottom:calc(64px + 28px); }
+  .vista[data-activa] { display:flex; }
 
   h2 { margin:0; font:500 .68rem/1 var(--mono); letter-spacing:.18em;
        text-transform:uppercase; color:var(--tiza-baja); }
   section { background:var(--musgo); border:1px solid var(--liquen);
             padding:13px 15px; display:flex; flex-direction:column; gap:10px; }
 
-  .lienzo { width:100%; aspect-ratio:16/9; max-height:min(34vh,320px);
+  .lienzo { width:100%; aspect-ratio:16/9; max-height:min(46vh,560px);
             border:1px solid var(--liquen); object-fit:cover; display:block;
             background:linear-gradient(#191D12,#0E100A); }
   .lienzo-vacio { display:flex; align-items:center; justify-content:center;
@@ -90,6 +91,13 @@
   button:disabled .icono { color:#5C6149; }
   .fila { display:flex; gap:9px; flex-wrap:wrap; }
   .fila > button { flex:1; min-width:110px; }
+
+  button.grande { min-height:58px; font-size:1.06rem; border-color:var(--sebo);
+                  background:var(--musgo-alto); }
+  button.grande .icono { font-size:1.2rem; }
+  .escribir { display:flex; gap:8px; }
+  .escribir input { flex:1; min-width:0; }
+  .escribir button { flex:none; }
 
   .barra-progreso { height:3px; background:#FFFFFF12; margin-top:8px; }
   .barra-progreso i { display:block; height:100%; background:var(--sebo); width:0; }
@@ -168,14 +176,19 @@
   .ok { color:#8FA86A; } .mal { color:#D4644A; } .neutro { color:var(--tiza-baja); }
 
   /* ── Botón de hablar, flotante ────────────────────────────────────── */
+  /* ── Panel de mesa: lo que está siempre abajo ─────────────────────── */
+  .panel { flex:none; background:var(--turba); border-top:1px solid var(--liquen);
+           padding-bottom:env(safe-area-inset-bottom); }
+
+  .aviso { width:100%; min-height:0; padding:9px 14px; text-align:left; justify-content:flex-start;
+           background:#2A1512; color:#F0C4B4; border:none; border-bottom:1px solid #8D3524;
+           font:400 .84rem/1.4 var(--serif); }
+  .aviso::after { content:" ✕"; color:#C4705C; margin-left:auto; padding-left:10px; }
+
   .hablar {
-    position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(var(--barra) + 14px + env(safe-area-inset-bottom));
-    width:min(340px, calc(100vw - 32px)); min-height:64px;
-    background:var(--sebo); color:#17140F; border:none;
-    font:400 1.06rem/1 var(--serif); letter-spacing:.02em;
-    box-shadow:0 6px 24px #000000a0; z-index:20;
-    touch-action:none; user-select:none;
+    width:100%; min-height:60px; background:var(--sebo); color:#17140F;
+    border:none; border-bottom:1px solid #00000060;
+    font:400 1.06rem/1 var(--serif); letter-spacing:.02em; user-select:none;
   }
   .hablar[data-modo="grabando"] { background:var(--herrumbre); color:#F2E4DE; }
   .hablar[data-modo="pensando"], .hablar[data-modo="hablando"] {
@@ -185,10 +198,8 @@
 
   /* ── Barra de pestañas ────────────────────────────────────────────── */
   nav {
-    position:fixed; left:0; right:0; bottom:0; z-index:25;
     display:grid; grid-template-columns:repeat(4,1fr);
     background:var(--musgo); border-top:1px solid var(--liquen);
-    padding-bottom:env(safe-area-inset-bottom);
   }
   nav button { flex-direction:column; gap:3px; min-height:var(--barra);
                border:none; background:none; font:400 .68rem/1 var(--mono);
@@ -197,54 +208,64 @@
   nav button[data-activa] { color:var(--sebo); background:#1F2416; }
 
   /* ── Banda de personajes ──────────────────────────────────────────────
-     Los retratos siempre a la vista con la vida debajo, como en los Might and
-     Magic viejos. Las caras «viven» con animación CSS: respiran, parpadean y de
-     vez en cuando hacen un tic. No son fotogramas generados — es movimiento
-     sobre una sola imagen, que a este tamaño se lee igual y no cuesta descargar
-     cuatro retratos por gesto.
-     Cada hueco lleva duraciones distintas para que no respiren a la vez, que es
-     lo que delata el truco. */
-  .banda { flex:none; display:grid; grid-auto-flow:column; grid-auto-columns:1fr;
-           gap:1px; background:var(--liquen); border-bottom:1px solid var(--liquen); }
+     Los cuatro retratos siempre a la vista con la vida debajo, en la barra de abajo, como en
+     los Might and Magic. Que sea ABAJO y GRANDE no es capricho: en aquellos juegos la barra
+     inferior ocupa casi un tercio de la pantalla y la cara llena el marco. En una tira
+     estrecha arriba, con marcos de 90 px, las caras no se distinguían.
+
+     Las caras «viven» con animación CSS sobre UNA sola imagen: respiran, parpadean y de vez en
+     cuando hacen un tic. No son fotogramas generados. Cada hueco lleva duraciones distintas
+     para que no respiren a la vez, que es lo que delata el truco. */
+  .banda { display:flex; justify-content:center; align-items:flex-end; gap:2px;
+           padding:2px; background:linear-gradient(#0E100A,#171B10);
+           box-shadow:inset 0 1px 0 #00000090; }
   .banda:empty { display:none; }
-  .pj-banda { background:var(--musgo); border:none; padding:6px 4px 5px; min-height:0;
-              display:flex; flex-direction:column; align-items:center; gap:4px;
+  .pj-banda { background:var(--musgo); border:1px solid #0A0B07; padding:7px 9px 6px;
+              min-height:0; display:flex; flex-direction:column; align-items:center; gap:5px;
               font:inherit; color:var(--tiza); cursor:pointer; overflow:hidden; }
-  .marco { width:100%; max-width:92px; aspect-ratio:1; position:relative; overflow:hidden;
-           border:1px solid #000; box-shadow:inset 0 0 0 1px #4A5236, 0 1px 0 #000;
-           background:#0B0D07; }
-  .cara { position:absolute; inset:0; }
-  .cara img { width:100%; height:100%; object-fit:cover; object-position:50% 22%; display:block; }
-  /* Sin retrato todavía: iniciales dentro del marco, para que la banda no se vea a medias. */
+  .pj-banda:hover { background:var(--musgo-alto); }
+
+  .marco { width:var(--marco); max-width:100%; aspect-ratio:1; position:relative;
+           overflow:hidden; background:#0B0D07;
+           border:1px solid #0A0B07;
+           box-shadow:inset 0 0 0 1px #6E7A4E, inset 0 0 0 3px #14170E, 0 1px 0 #000; }
+  .cara { position:absolute; inset:3px; }
+  .cara img { width:100%; height:100%; object-fit:cover; object-position:50% 30%; display:block; }
   .cara .inicial { position:absolute; inset:0; display:flex; align-items:center;
-                   justify-content:center; font:500 1.5rem/1 var(--serif); color:#4A5236; }
-  /* Vidrio: viñeteado y línea de barrido, el toque de pantalla vieja. */
-  .vidrio { position:absolute; inset:0; pointer-events:none;
-            background:radial-gradient(125% 105% at 50% 38%, #0000 58%, #00000085 100%),
-                       repeating-linear-gradient(#0000 0 2px, #00000018 2px 3px); }
-  .pj-banda .nom { font:500 .64rem/1 var(--mono); letter-spacing:.06em; max-width:100%;
+                   justify-content:center; font:500 2.1rem/1 var(--serif); color:#4A5236; }
+  /* Vidrio: viñeteado suave y línea de barrido, el toque de pantalla vieja sin tapar la cara. */
+  .vidrio { position:absolute; inset:3px; pointer-events:none;
+            background:radial-gradient(130% 110% at 50% 40%, #0000 62%, #00000078 100%),
+                       repeating-linear-gradient(#0000 0 2px, #00000014 2px 3px); }
+
+  .pj-banda .nom { font:500 .72rem/1 var(--mono); letter-spacing:.05em; max-width:100%;
                    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pgbar { width:100%; max-width:92px; height:5px; background:#0B0D07; border:1px solid #000; }
+  .medidor { width:var(--marco); max-width:100%; display:flex; flex-direction:column; gap:2px; }
+  .pgbar { height:7px; background:#0B0D07; border:1px solid #000; }
   .pgbar i { display:block; height:100%; background:var(--musgo-alto); transition:width .25s; }
-  .pj-banda .pgnum { font:500 .62rem/1 var(--mono); color:var(--tiza-baja);
+  /* Segunda barra, como los puntos de hechizo del original: aquí el agotamiento. */
+  .agotbar { height:4px; background:#0B0D07; border:1px solid #000; }
+  .agotbar i { display:block; height:100%; background:#6A5A8A; transition:width .25s; }
+  .pj-banda .pgnum { font:500 .7rem/1 var(--mono); color:var(--tiza-baja);
                      font-variant-numeric:tabular-nums; }
 
   .pj-banda[data-estado="entero"] .pgbar i { background:#7C9455; }
   .pj-banda[data-estado="tocado"] .pgbar i { background:var(--sebo); }
   .pj-banda[data-estado="grave"]  .pgbar i { background:var(--herrumbre); }
-  .pj-banda[data-estado="grave"]  .marco { box-shadow:inset 0 0 0 1px #7A3A28, 0 1px 0 #000; }
-  .pj-banda[data-estado="caido"]  .marco { box-shadow:inset 0 0 0 1px #2A2A2A, 0 1px 0 #000; }
-  .pj-banda[data-estado="caido"]  .cara { filter:grayscale(1) brightness(.55); }
+  .pj-banda[data-estado="grave"]  .marco {
+    box-shadow:inset 0 0 0 1px #8A4632, inset 0 0 0 3px #170E0B, 0 1px 0 #000; }
+  .pj-banda[data-estado="caido"]  .marco {
+    box-shadow:inset 0 0 0 1px #3A3A3A, inset 0 0 0 3px #101010, 0 1px 0 #000; }
+  .pj-banda[data-estado="caido"]  .cara { filter:grayscale(1) brightness(.5); }
   .pj-banda[data-estado="caido"]  .nom { color:var(--tiza-baja); text-decoration:line-through; }
-  .pj-banda[data-activa] { background:#1F2416; }
 
-  @keyframes latido { 0%,100% { transform:scale(1) } 48% { transform:scale(1.022) }
+  @keyframes latido { 0%,100% { transform:scale(1) } 48% { transform:scale(1.02) }
                       /* el achatamiento rápido del final se lee como un parpadeo */
-                      95% { transform:scale(1.004) scaleY(.972) } 97% { transform:scale(1.004) } }
-  @keyframes mirar  { 0%,38% { object-position:50% 22% } 44%,54% { object-position:43% 21% }
-                      60%,72% { object-position:57% 23% } 78%,100% { object-position:50% 22% } }
-  @keyframes tic    { 0%,100% { transform:none } 25% { transform:rotate(-1.4deg) translateY(-1px) }
-                      65% { transform:rotate(.9deg) } }
+                      95% { transform:scale(1.004) scaleY(.974) } 97% { transform:scale(1.004) } }
+  @keyframes mirar  { 0%,38% { object-position:50% 30% } 44%,54% { object-position:44% 29% }
+                      60%,72% { object-position:56% 31% } 78%,100% { object-position:50% 30% } }
+  @keyframes tic    { 0%,100% { transform:none } 25% { transform:rotate(-1.2deg) translateY(-1px) }
+                      65% { transform:rotate(.8deg) } }
 
   .cara     { animation:latido 6.5s ease-in-out infinite; }
   .cara img { animation:mirar 17s ease-in-out infinite; }
@@ -259,6 +280,15 @@
   .pj-banda[data-estado="caido"] .cara,
   .pj-banda[data-estado="caido"] .cara img { animation:none; }
 
+  @media (max-height: 700px) {
+    :root { --barra: 56px; }
+    .pj-banda { padding:5px 5px 4px; gap:3px; }
+    .pj-banda .pgnum { display:none; }
+    .hablar { min-height:50px; font-size:.98rem; }
+    nav button { min-height:var(--barra); font-size:.62rem; padding:5px 4px; }
+    nav button .g { font-size:1rem; }
+  }
+
   @media (prefers-reduced-motion:reduce) {
     * { transition:none !important; }
     .cara, .cara img, .marco[data-tic] { animation:none !important; }
@@ -272,9 +302,6 @@
   <h1 id="cab-nombre">El camino del sur</h1>
   <div class="reloj" id="cab-reloj" data-urgente="no">Luna Muerta <b>3</b></div>
 </header>
-
-<!-- Los retratos, siempre a la vista. Se rellena desde app.js. -->
-<div class="banda" id="banda"></div>
 
 <main>
   <!-- ══ ESCENA ══════════════════════════════════════════════════════ -->
@@ -303,6 +330,14 @@
       <ul class="sabeis" id="esc-sabeis"></ul>
     </section>
 
+    <section id="sec-arrancar">
+      <h2>Empezar</h2>
+      <button id="arrancar" class="grande">
+        <span class="icono">▸</span><span id="arrancar-txt">Empezar la sesión cero</span>
+      </button>
+      <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="arrancar-nota"></p>
+    </section>
+
     <section>
       <h2>Conversación con el DJ</h2>
       <div class="charla" id="charla">
@@ -311,6 +346,13 @@
           <p>Aprieta el botón de abajo y pregúntame lo que quieras. Suéltalo cuando acabes.</p>
         </div>
       </div>
+      <!-- Escribir es la vía de respaldo cuando el micrófono no está disponible, y también la
+           cómoda para nombres propios, que la transcripción destroza. -->
+      <form id="escribir-forma" class="escribir">
+        <input id="escribir" autocomplete="off" enterkeyhint="send"
+               placeholder="…o escribe tu turno y pulsa Enviar">
+        <button type="submit" id="escribir-enviar">Enviar</button>
+      </form>
       <button id="charla-limpiar"><span class="icono">✕</span><span>Vaciar conversación</span></button>
     </section>
   </div>
@@ -435,16 +477,23 @@
   </div>
 </main>
 
-<button class="hablar" id="hablar" data-modo="listo">
-  <span class="icono">🎤</span><span id="hablar-txt">Mantén pulsado para hablar</span>
-</button>
-
-<nav>
+<!-- Panel de mesa: los retratos, el botón de hablar y las pestañas. Siempre a la vista,
+     como la barra inferior de los Might and Magic. -->
+<div class="panel">
+  <!-- Los avisos van AQUÍ, en el panel, y no en la pestaña de Ajustes: durante la partida nadie
+       está mirando Ajustes, así que un error escrito allí es un error invisible. -->
+  <button class="aviso" id="aviso" hidden></button>
+  <div class="banda" id="banda"></div>
+  <button class="hablar" id="hablar" data-modo="listo">
+    <span class="icono">🎤</span><span id="hablar-txt">Toca para hablar</span>
+  </button>
+  <nav>
   <button data-va="escena" data-activa><span class="g">📖</span><span>Escena</span></button>
   <button data-va="mapa"><span class="g">🗺</span><span>Mapa</span></button>
   <button data-va="grupo"><span class="g">🛡</span><span>Grupo</span></button>
   <button data-va="ajustes"><span class="g">⚙</span><span>Ajustes</span></button>
-</nav>
+  </nav>
+</div>
 
 <script type="module" src="app.js"></script>
 </body>
