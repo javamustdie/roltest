@@ -214,6 +214,17 @@
   .desglose { margin:8px 0 0; font:500 .76rem/1.55 var(--mono); color:var(--tiza-baja); }
   .desglose b { color:var(--tiza); font-weight:500; }
 
+  /* Las heridas, dibujadas en la cara. No se curan nunca en este sistema, así que se ven en el
+     retrato que la mesa tiene delante toda la partida, no solo en una etiqueta de la ficha. */
+  .capacara .heridas-cara { pointer-events:none; }
+  .capacara .cic { fill:none; stroke:#C9A08A; stroke-width:.006; stroke-linecap:round;
+                   opacity:.75; }
+  .capacara .parche { fill:#100E0B; opacity:.82; }
+  .capacara .sangre { fill:none; stroke:#8D3524; stroke-width:.007; stroke-linecap:round;
+                      opacity:.7; }
+  .capacara .bosque { fill:none; stroke:#5A7A3A; stroke-width:.005; stroke-linecap:round;
+                      opacity:.8; }
+
   /* ── Modo tele ──────────────────────────────────────────────────────
      La pestaña que se duplica a la televisión: solo lo que hay que mirar. Los mandos se quedan en
      el tablet, en su propia pestaña. Los retratos y el rótulo crecen, porque una tele se ve desde

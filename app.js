@@ -1121,7 +1121,44 @@ const iniciales = (n) =>
  * tienen altura cero y no se ven. La boca es una elipse oscura que crece al bostezar. Y para el
  * gesto de dolor, dos trazos que fruncen las cejas.
  */
-function capaCara(idRetrato) {
+/**
+ * Las heridas persistentes se DIBUJAN en la cara del retrato, no solo se listan en la ficha.
+ *
+ * En este sistema las heridas no se curan: te acompañan el resto de la campaña. Si solo salen
+ * como una etiqueta roja en una pantalla que hay que abrir, no pesan. Marcadas en la cara que la
+ * mesa tiene delante toda la partida, sí.
+ *
+ * Cada marca se ata a la herida por su NOMBRE, no por el orden en que salieron: la tabla de
+ * heridas es aleatoria y el mismo personaje tiene que salir igual siempre. Lo que no reconoce no
+ * dibuja nada, que es mejor que poner una cicatriz genérica en el sitio equivocado.
+ */
+function marcasDeHerida(heridas, r) {
+  const [ix, iy] = r.ojoIzq, [dx, dy] = r.ojoDer;
+  const [bx, by] = r.boca;
+  const t = (h) => norm(h);
+  const marca = {
+    "ojo danado": `<path class="cic" d="M${dx - r.ojoRx * 1.5} ${dy - r.ojoRy * 3}
+                      L${dx + r.ojoRx * 1.4} ${dy + r.ojoRy * 3.4}"/>
+                   <ellipse class="parche" cx="${dx}" cy="${dy}"
+                      rx="${r.ojoRx * 1.5}" ry="${r.ojoRy * 2.2}"/>`,
+    "oido reventado": `<path class="cic" d="M${dx + r.ojoRx * 3.6} ${dy}
+                          q${r.ojoRx} ${r.ojoRy * 2} 0 ${r.ojoRy * 4}"/>`,
+    cicatriz: `<path class="cic" d="M${ix - r.ojoRx * 1.2} ${iy - r.ojoRy * 3.2}
+                  L${ix - r.ojoRx * 0.2} ${iy + r.ojoRy * 4}"/>`,
+    conmocion: `<path class="cic" d="M${bx - r.bocaRx * 0.7} ${by - r.bocaRx * 1.3}
+                   L${bx + r.bocaRx * 0.2} ${by - r.bocaRx * 0.6}"/>`,
+    hemorragia: `<path class="sangre" d="M${bx + r.bocaRx * 0.35} ${by + 0.012}
+                    q0.004 0.03 -0.002 0.055"/>`,
+    "marca del bosque": `<g class="bosque">
+        <path d="M${ix + r.ojoRx * 2.4} ${iy + r.ojoRy * 5} l0.03 0.022"/>
+        <path d="M${ix + r.ojoRx * 2.4} ${iy + r.ojoRy * 5} l0.024 -0.026"/>
+        <path d="M${ix + r.ojoRx * 2.4} ${iy + r.ojoRy * 5} l-0.008 0.034"/>
+      </g>`,
+  };
+  return (heridas ?? []).map((h) => marca[t(h)] ?? "").join("");
+}
+
+function capaCara(idRetrato, heridas) {
   const r = rasgosDe(idRetrato);
   const ojo = ([x, y], clase) => `
     <g class="ojo ${clase}" style="transform-origin:${x}px ${y - r.ojoRy}px">
@@ -1137,6 +1174,7 @@ function capaCara(idRetrato) {
       <path d="M${cix - r.ojoRx} ${ciy - r.ojoRy * 2.6} L${cix + r.ojoRx} ${ciy - r.ojoRy * 1.4}"/>
       <path d="M${cdx + r.ojoRx} ${cdy - r.ojoRy * 2.6} L${cdx - r.ojoRx} ${cdy - r.ojoRy * 1.4}"/>
     </g>
+    <g class="heridas-cara">${marcasDeHerida(heridas, r)}</g>
   </svg>`;
 }
 
@@ -1157,7 +1195,7 @@ function pintarBanda() {
                    agot ? `, agotamiento ${agot} de 6` : ""
                  }">
         <span class="marco"><span class="cara">${cara}</span>
-          ${p.retrato ? capaCara(p.retrato) : ""}
+          ${p.retrato ? capaCara(p.retrato, p.heridas) : ""}
           <span class="vidrio"></span></span>
         <span class="nom">${esc(p.pj)}</span>
         <!-- Sin icono de clase aquí, y es una decisión: los iconos de objetos.js están dibujados
@@ -3702,7 +3740,7 @@ irA(location.hash.slice(1) || "escena", false);
  * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
  * en mesa algo «no funciona».
  */
-const VERSION_APP = "corvalar-v15";
+const VERSION_APP = "corvalar-v16";
 $("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
 
 if ("serviceWorker" in navigator) {
