@@ -7,7 +7,7 @@
  *
  * Sube VERSION al cambiar cualquier fichero de app/ para forzar la actualización.
  */
-const VERSION = "corvalar-v1";
+const VERSION = "corvalar-v2";
 
 const BASE = [
   "./",
@@ -45,7 +45,7 @@ self.addEventListener("fetch", (e) => {
 
   // Los medios (audio y arte) son inmutables: caché primero, y si no está, red
   // y se guarda para la próxima.
-  if (/\/(audio|arte)\//.test(url.pathname)) {
+  if (/\/(audio|arte|retratos)\//.test(url.pathname)) {
     e.respondWith(
       caches.match(e.request).then(
         (hit) =>

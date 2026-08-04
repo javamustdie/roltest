@@ -196,7 +196,73 @@
   nav button .g { font-size:1.15rem; line-height:1; }
   nav button[data-activa] { color:var(--sebo); background:#1F2416; }
 
-  @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
+  /* ── Banda de personajes ──────────────────────────────────────────────
+     Los retratos siempre a la vista con la vida debajo, como en los Might and
+     Magic viejos. Las caras «viven» con animación CSS: respiran, parpadean y de
+     vez en cuando hacen un tic. No son fotogramas generados — es movimiento
+     sobre una sola imagen, que a este tamaño se lee igual y no cuesta descargar
+     cuatro retratos por gesto.
+     Cada hueco lleva duraciones distintas para que no respiren a la vez, que es
+     lo que delata el truco. */
+  .banda { flex:none; display:grid; grid-auto-flow:column; grid-auto-columns:1fr;
+           gap:1px; background:var(--liquen); border-bottom:1px solid var(--liquen); }
+  .banda:empty { display:none; }
+  .pj-banda { background:var(--musgo); border:none; padding:6px 4px 5px; min-height:0;
+              display:flex; flex-direction:column; align-items:center; gap:4px;
+              font:inherit; color:var(--tiza); cursor:pointer; overflow:hidden; }
+  .marco { width:100%; max-width:92px; aspect-ratio:1; position:relative; overflow:hidden;
+           border:1px solid #000; box-shadow:inset 0 0 0 1px #4A5236, 0 1px 0 #000;
+           background:#0B0D07; }
+  .cara { position:absolute; inset:0; }
+  .cara img { width:100%; height:100%; object-fit:cover; object-position:50% 22%; display:block; }
+  /* Sin retrato todavía: iniciales dentro del marco, para que la banda no se vea a medias. */
+  .cara .inicial { position:absolute; inset:0; display:flex; align-items:center;
+                   justify-content:center; font:500 1.5rem/1 var(--serif); color:#4A5236; }
+  /* Vidrio: viñeteado y línea de barrido, el toque de pantalla vieja. */
+  .vidrio { position:absolute; inset:0; pointer-events:none;
+            background:radial-gradient(125% 105% at 50% 38%, #0000 58%, #00000085 100%),
+                       repeating-linear-gradient(#0000 0 2px, #00000018 2px 3px); }
+  .pj-banda .nom { font:500 .64rem/1 var(--mono); letter-spacing:.06em; max-width:100%;
+                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pgbar { width:100%; max-width:92px; height:5px; background:#0B0D07; border:1px solid #000; }
+  .pgbar i { display:block; height:100%; background:var(--musgo-alto); transition:width .25s; }
+  .pj-banda .pgnum { font:500 .62rem/1 var(--mono); color:var(--tiza-baja);
+                     font-variant-numeric:tabular-nums; }
+
+  .pj-banda[data-estado="entero"] .pgbar i { background:#7C9455; }
+  .pj-banda[data-estado="tocado"] .pgbar i { background:var(--sebo); }
+  .pj-banda[data-estado="grave"]  .pgbar i { background:var(--herrumbre); }
+  .pj-banda[data-estado="grave"]  .marco { box-shadow:inset 0 0 0 1px #7A3A28, 0 1px 0 #000; }
+  .pj-banda[data-estado="caido"]  .marco { box-shadow:inset 0 0 0 1px #2A2A2A, 0 1px 0 #000; }
+  .pj-banda[data-estado="caido"]  .cara { filter:grayscale(1) brightness(.55); }
+  .pj-banda[data-estado="caido"]  .nom { color:var(--tiza-baja); text-decoration:line-through; }
+  .pj-banda[data-activa] { background:#1F2416; }
+
+  @keyframes latido { 0%,100% { transform:scale(1) } 48% { transform:scale(1.022) }
+                      /* el achatamiento rápido del final se lee como un parpadeo */
+                      95% { transform:scale(1.004) scaleY(.972) } 97% { transform:scale(1.004) } }
+  @keyframes mirar  { 0%,38% { object-position:50% 22% } 44%,54% { object-position:43% 21% }
+                      60%,72% { object-position:57% 23% } 78%,100% { object-position:50% 22% } }
+  @keyframes tic    { 0%,100% { transform:none } 25% { transform:rotate(-1.4deg) translateY(-1px) }
+                      65% { transform:rotate(.9deg) } }
+
+  .cara     { animation:latido 6.5s ease-in-out infinite; }
+  .cara img { animation:mirar 17s ease-in-out infinite; }
+  .pj-banda:nth-child(2) .cara { animation-duration:7.4s; animation-delay:-2.1s; }
+  .pj-banda:nth-child(2) .cara img { animation-duration:21s; animation-delay:-6s; }
+  .pj-banda:nth-child(3) .cara { animation-duration:5.9s; animation-delay:-4.3s; }
+  .pj-banda:nth-child(3) .cara img { animation-duration:14s; animation-delay:-11s; }
+  .pj-banda:nth-child(4) .cara { animation-duration:8.1s; animation-delay:-1.2s; }
+  .pj-banda:nth-child(4) .cara img { animation-duration:19s; animation-delay:-3s; }
+  .marco[data-tic] { animation:tic .75s ease-in-out; }
+  /* Inconsciente no gesticula. */
+  .pj-banda[data-estado="caido"] .cara,
+  .pj-banda[data-estado="caido"] .cara img { animation:none; }
+
+  @media (prefers-reduced-motion:reduce) {
+    * { transition:none !important; }
+    .cara, .cara img, .marco[data-tic] { animation:none !important; }
+  }
 </style>
 </head>
 <body>
@@ -206,6 +272,9 @@
   <h1 id="cab-nombre">El camino del sur</h1>
   <div class="reloj" id="cab-reloj" data-urgente="no">Luna Muerta <b>3</b></div>
 </header>
+
+<!-- Los retratos, siempre a la vista. Se rellena desde app.js. -->
+<div class="banda" id="banda"></div>
 
 <main>
   <!-- ══ ESCENA ══════════════════════════════════════════════════════ -->

@@ -322,11 +322,57 @@ function pintarCharla() {
 }
 
 function estadoPj(p) {
-  if (p.pg <= 0) return "grave";
+  if (p.pg <= 0) return "caido";
   if (p.pg <= p.pgMax / 3) return "grave";
   if (p.pg <= p.pgMax / 2) return "tocado";
   return "entero";
 }
+
+// ── Banda de personajes ──────────────────────────────────────────────────────
+/** Iniciales para el hueco de quien aún no tiene retrato. */
+const iniciales = (n) =>
+  n.trim().split(/\s+/).slice(0, 2).map((x) => x[0] ?? "").join("").toUpperCase() || "?";
+
+function pintarBanda() {
+  $("#banda").innerHTML = E.partida
+    .map((p, i) => {
+      const pct = Math.max(0, Math.min(100, (p.pg / Math.max(1, p.pgMax)) * 100));
+      const cara = p.retrato
+        ? `<img alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp"
+             onerror="this.replaceWith(Object.assign(document.createElement('span'),
+                      {className:'inicial',textContent:${JSON.stringify(iniciales(p.pj))}}))">`
+        : `<span class="inicial">${esc(iniciales(p.pj))}</span>`;
+      return `<button class="pj-banda" data-estado="${estadoPj(p)}" data-pjbanda="${i}"
+                 aria-label="${esc(p.pj)}, ${p.pg} de ${p.pgMax} puntos de golpe">
+        <span class="marco"><span class="cara">${cara}</span><span class="vidrio"></span></span>
+        <span class="nom">${esc(p.pj)}</span>
+        <span class="pgbar"><i style="width:${pct}%"></i></span>
+        <span class="pgnum">${p.pg}/${p.pgMax}</span>
+      </button>`;
+    })
+    .join("");
+}
+
+// Un tic cada pocos segundos en una cara al azar. Es lo que hace que la banda parezca viva
+// en vez de cuatro fotos respirando en bucle: el bucle se nota, lo aleatorio no.
+setInterval(() => {
+  if (document.hidden) return; // no gastar animaciones con la app en segundo plano
+  const caras = [...document.querySelectorAll('.pj-banda:not([data-estado="caido"]) .marco')];
+  if (!caras.length) return;
+  const m = caras[Math.floor(Math.random() * caras.length)];
+  if (m.hasAttribute("data-tic")) return;
+  m.setAttribute("data-tic", "");
+  setTimeout(() => m.removeAttribute("data-tic"), 800);
+}, 4200);
+
+$("#banda").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-pjbanda]");
+  if (!b) return;
+  irA("grupo");
+  // Resaltar un momento la ficha del personaje tocado, para no dejar al dedo buscándola.
+  const ficha = $("#grupo-lista").children[+b.dataset.pjbanda];
+  ficha?.scrollIntoView({ block: "center", behavior: "smooth" });
+});
 
 function pintarGrupo() {
   $("#grupo-lista").innerHTML = E.partida
@@ -425,7 +471,8 @@ function pintarGasto() {
 }
 
 function pintarTodo() {
-  pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarMapa(); pintarGasto();
+  pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarBanda();
+  pintarMapa(); pintarGasto();
 }
 
 const esc = (s) =>
@@ -448,14 +495,14 @@ $("#grupo-lista").addEventListener("click", (ev) => {
     const p = E.partida[+b.dataset.agot];
     p.agotamiento = Math.max(0, Math.min(6, p.agotamiento + +b.dataset.d));
   } else return;
-  guardarEstado(); pintarGrupo();
+  guardarEstado(); pintarGrupo(); pintarBanda();
 });
 
 $("#sumin").addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-sum]");
   if (!b) return;
   E.suministros[b.dataset.sum] = Math.max(0, E.suministros[b.dataset.sum] + +b.dataset.d);
-  guardarEstado(); pintarGrupo();
+  guardarEstado(); pintarGrupo(); pintarBanda();
 });
 
 $("#noche-mas").addEventListener("click", () => {
@@ -484,6 +531,9 @@ function pintarEditor() {
         <label>Nombre<input data-e="pj" data-i="${i}" value="${esc(p.pj)}" autocomplete="off"></label>
         <label>Clase y nivel<input data-e="clase" data-i="${i}" value="${esc(p.clase)}" autocomplete="off"></label>
       </div>
+      <label>Retrato <small>— el id que te diga el DJ; vacío deja las iniciales</small>
+        <input data-e="retrato" data-i="${i}" value="${esc(p.retrato ?? "")}" autocomplete="off"
+               placeholder="p. ej. javamustdie"></label>
       <div class="numeros">
         <label>PG máx<input data-e="pgMax" data-i="${i}" type="number" inputmode="numeric" min="1" max="200" value="${p.pgMax}"></label>
         <label>PG ahora<input data-e="pg" data-i="${i}" type="number" inputmode="numeric" min="0" max="200" value="${p.pg}"></label>
@@ -509,6 +559,9 @@ $("#editor-lista").addEventListener("input", (ev) => {
 
   if (c.dataset.e === "pj" || c.dataset.e === "clase") {
     p[c.dataset.e] = c.value;
+  } else if (c.dataset.e === "retrato") {
+    // El valor va a una ruta de fichero, así que se limpia a lo que puede ser un nombre.
+    p.retrato = c.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
   } else {
     // Un campo numérico vacío llega como "" y `Number("")` es 0: sin este guardado se
     // pondría el personaje a 0 PG máximos en cuanto alguien borra el número para reescribirlo.
@@ -518,7 +571,7 @@ $("#editor-lista").addEventListener("input", (ev) => {
     if (c.dataset.e === "pgMax" && p.pg > n) p.pg = n;
   }
   guardarEstado();
-  pintarGrupo(); // el editor no se repinta: reescribirlo perdería el foco al teclear
+  pintarGrupo(); pintarBanda(); // el editor no se repinta: reescribirlo perdería el foco al teclear
 });
 
 $("#editor-lista").addEventListener("click", (ev) => {
@@ -527,19 +580,19 @@ $("#editor-lista").addEventListener("click", (ev) => {
   const i = +b.dataset.borrar;
   if (!confirm(`¿Quitar a ${E.partida[i]?.pj} del grupo?`)) return;
   E.partida.splice(i, 1);
-  guardarEstado(); pintarEditor(); pintarGrupo();
+  guardarEstado(); pintarEditor(); pintarGrupo(); pintarBanda();
 });
 
 $("#anadir-pj").addEventListener("click", () => {
   E.partida.push({ pj: "Nuevo", clase: "Clase 2", pg: 18, pgMax: 18, ca: 14, heridas: [], agotamiento: 0 });
-  guardarEstado(); pintarEditor(); pintarGrupo();
+  guardarEstado(); pintarEditor(); pintarGrupo(); pintarBanda();
   $("#editor-lista").lastElementChild?.querySelector("input")?.focus();
 });
 
 $("#restaurar-pj").addEventListener("click", () => {
   if (!confirm("¿Volver a los cuatro personajes pregenerados? Se pierden los que hay ahora.")) return;
   E.partida = structuredClone(CAMPANA.partidaInicial);
-  guardarEstado(); pintarEditor(); pintarGrupo();
+  guardarEstado(); pintarEditor(); pintarGrupo(); pintarBanda();
 });
 
 $("#charla-limpiar").addEventListener("click", () => {
