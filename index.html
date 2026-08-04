@@ -101,17 +101,73 @@
   button .icono { color:var(--sebo); }
   button:disabled .icono { color:#5C6149; }
   .fila { display:flex; gap:9px; flex-wrap:wrap; }
+  .pila { display:flex; flex-direction:column; gap:10px; }
   .fila > button { flex:1; min-width:110px; }
 
   button.grande { min-height:58px; font-size:1.06rem; border-color:var(--sebo);
                   background:var(--musgo-alto); }
   button.grande .icono { font-size:1.2rem; }
-  .escribir { display:flex; gap:8px; }
-  .escribir input { flex:1; min-width:0; }
-  .escribir button { flex:none; }
+  /* Campo con el botón DENTRO, a la derecha. Antes eran dos filas con el botón al lado y el
+     rótulo «Enviar» se comía un tercio del ancho de la lateral. */
+  .campo { position:relative; display:block; }
+  .campo input { width:100%; padding-right:44px; }
+  .campo button { position:absolute; top:2px; right:2px; bottom:2px; min-height:0; width:38px;
+                  padding:0; border:none; background:#2A3019; color:var(--sebo);
+                  font-size:.98rem; }
+  .campo button:active { background:#3A4222; }
+
+  /* Utilidades de escena: se usan una vez por escena, no en cada turno, así que van pequeñas y
+     al final. Antes eran dos botones grandes con rótulo y en mesa nadie sabía qué eran. */
+  .utiles { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .utiles button { min-height:34px; padding:0 8px; font:400 .74rem/1 var(--mono);
+                   letter-spacing:.04em; color:var(--tiza-baja); gap:5px; }
+  .utiles button .icono { font-size:.8rem; }
 
   .barra-progreso { height:3px; background:#FFFFFF12; margin-top:8px; }
   .barra-progreso i { display:block; height:100%; background:var(--sebo); width:0; }
+
+  /* ── Grupo: una tarjeta por personaje ──────────────────────────────
+     Antes eran cajas iguales con cinco botones apilados, y en mitad de un combate no se veía de
+     un vistazo quién estaba mal, que es lo único que se busca aquí. */
+  #grupo-lista { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); gap:12px; }
+  .tarjeta-pj { display:flex; gap:12px; padding:11px 13px; background:var(--musgo);
+                border:1px solid var(--liquen); border-left:3px solid var(--liquen); }
+  .tarjeta-pj[data-estado="tocado"] { border-left-color:var(--ambar); }
+  .tarjeta-pj[data-estado="grave"] { border-left-color:var(--herrumbre); background:#1E1710; }
+  .tarjeta-pj[data-estado="caido"] { border-left-color:#6A2318; opacity:.72; }
+  .tarjeta-cara { flex:none; width:74px; height:96px; padding:0; min-height:0; overflow:hidden;
+                  border:1px solid var(--liquen); background:#0E100A; }
+  .tarjeta-cara img { width:100%; height:100%; object-fit:cover; object-position:50% 22%;
+                      display:block; }
+  .tarjeta-pj[data-estado="caido"] .tarjeta-cara img { filter:grayscale(1) brightness(.6); }
+  .tarjeta-cara .ini { font:400 1.5rem/1 var(--serif); color:var(--tiza-baja); }
+  .tarjeta-datos { flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; }
+  .tarjeta-cab { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .tarjeta-cab b { font:400 1.06rem/1 var(--serif); font-weight:400; }
+  .tarjeta-cab .cls { font-size:.74rem; font-style:italic; color:var(--tiza-baja); }
+
+  .chapas { display:flex; gap:6px; flex-wrap:wrap; }
+  .chapas span { display:flex; align-items:center; gap:4px; padding:3px 7px;
+                 background:var(--musgo-alto); border:1px solid var(--liquen);
+                 font:500 .64rem/1 var(--mono); letter-spacing:.06em; color:var(--tiza-baja); }
+  .chapas b { font-weight:500; color:var(--sebo); font-variant-numeric:tabular-nums; }
+  .ico-chapa { width:13px; height:13px; flex:none; display:block; }
+
+  /* Las dos barras, con el número encima: la cifra exacta hace falta, y una barra sola no la da. */
+  .medidores { display:flex; flex-direction:column; gap:4px; }
+  .medidores span { position:relative; display:block; height:16px; background:#0E100A;
+                    border:1px solid var(--liquen); }
+  .medidores i { display:block; height:100%; transition:width 180ms; }
+  .medidores em { position:absolute; inset:0; display:flex; align-items:center;
+                  justify-content:center; font:500 .62rem/1 var(--mono); letter-spacing:.08em;
+                  font-style:normal; color:var(--tiza); text-shadow:0 1px 2px #000; }
+  .m-pg i { background:linear-gradient(#6E8A3C,#4A5F26); }
+  .tarjeta-pj[data-estado="tocado"] .m-pg i { background:linear-gradient(#C8923C,#8A6220); }
+  .tarjeta-pj[data-estado="grave"] .m-pg i,
+  .tarjeta-pj[data-estado="caido"] .m-pg i { background:linear-gradient(#A8412C,#6E2318); }
+  .m-agot i { background:linear-gradient(#5A5A7A,#3A3A52); }
+  .menudos button { min-height:36px; font-size:.78rem; padding:0 8px; }
+  .menudos button .icono { font-size:.72rem; }
 
   /* ── Grupo ────────────────────────────────────────────────────────── */
   .pj { display:flex; flex-direction:column; gap:9px; padding:12px 14px;
@@ -136,6 +192,7 @@
   .sumin { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:9px; }
   .sumin div { display:flex; align-items:center; gap:8px; padding:9px 11px;
                background:var(--musgo-alto); border:1px solid var(--liquen); }
+  .sumin .ico-chapa { width:20px; height:20px; }
   .sumin span { flex:1; font-size:.88rem; }
   .sumin b { font:500 1.02rem/1 var(--mono); font-variant-numeric:tabular-nums; color:var(--sebo); }
   .sumin [data-vacio="si"] b { color:var(--herrumbre); }
@@ -174,7 +231,14 @@
      (clases con prefijo `m-`) para que el módulo sea autónomo. Aquí solo se le da el tamaño.
      Ojo si se añaden reglas: `svg.mapa .algo` tiene más especificidad que la `.algo` interna
      del SVG y le ganaría, así que no se estilan sus tripas desde fuera. */
-  svg.mapa { width:100%; max-width:760px; height:auto; margin:0 auto; display:block; }
+  /* El mapa ocupa su capa entera: es lo único que hay en ella. Se limita por ALTO además de por
+     ancho, para que en una pantalla apaisada no haya que bajar para ver el sur. */
+  svg.mapa { width:100%; max-width:min(100%, 150vh); max-height:100%; height:auto;
+             margin:0 auto; display:block; }
+  .capa-mapa .capa-cuerpo { justify-content:center; padding-top:8px; }
+  .pie-capa { margin:0; font-size:.82rem; color:var(--tiza-baja); font-style:italic;
+              text-align:center; }
+  .donde-grande { margin:0; font:400 1.15rem/1.3 var(--serif); color:var(--tiza); }
 
   /* ── Panel de mesa: lo que está siempre abajo ─────────────────────── */
   /* El aviso, al pie de la lateral. Siempre a la vista: durante la partida nadie mira Ajustes,
@@ -184,10 +248,11 @@
            border-top:1px solid #8D3524; font:400 .82rem/1.4 var(--serif); }
   .aviso::after { content:" ✕"; color:#C4705C; margin-left:auto; padding-left:10px; }
 
+  /* 46px de alto en vez de 60: era el elemento más grande de la lateral y se comía el sitio de
+     la conversación. Sigue estando muy por encima del objetivo táctil recomendado. */
   .hablar {
-    width:100%; min-height:60px; background:var(--sebo); color:#17140F;
-    border:none; border-bottom:1px solid #00000060;
-    font:400 1.06rem/1 var(--serif); letter-spacing:.02em; user-select:none;
+    width:100%; min-height:46px; background:var(--sebo); color:#17140F;
+    border:none; font:400 .98rem/1 var(--serif); letter-spacing:.02em; user-select:none;
   }
   .hablar[data-modo="grabando"] { background:var(--herrumbre); color:#F2E4DE; }
   .hablar[data-modo="pensando"], .hablar[data-modo="hablando"] {
@@ -198,7 +263,9 @@
   /* ── Atajos: lo que antes era la barra de pestañas de abajo ─────────
      Ya no son pestañas. Abren una capa sobre la escena, y esta lateral se queda debajo, así que
      se le puede hablar al DJ mientras se mira el mapa. */
-  .atajos { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-top:2px; }
+  /* 2×2 y no una fila de cuatro: en una lateral de 250-400px, cuatro columnas dejan los rótulos
+     en 60px y «Ajustes» se parte. */
+  .atajos { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; margin-top:2px; }
   .atajos button { flex-direction:column; gap:3px; min-height:52px; padding:7px 4px;
                    font:400 .66rem/1 var(--mono); letter-spacing:.06em; color:var(--tiza-baja); }
   .atajos button .g { font-size:1.1rem; line-height:1; color:var(--sebo); }
@@ -651,84 +718,95 @@
 
     <!-- Capa «Misión y mapa»: se abre SOBRE la escena, no en otra pantalla. La lateral con el
          director de juego se queda debajo, así que se le puede hablar mientras se mira esto. -->
-    <div class="capa" id="capa-mapa" hidden>
+    <!-- Capa «Mapa»: SOLO el mapa, a toda la pantalla. Antes compartía capa con la misión, el
+         registro y el cierre, así que el mapa se quedaba en una franja y había que bajar. -->
+    <div class="capa capa-mapa" id="capa-mapa" hidden>
       <div class="capa-cab">
-        <h2>Misión y mapa</h2>
+        <h2>El mapa</h2>
         <button class="capa-cerrar" data-cerrarcapa title="Volver a la escena">✕</button>
       </div>
       <div class="capa-cuerpo">
-      <section>
-        <h2>Lo que sabéis</h2>
-        <ul class="sabeis" id="esc-sabeis"></ul>
-      </section>
-      <section>
-        <h2>Dónde estáis</h2>
         <!-- El viewBox lo pone mapa.js al pintar (1000×800); aquí no se fija. -->
         <svg class="mapa" id="mapa" role="img"
              aria-label="Mapa de localizaciones de la aventura"></svg>
-        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
+        <p class="pie-capa">
           Toca una localización para moveros allí. Las que no habéis visitado salen apagadas.
         </p>
-      </section>
-      <section>
+      </div>
+    </div>
+
+    <!-- Capa «Misión»: qué sabéis, qué habéis hecho, el reloj y el cierre de la sesión. -->
+    <div class="capa" id="capa-mision" hidden>
+      <div class="capa-cab">
+        <h2>La misión</h2>
+        <button class="capa-cerrar" data-cerrarcapa title="Volver a la escena">✕</button>
+      </div>
+      <div class="capa-cuerpo">
+        <section>
+          <h2>Dónde estáis</h2>
+          <p class="donde-grande" id="mision-lugar"></p>
+          <p class="pie-capa" id="mision-pie"></p>
+        </section>
+        <section>
+        <h2>Lo que sabéis</h2>
+        <ul class="sabeis" id="esc-sabeis"></ul>
+        </section>
+        <section>
+        <h2 id="reloj-titulo">El reloj</h2>
+        <div class="fila" id="reloj-botones">
+        <button id="noche-mas"><span class="icono">☾</span><span>Cae la noche</span></button>
+        <button id="noche-menos"><span class="icono">↺</span><span>Deshacer</span></button>
+        </div>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="noche-nota"></p>
+        </section>
+        <section>
         <h2>Lo que ha pasado</h2>
         <ol class="registro" id="registro"></ol>
-      </section>
-      <!-- Cierre de sesión: los números del grupo y el resumen para mandar por WhatsApp. -->
-      <section>
+        </section>
+        <section>
         <h2>Cierre de la sesión</h2>
         <div id="cierre-tabla" class="cierre"></div>
         <ul class="sabeis" id="cierre-resumen-datos"></ul>
         <div class="fila">
-          <button id="cierre-hacer"><span class="icono">✒</span><span>Escribir el resumen</span></button>
-          <button id="cierre-audio" hidden><span class="icono">🔊</span><span>Grabar el audio</span></button>
-          <button id="cierre-copiar" hidden><span class="icono">⧉</span><span>Copiar el texto</span></button>
+        <button id="cierre-hacer"><span class="icono">✒</span><span>Escribir el resumen</span></button>
+        <button id="cierre-audio" hidden><span class="icono">🔊</span><span>Grabar el audio</span></button>
+        <button id="cierre-copiar" hidden><span class="icono">⧉</span><span>Copiar el texto</span></button>
         </div>
         <blockquote id="cierre-texto" class="resumen" hidden></blockquote>
         <audio id="cierre-reproductor" controls preload="metadata" hidden
-               style="width:100%"></audio>
+        style="width:100%"></audio>
         <a id="cierre-descargar" class="descargar" hidden download>
-          <span class="icono">⤓</span><span>Descargar el MP3 para WhatsApp</span>
+        <span class="icono">⤓</span><span>Descargar el MP3 para WhatsApp</span>
         </a>
         <p id="cierre-peso" style="margin:0;font:400 .76rem/1.4 var(--mono);color:var(--tiza-baja)"></p>
         <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
-          El resumen sale de lo que el DJ ha ido anotando durante la partida, así que no se inventa
-          nada. Repásalo antes de mandarlo.
+        El resumen sale de lo que el DJ ha ido anotando durante la partida, así que no se inventa
+        nada. Repásalo antes de mandarlo.
         </p>
-      </section>
-      <section>
-        <h2 id="reloj-titulo">El reloj</h2>
-        <div class="fila" id="reloj-botones">
-          <button id="noche-mas"><span class="icono">☾</span><span>Cae la noche</span></button>
-          <button id="noche-menos"><span class="icono">↺</span><span>Deshacer</span></button>
-        </div>
-        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="noche-nota"></p>
-      </section>
+        </section>
       </div>
     </div>
 
-    <!-- Capa «El grupo»: se abre SOBRE la escena, no en otra pantalla. La lateral con el
-         director de juego se queda debajo, así que se le puede hablar mientras se mira esto. -->
     <div class="capa" id="capa-grupo" hidden>
       <div class="capa-cab">
         <h2>El grupo</h2>
         <button class="capa-cerrar" data-cerrarcapa title="Volver a la escena">✕</button>
       </div>
       <div class="capa-cuerpo">
-      <div id="grupo-lista" style="display:flex;flex-direction:column;gap:12px"></div>
+      <div id="grupo-lista"></div>
       <section>
         <h2>Suministros</h2>
         <div class="sumin" id="sumin"></div>
       </section>
       <section>
-        <h2>El grupo</h2>
+        <h2>Vuestros personajes</h2>
         <button id="editar-grupo"><span class="icono">✎</span><span>Editar personajes</span></button>
         <div id="editor" hidden>
           <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)">
             Pon aquí vuestros personajes de la sesión cero. Los nombres y los números salen de la ficha
             que te dé el DJ. Se guarda en el dispositivo al escribir.
           </p>
-          <div id="editor-lista" style="display:flex;flex-direction:column;gap:10px"></div>
+          <div id="editor-lista" class="pila"></div>
           <div class="fila">
             <button id="anadir-pj"><span class="icono">＋</span><span>Añadir personaje</span></button>
             <button id="restaurar-pj"><span class="icono">⟲</span><span>Volver a los pregenerados</span></button>
@@ -863,43 +941,57 @@
         <span class="icono">▸</span><span id="arrancar-txt">Empezar la sesión cero</span>
       </button>
 
+      <!-- Hablar y cantar la tirada: lo que se toca en cada turno. El botón de hablar era de 60px
+           de alto y se comía la lateral; a 46 sigue siendo un objetivo de dedo de sobra. -->
       <button class="hablar" id="hablar" data-modo="listo">
         <span class="icono">🎤</span><span id="hablar-txt">Toca para hablar</span>
       </button>
       <button id="cancelar" hidden><span class="icono">■</span><span>Cancelar</span></button>
 
-      <!-- Escribir: la vía de respaldo si el micrófono falla, y la buena para nombres propios. -->
-      <form id="escribir-forma" class="escribir">
+      <!-- Escribir y cantar comparten forma: campo con el botón dentro, a la derecha. Antes eran
+           dos filas con el botón al lado, y el «Enviar» de texto ocupaba un tercio del ancho. -->
+      <form id="escribir-forma" class="campo">
         <input id="escribir" autocomplete="off" enterkeyhint="send" placeholder="…o escríbelo">
-        <button type="submit" id="escribir-enviar">Enviar</button>
+        <button type="submit" id="escribir-enviar" title="Enviar">→</button>
       </form>
 
-      <!-- Cantar una tirada es lo que más se hace en mesa: un campo y ya. -->
-      <form class="tirada" id="tirada-forma">
+      <form class="campo" id="tirada-forma">
         <input id="tirada" inputmode="numeric" autocomplete="off"
-               placeholder="tu resultado del d20">
-        <button type="submit" title="Le dices al DJ lo que has sacado">🎲 Cantar</button>
+               placeholder="qué has sacado en el d20">
+        <button type="submit" title="Le dices al DJ lo que has sacado">🎲</button>
       </form>
 
-      <div class="fila">
-        <button id="acc-narracion" title="Reproduce la narración grabada de esta escena"><span class="icono">▶</span><span>Narrar escena</span></button>
-        <button id="acc-antorcha" title="Descuenta una antorcha de los suministros del grupo"><span class="icono">🔥</span><span>Gastar antorcha</span></button>
-      </div>
       <audio id="esc-audio" preload="metadata"></audio>
       <p style="margin:0;font-size:.72rem;color:var(--tiza-baja)" id="esc-nota-audio"></p>
 
       <!-- Lo que antes era la barra de pestañas de abajo. Ya no son pestañas: abren una capa
            sobre la escena, y la lateral con el DJ sigue debajo, así que se le puede hablar
-           mientras se mira el mapa. -->
+           mientras se mira el mapa.
+
+           «Narrar escena» y «Gastar antorcha» estaban aquí como botones grandes con su rótulo, y
+           en mesa nadie sabía qué eran. Bajan a esta fila de utilidades, pequeños y con su título
+           al pasar por encima: se usan una vez por escena, no en cada turno. -->
       <div class="atajos">
-        <button data-capa="mapa" title="El mapa, la misión y el cierre de la sesión">
-          <span class="g">🗺</span><span>Misión</span>
+        <button data-capa="mapa" title="El mapa de la aventura a pantalla completa">
+          <span class="g">🗺</span><span>Mapa</span>
         </button>
-        <button data-capa="grupo" title="El grupo y los suministros">
+        <button data-capa="mision" title="Lo que sabéis, lo que habéis hecho y el cierre">
+          <span class="g">✒</span><span>Misión</span>
+        </button>
+        <button data-capa="grupo" title="El grupo, los suministros y el oro">
           <span class="g">🛡</span><span>Grupo</span>
         </button>
         <button data-capa="ajustes" title="Claves, aventura y modo sesión cero">
           <span class="g">⚙</span><span>Ajustes</span>
+        </button>
+      </div>
+
+      <div class="utiles">
+        <button id="acc-narracion" title="Reproduce la narración grabada de esta escena">
+          <span class="icono">▶</span><span>Narración</span>
+        </button>
+        <button id="acc-antorcha" title="Descuenta una antorcha de los suministros del grupo">
+          <span class="icono">🔥</span><span>Antorcha</span>
         </button>
       </div>
     </div>

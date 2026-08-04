@@ -443,6 +443,21 @@ const HERRAMIENTAS = [
     },
   },
   {
+    name: "cambiar_oro",
+    description:
+      "Suma o resta monedas a un personaje. En positivo lo que encuentran o cobran, en negativo " +
+      "lo que pagan. Llévalo tú: si la mesa tiene que apuntar el dinero a mano, no lo apunta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string" },
+        cuanto: { type: "integer", description: "Monedas. Negativo para restar." },
+        porque: { type: "string", description: "Una línea: de dónde sale o en qué se va." },
+      },
+      required: ["pj", "cuanto"],
+    },
+  },
+  {
     name: "quitar_objeto",
     description:
       "Saca algo de la mochila: se gasta, se rompe, se lo dan a alguien o lo dejan atrás.",
@@ -467,11 +482,12 @@ const HERRAMIENTAS = [
       properties: {
         vista: {
           type: "string",
-          enum: ["mesa", "mapa", "grupo", "ficha", "cierre"],
+          enum: ["mesa", "mapa", "mision", "grupo", "ficha", "cierre"],
           description:
-            "«mesa» es la escena con las caras; «mapa» el mapa y lo que sabéis; «grupo» las " +
-            "barras y los suministros; «ficha» la hoja de un personaje (hace falta `pj`); " +
-            "«cierre» las estadísticas y el resumen del final.",
+            "«mesa» es la escena con las caras; «mapa» el mapa de la aventura a pantalla " +
+            "completa; «mision» lo que saben, el reloj y lo que han ido haciendo; «grupo» las " +
+            "barras, los suministros y el oro; «ficha» la hoja de un personaje (hace falta " +
+            "`pj`); «cierre» las estadísticas y el resumen del final.",
         },
         pj: { type: "string", description: "De quién es la ficha, si `vista` es «ficha»." },
       },
@@ -691,6 +707,8 @@ LOS OBJETOS Y LA PANTALLA LOS MANEJAS TÚ. Esto es lo que la mesa espera de ti:
   queréis poner?» para algo obvio; hazlo y sigue.
 - **Se gasta o se rompe → quitar_objeto.** Una antorcha consumida, una cuerda cortada, algo que
   dejan atrás.
+- **El dinero también es tuyo.** cambiar_oro cuando encuentren monedas, cobren o paguen. Si la mesa
+  tiene que apuntar el dinero a mano, no lo apunta.
 - **Tú decides qué se ve.** Con mostrar cambias la pantalla del tablet: si preguntan dónde están o
   piden el mapa, saca el mapa; si vais a hablar de lo que lleva alguien, abre su ficha; si acaba
   la sesión, saca el cierre. Y hazlo también sin que lo pidan, cuando lo que estás contando se vea
@@ -837,7 +855,7 @@ const actual = () => loc(E.local);
  * personajes por encima, y el rótulo del lugar sigue arriba. `irA` mantiene su nombre y sus
  * argumentos porque la llaman `moverA`, la herramienta `mostrar` y el arranque por hash.
  */
-const CAPAS = ["mapa", "grupo", "ajustes"];
+const CAPAS = ["mapa", "mision", "grupo", "ajustes"];
 
 function irA(nombre, tocarHash = true) {
   const capa = CAPAS.includes(nombre) ? nombre : null; // cualquier otra cosa es «la escena»
@@ -921,6 +939,11 @@ function pintarEscena() {
 
   $("#esc-sabeis").innerHTML = (l.sabeis ?? [])
     .map((s) => `<li>${esc(s)}</li>`).join("") || "<li>Nada todavía.</li>";
+
+  // Dónde estáis, en la capa de la misión. Antes ese dato solo estaba sobre la ilustración, y al
+  // abrir la misión no se sabía de qué sitio hablaban las pistas.
+  $("#mision-lugar").textContent = `${l.id} · ${l.nombre}`;
+  $("#mision-pie").textContent = l.pie ?? "";
 
   const a = $("#esc-audio"), boton = $("#acc-narracion");
   // El aviso se limpia en cada escena: si no, el de una escena sin audio se quedaría pegado
@@ -1122,6 +1145,9 @@ function abrirFicha(i) {
           <div><i>🛡</i><span>armadura</span><b>${caDe(p)}</b></div>
           <div><i>🌙</i><span>agotamiento</span><b>${p.agotamiento ?? 0} / 6</b></div>
           <div><i>🩸</i><span>heridas</span><b>${p.heridas.length}</b></div>
+          <div><svg class="ico-clase" viewBox="0 0 100 100" aria-hidden="true"
+                >${iconoObjeto("moneda", { sufijo: `or${i}`, sombra: false })}</svg
+              ><span>monedas</span><b>${p.oro ?? 0}</b></div>
           <div><i>✶</i><span>experiencia</span><b>${p.px ?? 0}</b></div>
           <div>${ICONO_CLASE(p.clase, `fn${i}`)}<span>nivel</span><b>${nivelDe(p.px ?? 0)}</b></div>
         </div>
@@ -1374,45 +1400,81 @@ $("#ficha-caja").addEventListener("input", (ev) => {
 });
 
 function pintarGrupo() {
+  // Una tarjeta por personaje, con su cara, sus barras y sus números. Antes era una lista de
+  // cajas con cinco botones apilados y el mismo aspecto para todos: no se veía de un vistazo
+  // quién estaba mal, que es lo único que se busca aquí en mitad de un combate.
   $("#grupo-lista").innerHTML = E.partida
-    .map(
-      (p, i) => `
-    <div class="pj" data-estado="${estadoPj(p)}">
-      <div class="pj-cab">
-        <span class="nom">${esc(p.pj)}</span>
-        <span class="cls">${esc(p.clase)}</span>
-        <span class="ca">CA ${caDe(p)}</span>
+    .map((p, i) => {
+      const pct = Math.max(0, Math.min(100, (p.pg / Math.max(1, p.pgMax)) * 100));
+      const agot = Math.max(0, Math.min(6, p.agotamiento ?? 0));
+      const cara = p.retrato
+        ? `<img alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp">`
+        : `<span class="ini">${esc(iniciales(p.pj))}</span>`;
+      return `
+    <article class="tarjeta-pj" data-estado="${estadoPj(p)}">
+      <button class="tarjeta-cara" data-verficha="${i}"
+              title="Abrir la ficha de ${esc(p.pj)}">${cara}</button>
+      <div class="tarjeta-datos">
+        <div class="tarjeta-cab">
+          <b>${esc(p.pj)}</b>
+          <span class="cls">${esc(p.clase)}</span>
+        </div>
+
+        <div class="chapas">
+          <span title="Clase de armadura">CA <b>${caDe(p)}</b></span>
+          <span title="Monedas">${iconoChapa("moneda", `gm${i}`)}<b>${p.oro ?? 0}</b></span>
+          <span title="Experiencia">${nivelDe(p.px ?? 0)}º <b>${p.px ?? 0} px</b></span>
+        </div>
+
+        <div class="medidores">
+          <span class="m-pg" title="Puntos de golpe">
+            <i style="width:${pct}%"></i><em>${p.pg} / ${p.pgMax}</em></span>
+          <span class="m-agot" title="Agotamiento ${agot} de 6">
+            <i style="width:${(agot / 6) * 100}%"></i><em>agot. ${agot}/6</em></span>
+        </div>
+
+        <div class="pg-fila">
+          <button data-pg="${i}" data-d="-3">−3</button>
+          <button data-pg="${i}" data-d="-1">−1</button>
+          <button data-pg="${i}" data-d="1">+1</button>
+          <button data-pg="${i}" data-d="3">+3</button>
+        </div>
+
+        ${p.heridas.length
+          ? `<div class="marcas">${p.heridas
+              .map((h, j) =>
+                `<button class="marca" data-quitar="${i}" data-h="${j}">${esc(h)} ✕</button>`)
+              .join("")}</div>`
+          : ""}
+
+        <div class="fila menudos">
+          <button data-herida="${i}"><span class="icono">✚</span><span>Herida</span></button>
+          <button data-agot="${i}" data-d="1"><span class="icono">▲</span><span>Agotar</span></button>
+          <button data-agot="${i}" data-d="-1"><span class="icono">▼</span><span>Descansa</span></button>
+        </div>
       </div>
-      <div class="pg-fila">
-        <button data-pg="${i}" data-d="-3">−3</button>
-        <button data-pg="${i}" data-d="-1">−1</button>
-        <span class="val">${p.pg} / ${p.pgMax}</span>
-        <button data-pg="${i}" data-d="1">+1</button>
-        <button data-pg="${i}" data-d="3">+3</button>
-      </div>
-      ${p.heridas.length ? `<div class="marcas">${p.heridas
-        .map((h, j) => `<button class="marca" data-quitar="${i}" data-h="${j}">${esc(h)} ✕</button>`)
-        .join("")}</div>` : ""}
-      <div class="fila">
-        <button data-herida="${i}"><span class="icono">✚</span><span>Herida</span></button>
-        <button data-agot="${i}" data-d="1"><span class="icono">▲</span><span>Agotamiento</span></button>
-        <button data-agot="${i}" data-d="-1"><span class="icono">▼</span><span>Descansa</span></button>
-      </div>
-      ${p.agotamiento ? `<div class="agot">Agotamiento ${p.agotamiento} de 6</div>` : ""}
-    </div>`,
-    )
+    </article>`;
+    })
     .join("");
 
+  // Los suministros con su icono dibujado: se reconocen antes por el dibujo que por la palabra.
   $("#sumin").innerHTML = Object.entries(E.suministros)
     .map(
       ([k, v]) => `<div data-vacio="${v <= 0 ? "si" : "no"}">
-        <button data-sum="${k}" data-d="-1">−</button>
+        ${iconoChapa(k, `su-${k}`)}
         <span>${esc(k)}</span><b>${v}</b>
-        <button data-sum="${k}" data-d="1">+</button>
+        <button data-sum="${k}" data-d="-1" title="Gastar uno">−</button>
+        <button data-sum="${k}" data-d="1" title="Añadir uno">+</button>
       </div>`,
     )
     .join("");
 }
+
+/** Un icono de objeto del tamaño de una letra, para meterlo en una chapa o un rótulo. */
+const iconoChapa = (nombre, sufijo) =>
+  `<svg class="ico-chapa" viewBox="0 0 100 100" aria-hidden="true"
+    >${iconoObjeto(nombre, { sufijo, sombra: false })}</svg>`;
+
 
 function pintarMapa() {
   // El mapa lo dibuja mapa.js: un mapa pintado de verdad (mar, costa, cordillera, bosque,
@@ -1541,8 +1603,10 @@ function pintarCierre() {
     </div>`).join("");
 
   $("#cierre-resumen-datos").innerHTML =
-    `<li>${s.acciones} cosas anotadas en el registro.</li>` +
-    `<li>${s.sitios} de ${s.deSitios} localizaciones visitadas.</li>` +
+    `<li>${s.acciones === 1 ? "Una cosa anotada" : `${s.acciones} cosas anotadas`} en el ` +
+      `registro.</li>` +
+    `<li>${s.sitios} de ${s.deSitios} ${
+      s.deSitios === 1 ? "localización" : "localizaciones"} visitada${s.sitios === 1 ? "" : "s"}.</li>` +
     (CAMPANA.reloj ? `<li>Noche ${s.noche} de ${CAMPANA.reloj.noches}.</li>` : "") +
     (s.gastado.length
       ? `<li>Gastado: ${s.gastado.map(([k, n]) => `${n} ${k.toLowerCase()}`).join(", ")}.</li>`
@@ -1565,6 +1629,12 @@ const esc = (s) =>
 $("#grupo-lista").addEventListener("click", (ev) => {
   const b = ev.target.closest("button");
   if (!b) return;
+  // Tocar la cara abre su ficha, igual que en la banda de la mesa: es el gesto que ya se conoce.
+  if (b.dataset.verficha !== undefined) {
+    irA("escena");
+    abrirFicha(+b.dataset.verficha);
+    return;
+  }
   if (b.dataset.pg !== undefined) {
     const p = E.partida[+b.dataset.pg];
     p.pg = Math.max(0, Math.min(p.pgMax, p.pg + +b.dataset.d));
@@ -2406,6 +2476,22 @@ function ejecutarHerramienta(nombre, e) {
     );
   }
 
+  if (nombre === "cambiar_oro") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
+    const n = Math.round(+e.cuanto) || 0;
+    // No se permite deber dinero: la mesa se queda a cero y el DJ se entera de cuánto faltaba.
+    const antes = p.oro ?? 0;
+    p.oro = Math.max(0, antes + n);
+    const real = p.oro - antes;
+    registrar("otro", `${p.pj}: ${real >= 0 ? "+" : ""}${real} monedas` +
+      `${e.porque?.trim() ? ` (${e.porque.trim()})` : ""}`, p.pj);
+    return nota(
+      `${p.pj} tiene ${p.oro} monedas` +
+        (real !== n ? `. Solo tenía ${antes}, así que no ha podido pagar las ${Math.abs(n)}.` : "."),
+    );
+  }
+
   if (nombre === "quitar_objeto") {
     const p = buscarPj(e.pj);
     if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
@@ -2443,7 +2529,8 @@ function ejecutarHerramienta(nombre, e) {
       return nota(`En pantalla: la ficha de ${p.pj}.`);
     }
     cerrarFicha();
-    const vistas = { mesa: "escena", mapa: "mapa", grupo: "grupo", cierre: "mapa" };
+    const vistas = { mesa: "escena", mapa: "mapa", mision: "mision", grupo: "grupo",
+                     cierre: "mision" };
     const destino = vistas[e.vista];
     if (!destino) return `"${e.vista}" no es una vista. Son: mesa, mapa, grupo, ficha, cierre.`;
     irA(destino);
@@ -2451,8 +2538,8 @@ function ejecutarHerramienta(nombre, e) {
     if (e.vista === "cierre") {
       $("#cierre-tabla")?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-    const comoSeLlama = { mesa: "la mesa", mapa: "el mapa", grupo: "el grupo",
-                          cierre: "el cierre de la sesión" };
+    const comoSeLlama = { mesa: "la mesa", mapa: "el mapa", mision: "la misión",
+                          grupo: "el grupo", cierre: "el cierre de la sesión" };
     return nota(`En pantalla: ${comoSeLlama[e.vista]}.`);
   }
 

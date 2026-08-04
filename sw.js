@@ -7,7 +7,7 @@
  *
  * Sube VERSION al cambiar cualquier fichero de app/ para forzar la actualización.
  */
-const VERSION = "corvalar-v10";
+const VERSION = "corvalar-v11";
 
 const BASE = [
   "./",
