@@ -11,6 +11,141 @@
 import { CAMPANAS, CAMPANA_POR_DEFECTO } from "./campana.js";
 import { RETRATOS } from "./retratos.js";
 
+// ── Herramientas del DJ ──────────────────────────────────────────────────────
+/**
+ * Lo que el DJ puede HACER, no solo decir.
+ *
+ * Antes solo hablaba: si te bajaba la vida, tenías que apuntarla tú a mano en la pestaña Grupo,
+ * y el DJ no se enteraba de si lo habías hecho. Con esto lleva el estado él: los PG, las heridas,
+ * el agotamiento, los suministros, la escena, y escribe las fichas de la sesión cero.
+ *
+ * Dos reglas de diseño que importan:
+ *  - TODA acción se anota en el registro y se ve en la conversación. La mesa tiene que poder
+ *    auditar al DJ, que es la premisa de la partida de prueba; un DJ que cambia números sin
+ *    decirlo es peor que uno que no los cambia.
+ *  - Nada de borrar. No hay herramienta para eliminar un personaje ni para vaciar el estado: si
+ *    se equivoca, se corrige a mano, pero no puede destruir una partida de veinte sesiones.
+ */
+const HERRAMIENTAS = [
+  {
+    name: "cambiar_pg",
+    description:
+      "Cambia los puntos de golpe de un personaje. Úsalo en cuanto reciba daño o se cure, sin " +
+      "esperar a que la mesa lo apunte. Si llega a 0 avisa de que está agonizante.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string", description: "Nombre del personaje, tal como aparece en el grupo." },
+        delta: { type: "integer", description: "Cuánto cambia. Negativo si es daño." },
+        motivo: { type: "string", description: "Una frase: de qué viene el cambio." },
+      },
+      required: ["pj", "delta", "motivo"],
+    },
+  },
+  {
+    name: "anadir_herida",
+    description:
+      "Apunta una herida persistente. Se usa al caer a 0 PG, al recibir un crítico, o al fallar " +
+      "una salvación de muerte por 5 o más. Si no dices cuál, se tira en la tabla.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string" },
+        herida: {
+          type: "string",
+          description: "La herida de la tabla de d10. Déjalo vacío para que la tire la app.",
+        },
+      },
+      required: ["pj"],
+    },
+  },
+  {
+    name: "cambiar_agotamiento",
+    description: "Sube o baja niveles de agotamiento. A 6 el personaje muere.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string" },
+        delta: { type: "integer" },
+        motivo: { type: "string" },
+      },
+      required: ["pj", "delta", "motivo"],
+    },
+  },
+  {
+    name: "gastar_suministro",
+    description:
+      "Descuenta o añade suministros del grupo: antorchas, raciones, aceite, flechas. Lleva la " +
+      "cuenta tú: la logística es la mitad de la tensión y la mesa te va a preguntar cuántas quedan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        que: { type: "string", description: "Antorchas, Raciones, Aceite o Flechas." },
+        delta: { type: "integer", description: "Negativo para gastar." },
+      },
+      required: ["que", "delta"],
+    },
+  },
+  {
+    name: "mover_escena",
+    description:
+      "Mueve al grupo a otra localización de la aventura. Usa el identificador corto (L0, L4, P2…). " +
+      "Cambia el arte y la narración de la pantalla, así que hazlo cuando de verdad se muevan.",
+    input_schema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    },
+  },
+  {
+    name: "avanzar_noche",
+    description: "Hace caer la noche: avanza el reloj de la campaña un paso.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "escribir_ficha",
+    description:
+      "Crea o actualiza la ficha de un personaje. Esto es lo que se usa al final de la sesión " +
+      "cero, cuando ya tienes nombre, clase y características: escríbela tú, no hagas que la " +
+      "mesa la teclee. Si el nombre no existe, se añade al grupo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string", description: "Nombre del personaje." },
+        clase: { type: "string", description: "Clase y nivel, por ejemplo «Guerrero 2»." },
+        pgMax: { type: "integer" },
+        ca: { type: "integer", description: "Clase de armadura." },
+        retrato: { type: "string", description: "Id de un retrato ya generado, si lo hay." },
+        notas: {
+          type: "string",
+          description:
+            "Características, ataques, competencias, equipo y los ganchos que haya contado el " +
+            "jugador. Se guarda entero y se ve en su ficha.",
+        },
+      },
+      required: ["pj", "clase", "pgMax", "ca"],
+    },
+  },
+  {
+    name: "registrar_accion",
+    description:
+      "Anota algo que ha pasado, para el resumen del final de la sesión: una tirada importante, " +
+      "una decisión, una muerte, un hallazgo. Sé breve y concreto.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pj: { type: "string", description: "Quién lo hizo. Vacío si fue del grupo." },
+        que: { type: "string", description: "Qué pasó, en una frase." },
+        tipo: {
+          type: "string",
+          enum: ["tirada", "combate", "decision", "hallazgo", "herida", "muerte", "otro"],
+        },
+      },
+      required: ["que", "tipo"],
+    },
+  },
+];
+
 // ── Voces (mismos ids que scripts/lib.mjs) ───────────────────────────────────
 const VOZ = {
   narrador: "DdKbXdRlBmj7Ty7N0FVr",
@@ -133,6 +268,30 @@ está haciendo largo, corta y di que sigues cuando te digan.
 
 Al acabar, di que apunten los personajes en la pestaña Grupo con «Editar personajes», y que
 quiten el modo sesión cero de Ajustes para empezar a jugar.
+`.trim();
+
+/**
+ * Cómo usar las herramientas. Va aparte de GUIA porque es lo que convierte al DJ de narrador en
+ * árbitro: sin decirle explícitamente que las use, describe el daño y no lo aplica.
+ */
+const GUIA_HERRAMIENTAS = `
+TIENES HERRAMIENTAS Y LLEVAS EL ESTADO TÚ. No pidas a la mesa que apunte nada.
+
+- En cuanto alguien reciba daño o se cure, llama a cambiar_pg. No narres «pierdes cuatro» sin
+  aplicarlo: la pantalla tiene que cuadrar con lo que dices.
+- Al caer a 0 PG, o con un crítico, llama a anadir_herida.
+- Al gastar una antorcha, comer una ración o disparar flechas, llama a gastar_suministro. Te van
+  a preguntar cuántas quedan y tienes que saber el número exacto.
+- Cuando el grupo se mueva de verdad, llama a mover_escena: cambia el arte de la pantalla.
+- Llama a registrar_accion en los momentos que merezcan salir en el resumen del final: una
+  decisión, una muerte, un hallazgo, una tirada que cambió algo.
+- En sesión cero, cuando tengas nombre, clase y características de alguien, llama a
+  escribir_ficha. Tú escribes la ficha; la mesa solo contesta preguntas y canta dados.
+
+Puedes llamar a varias en el mismo turno. Después de usarlas, di en una o dos frases lo que ha
+pasado en la ficción — no leas los números como un contable, ya se ven en pantalla.
+
+Lo que NO puedes hacer: tirar los dados de los jugadores, borrar personajes, ni resucitar a nadie.
 `.trim();
 
 /**
@@ -347,7 +506,11 @@ function pintarCharla() {
     .slice(-12)
     .map((t) => `<div class="turno" data-de="${t.de}">
         <div class="quien">${t.de === "mesa" ? "la mesa" : "director de juego"}</div>
-        <p>${esc(t.texto)}</p></div>`)
+        <p>${esc(t.texto)}</p>${
+          t.hechos?.length
+            ? `<ul class="hechos">${t.hechos.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`
+            : ""
+        }</div>`)
     .join("");
   c.lastElementChild?.scrollIntoView({ block: "nearest" });
 }
@@ -586,9 +749,18 @@ function pintarGasto() {
     `voz ${g.ttsCar} car.<br><b>Estimado: ${t.toFixed(2)} $</b>`;
 }
 
+function pintarRegistro() {
+  const r = E.registro ?? [];
+  $("#registro").innerHTML = r.length
+    ? r.slice(-40).map((x) =>
+        `<li><span class="tipo">${esc(x.tipo)}</span>${esc(x.que)}</li>`).join("")
+    : `<li style="list-style:none;margin-left:-1.4em;color:var(--tiza-baja);font-style:italic">
+         Todavía nada. El DJ va anotando aquí lo que pasa.</li>`;
+}
+
 function pintarTodo() {
   pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarBanda();
-  pintarMapa(); pintarGasto(); pintarArrancar();
+  pintarMapa(); pintarGasto(); pintarArrancar(); pintarRegistro();
 }
 
 const esc = (s) =>
@@ -1144,7 +1316,7 @@ async function turno(blob, segundos, textoEscrito) {
     let respuesta = "";
     let pendiente = "";
 
-    const cortado = await claudeStream(dicho, (t) => {
+    const res = await claudeStream(dicho, (t) => {
       respuesta += t;
       pendiente += t;
       const corte = pendiente.search(/[.!?…]["»]?\s/);
@@ -1156,9 +1328,17 @@ async function turno(blob, segundos, textoEscrito) {
       }
     });
     if (pendiente.trim()) cola.encolar(pendiente.trim());
+    const { cortado, hechos } = res;
 
-    E.charla.push({ de: "dj", texto: respuesta.trim() || "(silencio)" });
-    guardarEstado(); pintarCharla(); pintarGasto();
+    E.charla.push({
+      de: "dj",
+      texto: respuesta.trim() || "(silencio)",
+      // Lo que el DJ ha CAMBIADO se guarda con su turno y se ve bajo él. Es la única forma de
+      // auditarle: un DJ que toca los números sin decirlo es peor que uno que no los toca.
+      // Se copia el array, no se referencia: `E.hechos` se vacía en el turno siguiente.
+      ...(hechos?.length ? { hechos: [...hechos] } : {}),
+    });
+    guardarEstado(); pintarTodo();
     if (cortado) {
       avisar('El DJ se ha quedado a media frase por el límite de longitud. Dile «sigue» y remata.');
     }
@@ -1177,111 +1357,309 @@ async function turno(blob, segundos, textoEscrito) {
   }
 }
 
+
+// ── Ejecutar lo que pide el DJ ───────────────────────────────────────────────
+/** Busca un personaje por nombre, tolerando mayúsculas y acentos. */
+function buscarPj(nombre) {
+  const norm = (x) =>
+    String(x ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const n = norm(nombre);
+  return (
+    E.partida.find((p) => norm(p.pj) === n) ??
+    E.partida.find((p) => norm(p.pj).startsWith(n) || n.startsWith(norm(p.pj)))
+  );
+}
+
+/** Apunta en el registro de la sesión. Es la base del resumen del final. */
+function registrar(tipo, que, pj) {
+  E.registro ??= [];
+  E.registro.push({ n: E.registro.length + 1, tipo, que, pj: pj ?? null, escena: E.local });
+}
+
 /**
- * Llama a Claude en streaming y va entregando el texto por trozos.
- * Devuelve true si la respuesta se cortó por el límite de longitud.
+ * Ejecuta una herramienta y devuelve lo que se le contesta al DJ.
+ *
+ * Devuelve SIEMPRE un texto, también cuando falla: si se le contesta con un error claro
+ * («no existe ningún personaje llamado así»), lo corrige en el mismo turno. Si se le lanza una
+ * excepción, la conversación se rompe y la mesa no sabe por qué.
+ */
+function ejecutarHerramienta(nombre, e) {
+  const nota = (t) => { E.hechos ??= []; E.hechos.push(t); return t; };
+
+  if (nombre === "cambiar_pg") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}". El grupo es: ${E.partida.map((x) => x.pj).join(", ")}.`;
+    const antes = p.pg;
+    p.pg = Math.max(0, Math.min(p.pgMax, p.pg + (e.delta | 0)));
+    registrar("tirada", `${p.pj}: ${antes} → ${p.pg} PG (${e.motivo})`, p.pj);
+    const cae = p.pg === 0 && antes > 0;
+    return nota(
+      `${p.pj}: ${antes} → ${p.pg} de ${p.pgMax} PG.` +
+        (cae ? " Ha caído a 0: inconsciente y agonizante, y toca tirar herida persistente." : ""),
+    );
+  }
+
+  if (nombre === "anadir_herida") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
+    const h = e.herida?.trim() || CAMPANA.heridas[Math.floor(Math.random() * CAMPANA.heridas.length)];
+    p.heridas.push(h);
+    registrar("herida", `${p.pj} — ${h}`, p.pj);
+    return nota(`${p.pj} se queda con «${h}». No se cura con conjuros: semana de reposo o Medicina 16.`);
+  }
+
+  if (nombre === "cambiar_agotamiento") {
+    const p = buscarPj(e.pj);
+    if (!p) return `No hay ningún personaje llamado "${e.pj}".`;
+    const antes = p.agotamiento ?? 0;
+    p.agotamiento = Math.max(0, Math.min(6, antes + (e.delta | 0)));
+    registrar("otro", `${p.pj}: agotamiento ${antes} → ${p.agotamiento} (${e.motivo})`, p.pj);
+    return nota(
+      `${p.pj}: agotamiento ${antes} → ${p.agotamiento} de 6.` +
+        (p.agotamiento >= 6 ? " A seis, muere." : ""),
+    );
+  }
+
+  if (nombre === "gastar_suministro") {
+    // Se acepta cualquier forma de escribirlo: «antorcha», «antorchas», «Antorchas».
+    const clave = Object.keys(E.suministros).find(
+      (k) => k.toLowerCase().startsWith(String(e.que ?? "").toLowerCase().slice(0, 4)),
+    );
+    if (!clave) return `No hay un suministro llamado "${e.que}". Hay: ${Object.keys(E.suministros).join(", ")}.`;
+    const antes = E.suministros[clave];
+    E.suministros[clave] = Math.max(0, antes + (e.delta | 0));
+    registrar("otro", `${clave}: ${antes} → ${E.suministros[clave]}`);
+    return nota(
+      `${clave}: ${antes} → ${E.suministros[clave]}.` +
+        (E.suministros[clave] === 0 ? " Se han agotado." : ""),
+    );
+  }
+
+  if (nombre === "mover_escena") {
+    const l = CAMPANA.localizaciones.find(
+      (x) => x.id.toLowerCase() === String(e.id ?? "").toLowerCase(),
+    );
+    if (!l) return `No existe "${e.id}". Las localizaciones son: ${CAMPANA.localizaciones.map((x) => x.id).join(", ")}.`;
+    E.local = l.id;
+    if (!E.visitadas.includes(l.id)) E.visitadas.push(l.id);
+    registrar("otro", `El grupo se mueve a ${l.id} · ${l.nombre}`);
+    return nota(`La pantalla ya muestra ${l.id} · ${l.nombre}.`);
+  }
+
+  if (nombre === "avanzar_noche") {
+    if (!CAMPANA.reloj) return "Esta aventura no lleva reloj de noches.";
+    const antes = E.noche;
+    E.noche = Math.min(CAMPANA.reloj.noches, antes + 1);
+    registrar("otro", `Cae la noche: ${antes} → ${E.noche}`);
+    const quedan = CAMPANA.reloj.noches - E.noche;
+    return nota(
+      `Noche ${E.noche}. ` + (quedan <= 0 ? `Es ${CAMPANA.reloj.etiqueta}.` : `Quedan ${quedan}.`),
+    );
+  }
+
+  if (nombre === "escribir_ficha") {
+    const pgMax = Math.max(1, Math.min(200, e.pgMax | 0));
+    const ca = Math.max(1, Math.min(30, e.ca | 0));
+    const retrato = RETRATOS.includes(e.retrato) ? e.retrato : undefined;
+    let p = buscarPj(e.pj);
+    if (p) {
+      Object.assign(p, { pj: e.pj, clase: e.clase, pgMax, ca });
+      // Los PG actuales se respetan salvo que pasen del nuevo máximo: si está herido, sigue herido.
+      p.pg = Math.min(p.pg, pgMax);
+      if (retrato) p.retrato = retrato;
+      if (e.notas) p.notas = e.notas;
+      registrar("otro", `Ficha actualizada: ${p.pj} (${p.clase})`, p.pj);
+      return nota(`Ficha de ${p.pj} actualizada: ${p.clase}, ${p.pg}/${pgMax} PG, CA ${ca}.`);
+    }
+    p = {
+      pj: e.pj, clase: e.clase, pg: pgMax, pgMax, ca,
+      heridas: [], agotamiento: 0, ...(retrato ? { retrato } : {}), ...(e.notas ? { notas: e.notas } : {}),
+    };
+    E.partida.push(p);
+    registrar("otro", `Ficha nueva: ${p.pj} (${p.clase})`, p.pj);
+    return nota(
+      `${p.pj} entra en el grupo: ${p.clase}, ${pgMax} PG, CA ${ca}.` +
+        (retrato ? "" : ` Sin retrato todavía — los disponibles son: ${RETRATOS.join(", ") || "ninguno"}.`),
+    );
+  }
+
+  if (nombre === "registrar_accion") {
+    registrar(e.tipo ?? "otro", e.que, e.pj);
+    return "Anotado.";
+  }
+
+  return `No tengo ninguna herramienta llamada "${nombre}".`;
+}
+
+/**
+ * Llama a Claude en streaming, ejecuta las herramientas que pida, y va entregando el texto.
+ *
+ * El bucle es lo que convierte al DJ en algo que ACTÚA: pide una herramienta, se ejecuta contra
+ * el estado, se le devuelve el resultado, y se le vuelve a preguntar hasta que ya no pide más.
+ * Sin el bucle solo podría pedir una cosa por turno, y un combate normal necesita bajar vida,
+ * apuntar una herida y anotar la acción en el mismo turno.
+ *
+ * Devuelve { cortado, hechos } — `hechos` es lo que ha cambiado, para poder enseñárselo a la mesa.
  */
 async function claudeStream(pregunta, alRecibir) {
   let cortado = false;
-  const l = actual();
-  const grupo = E.partida
-    .map((p) => `${p.pj} (${p.clase}, ${p.pg}/${p.pgMax} PG${p.heridas.length ? ", herido: " + p.heridas.join(" y ") : ""})`)
-    .join("; ");
+  E.hechos = [];
 
-  // En sesión cero no se manda escena ni reloj: si se manda, el DJ empieza a describir la
-  // localización en vez de crear personajes, por muy claro que sea el resto del prompt.
-  const contexto = (
-    A.sesionCero
-      ? [
-          "Aún no ha empezado la partida: estás en sesión cero.",
-          `En la pestaña Grupo hay de momento estos personajes, que son los pregenerados y se van a sustituir: ${grupo}.`,
-        ]
-      : [
-          `Escena actual: ${l.id} · ${l.nombre}.`,
-          l.sabeis?.length ? `Lo que la mesa ya sabe: ${l.sabeis.join(" ")}` : "",
-          CAMPANA.reloj
-            ? `Noche ${E.noche} de ${CAMPANA.reloj.noches} hasta ${CAMPANA.reloj.etiqueta}.`
-            : "",
-          `Grupo: ${grupo}.`,
-          `Suministros: ${Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(", ")}.`,
-        ]
-  ).filter(Boolean).join("\n");
+  const contexto = () => {
+    const l = actual();
+    const grupo = E.partida
+      .map((p) => `${p.pj} (${p.clase}, ${p.pg}/${p.pgMax} PG, CA ${p.ca}${
+        p.heridas.length ? ", herido: " + p.heridas.join(" y ") : ""
+      }${p.agotamiento ? ", agotamiento " + p.agotamiento : ""})`)
+      .join("; ");
+
+    // En sesión cero no se manda escena ni reloj: si se manda, el DJ empieza a describir la
+    // localización en vez de crear personajes, por muy claro que sea el resto del prompt.
+    return (
+      A.sesionCero
+        ? [
+            "Aún no ha empezado la partida: estás en sesión cero.",
+            `Grupo actual (pregenerados, a sustituir con escribir_ficha): ${grupo}.`,
+            `Retratos ya generados y disponibles: ${RETRATOS.join(", ") || "ninguno"}.`,
+          ]
+        : [
+            `Escena actual: ${l.id} · ${l.nombre}.`,
+            l.sabeis?.length ? `Lo que la mesa ya sabe: ${l.sabeis.join(" ")}` : "",
+            CAMPANA.reloj
+              ? `Noche ${E.noche} de ${CAMPANA.reloj.noches} hasta ${CAMPANA.reloj.etiqueta}.`
+              : "",
+            `Grupo: ${grupo}.`,
+            `Suministros: ${Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(", ")}.`,
+            `Localizaciones a las que puedes mover: ${CAMPANA.localizaciones.map((x) => x.id).join(", ")}.`,
+          ]
+    ).filter(Boolean).join("\n");
+  };
 
   const historial = E.charla.slice(-8).map((t) => ({
     role: t.de === "mesa" ? "user" : "assistant",
     content: t.texto,
   }));
+  const mensajes = [...historial, { role: "user", content: pregunta }];
 
-  const cuerpo = {
-    model: A.modelo,
-    max_tokens: A.sesionCero ? 1400 : 700,
-    stream: true,
-    system: [
-      // Las dos partes estables van cacheadas; el contexto de escena cambia cada turno.
-      // En sesión cero manda GUIA_CERO y NO se manda la trama: aún no se juega ninguna escena,
-      // y colar la trama aquí hace que el DJ empiece a narrar en vez de crear personajes.
-      {
-        type: "text",
-        text: [
-          GUIA,
-          A.cachondeo ? GUIA_CACHONDEO : "",
-          A.sesionCero ? GUIA_CERO : TRAMA[A.aventura],
-        ].filter(Boolean).join("\n\n"),
-        cache_control: { type: "ephemeral" },
-      },
-      { type: "text", text: contexto },
-    ],
-    messages: [...historial, { role: "user", content: pregunta }],
-  };
-  // Sonnet 5 y Opus 5 piensan por defecto; en voz eso añade segundos.
-  if (/sonnet-5|opus-5/.test(A.modelo)) cuerpo.thinking = { type: "disabled" };
-
-  // Dos límites distintos: uno corto para que conteste ALGO, y uno largo para el total. Un
-  // stream que se corta a medias dejaría la app colgada igual que si no contestara nunca.
-  const lim = conLimite(90_000, "el DJ");
+  const lim = conLimite(120_000, "el DJ");
   enCurso = lim;
-  const primerByte = setTimeout(() => lim.ac.abort(new Error("el DJ no ha contestado en 25 s")), 25_000);
 
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST", headers: cabecerasClaude(), body: JSON.stringify(cuerpo), signal: lim.señal,
-  }).catch((e) => {
-    clearTimeout(primerByte); lim.listo();
-    throw new Error(e?.name === "AbortError" ? String(e.message || "cancelado") : explicar("Claude", 0, e));
-  });
-  clearTimeout(primerByte);
-
-  if (!r.ok) {
-    const d = await r.text().catch(() => "");
-    lim.listo();
-    throw new Error(`${explicar("Claude", r.status)}${d.includes("credit") ? " Sin saldo." : ""}`);
-  }
-
-  const lector = r.body.getReader(), dec = new TextDecoder();
-  let resto = "";
   try {
-  while (true) {
-    const { done, value } = await lector.read();
-    if (done) break;
-    resto += dec.decode(value, { stream: true });
-    const lineas = resto.split("\n");
-    resto = lineas.pop() ?? "";
-    for (const linea of lineas) {
-      if (!linea.startsWith("data:")) continue;
-      let ev; try { ev = JSON.parse(linea.slice(5).trim()); } catch { continue; }
-      if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
-        alRecibir(ev.delta.text);
-      } else if (ev.type === "message_start") {
-        E.gasto.entrada += ev.message?.usage?.input_tokens ?? 0;
-      } else if (ev.type === "message_delta") {
-        E.gasto.salida += ev.usage?.output_tokens ?? 0;
-        if (ev.delta?.stop_reason === "max_tokens") cortado = true;
+    // Hasta 6 vueltas. Es de sobra para un turno de mesa y es el tope que evita que un bucle
+    // de herramientas se coma el saldo sin que nadie lo pare.
+    for (let vuelta = 0; vuelta < 6; vuelta++) {
+      const cuerpo = {
+        model: A.modelo,
+        max_tokens: A.sesionCero ? 1400 : 700,
+        stream: true,
+        tools: HERRAMIENTAS,
+        system: [
+          {
+            type: "text",
+            text: [
+              GUIA,
+              GUIA_HERRAMIENTAS,
+              A.cachondeo ? GUIA_CACHONDEO : "",
+              A.sesionCero ? GUIA_CERO : TRAMA[A.aventura],
+            ].filter(Boolean).join("\n\n"),
+            cache_control: { type: "ephemeral" },
+          },
+          { type: "text", text: contexto() },
+        ],
+        messages: mensajes,
+      };
+      // Sonnet 5 y Opus 5 piensan por defecto; en voz eso añade segundos.
+      if (/sonnet-5|opus-5/.test(A.modelo)) cuerpo.thinking = { type: "disabled" };
+
+      const primerByte = setTimeout(
+        () => lim.ac.abort(new Error("el DJ no ha contestado en 25 s")), 25_000,
+      );
+
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", headers: cabecerasClaude(), body: JSON.stringify(cuerpo), signal: lim.señal,
+      }).catch((e) => {
+        clearTimeout(primerByte);
+        throw new Error(
+          e?.name === "AbortError" ? String(e.message || "cancelado") : explicar("Claude", 0, e),
+        );
+      });
+      clearTimeout(primerByte);
+
+      if (!r.ok) {
+        const d = await r.text().catch(() => "");
+        throw new Error(`${explicar("Claude", r.status)}${d.includes("credit") ? " Sin saldo." : ""}`);
       }
+
+      // Se van montando los bloques por índice: el texto llega en trozos y el JSON de cada
+      // herramienta también, así que no se puede parsear hasta que el bloque termina.
+      const bloques = new Map();
+      let motivo = null;
+      const lector = r.body.getReader(), dec = new TextDecoder();
+      let resto = "";
+
+      while (true) {
+        const { done, value } = await lector.read();
+        if (done) break;
+        resto += dec.decode(value, { stream: true });
+        const lineas = resto.split("\n");
+        resto = lineas.pop() ?? "";
+        for (const linea of lineas) {
+          if (!linea.startsWith("data:")) continue;
+          let ev; try { ev = JSON.parse(linea.slice(5).trim()); } catch { continue; }
+
+          if (ev.type === "content_block_start") {
+            bloques.set(ev.index, { tipo: ev.content_block?.type, cb: ev.content_block, json: "" });
+          } else if (ev.type === "content_block_delta") {
+            const b = bloques.get(ev.index);
+            if (ev.delta?.type === "text_delta") alRecibir(ev.delta.text);
+            else if (ev.delta?.type === "input_json_delta" && b) b.json += ev.delta.partial_json ?? "";
+          } else if (ev.type === "message_start") {
+            E.gasto.entrada += ev.message?.usage?.input_tokens ?? 0;
+          } else if (ev.type === "message_delta") {
+            E.gasto.salida += ev.usage?.output_tokens ?? 0;
+            motivo = ev.delta?.stop_reason ?? motivo;
+            if (motivo === "max_tokens") cortado = true;
+          }
+        }
+      }
+
+      const usos = [...bloques.values()].filter((b) => b.tipo === "tool_use");
+      if (motivo !== "tool_use" || !usos.length) return { cortado, hechos: E.hechos };
+
+      // Se reconstruye el turno del asistente TAL COMO LLEGÓ —texto y peticiones— porque la API
+      // exige que cada tool_use tenga su tool_result en el mensaje siguiente.
+      const contenidoAsistente = [...bloques.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, b]) =>
+          b.tipo === "tool_use"
+            ? { type: "tool_use", id: b.cb.id, name: b.cb.name, input: parsearJson(b.json) }
+            : { type: "text", text: b.cb?.text ?? "" },
+        )
+        .filter((x) => x.type === "tool_use" || x.text);
+
+      mensajes.push({ role: "assistant", content: contenidoAsistente });
+      mensajes.push({
+        role: "user",
+        content: usos.map((b) => ({
+          type: "tool_result",
+          tool_use_id: b.cb.id,
+          content: ejecutarHerramienta(b.cb.name, parsearJson(b.json)),
+        })),
+      });
+
+      guardarEstado();
+      pintarTodo();
     }
-  }
+    return { cortado, hechos: E.hechos };
   } finally {
     lim.listo();
   }
-  return cortado;
+}
+
+/** El JSON de una herramienta puede llegar vacío si no tenía argumentos. */
+function parsearJson(t) {
+  if (!t?.trim()) return {};
+  try { return JSON.parse(t); } catch { return {}; }
 }
 
 /** Convierte frases en voz y las reproduce en orden, sin solaparse. */

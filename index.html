@@ -75,6 +75,13 @@
   figcaption { margin-top:6px; font-size:.78rem; font-style:italic; color:var(--tiza-baja); }
   figure { margin:0; }
 
+  /* Registro de la sesión: lo que el DJ ha ido anotando. Base del resumen del final. */
+  .registro { margin:0; padding-left:1.4em; display:flex; flex-direction:column; gap:6px; }
+  .registro li { font-size:.88rem; }
+  .registro li::marker { color:var(--liquen); font:500 .7rem var(--mono); }
+  .registro .tipo { font:500 .6rem/1 var(--mono); letter-spacing:.1em; text-transform:uppercase;
+                    color:var(--sebo); margin-right:7px; }
+
   ul.sabeis { margin:0; padding-left:1.1em; display:flex; flex-direction:column; gap:6px; }
   ul.sabeis li { font-size:.95rem; }
   ul.sabeis li::marker { color:var(--sebo); }
@@ -332,6 +339,11 @@
   .dj[data-estado="grabando"] { background:#2A1512; }
   .dj[data-estado="grabando"] .cara-dj { opacity:.5; }
 
+  /* Lo que el DJ ha cambiado, bajo su turno: PG, heridas, suministros, escena. */
+  .hechos { margin:7px 0 0; padding-left:1.05em; display:flex; flex-direction:column; gap:3px; }
+  .hechos li { font:500 .72rem/1.35 var(--mono); color:var(--sebo); }
+  .hechos li::marker { color:var(--liquen); }
+
   .lateral .charla { flex:1; min-height:0; overflow-y:auto; padding:10px 11px;
                      display:flex; flex-direction:column; gap:9px; }
   .lateral .acciones { flex:none; border-top:1px solid var(--liquen); padding:9px 11px;
@@ -464,6 +476,10 @@
       <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic">
         Toca una localización para moveros allí. Las que no habéis visitado salen apagadas.
       </p>
+    </section>
+    <section>
+      <h2>Lo que ha pasado</h2>
+      <ol class="registro" id="registro"></ol>
     </section>
     <section>
       <h2 id="reloj-titulo">El reloj</h2>
