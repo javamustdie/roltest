@@ -17,10 +17,17 @@ const CORVALAR = {
     agotado: "Es la Luna Muerta. El Bosque entra en la aldea y no se lleva solo a uno.",
   },
 
-  /** Coordenadas en un lienzo de 100×100 para el mapa de localizaciones. */
+  /**
+   * Coordenadas en un lienzo de 100×100 para el mapa de localizaciones.
+   *
+   * `ambiente` es la música de fondo que suena al llegar: la pone la app sola para que el DJ no
+   * tenga que acordarse en cada movimiento, y él puede cambiarla con la herramienta `ambiente`
+   * cuando la escena cambie de tono (una pelea, una muerte).
+   */
   localizaciones: [
     {
       id: "L0",
+      ambiente: "tension",
       nombre: "El camino del sur",
       x: 12, y: 78,
       audio: "l0-entrada",
@@ -35,6 +42,7 @@ const CORVALAR = {
     },
     {
       id: "L1",
+      ambiente: "calma",
       nombre: "Corvalar",
       x: 26, y: 62,
       audio: "l1-domar",
@@ -50,6 +58,7 @@ const CORVALAR = {
     },
     {
       id: "L2",
+      ambiente: "tension",
       nombre: "Casa de los Ramos",
       x: 13, y: 45,
       audio: "l2-mirena",
@@ -62,6 +71,7 @@ const CORVALAR = {
     },
     {
       id: "L3",
+      ambiente: "tension",
       nombre: "Iglesia de San Bran",
       x: 33, y: 40,
       audio: "l3-olen",
@@ -76,6 +86,7 @@ const CORVALAR = {
     },
     {
       id: "L4",
+      ambiente: "tension",
       nombre: "El Vado de las Piedras",
       x: 48, y: 66,
       audio: "l4-vado",
@@ -90,6 +101,7 @@ const CORVALAR = {
     },
     {
       id: "L5",
+      ambiente: "calma",
       nombre: "Choza de la Hilandera",
       x: 63, y: 84,
       audio: "l5-vesna",
@@ -104,6 +116,7 @@ const CORVALAR = {
     },
     {
       id: "L6",
+      ambiente: "horror",
       nombre: "El Círculo de Abedules",
       x: 72, y: 48,
       audio: "l6-sela",
@@ -118,6 +131,7 @@ const CORVALAR = {
     },
     {
       id: "L7",
+      ambiente: "horror",
       nombre: "El Corazón",
       x: 89, y: 22,
       audio: "l7-acreedor",
@@ -176,6 +190,7 @@ const PRUEBA = {
   localizaciones: [
     {
       id: "P1",
+      ambiente: "tension",
       nombre: "La alquería de Sarna",
       x: 22, y: 70,
       audio: "p1-entrada",
@@ -191,6 +206,7 @@ const PRUEBA = {
     },
     {
       id: "P2",
+      ambiente: "horror",
       nombre: "El pozo",
       x: 52, y: 44,
       audio: "p2-ahogado",
@@ -206,6 +222,7 @@ const PRUEBA = {
     },
     {
       id: "P3",
+      ambiente: "duelo",
       nombre: "El desván",
       x: 80, y: 24,
       audio: "p3-nera",

@@ -471,6 +471,53 @@ const HERRAMIENTAS = [
     },
   },
   {
+    name: "ambiente",
+    description:
+      "Cambia la música de fondo. Hazlo cuando cambie el tono de la escena, no en cada frase: al " +
+      "entrar en un sitio, al empezar una pelea, al morir alguien. Si la mesa lo tiene apagado no " +
+      "suena nada, pero el cambio se recuerda para cuando lo encienda.",
+    input_schema: {
+      type: "object",
+      properties: {
+        estado: {
+          type: "string",
+          enum: ["calma", "tension", "combate", "horror", "duelo"],
+          description:
+            "«calma» hablando o de camino; «tension» cuando saben que hay algo; «combate» en la " +
+            "pelea; «horror» el Bosque y lo que no se debería mirar; «duelo» cuando alguien ha " +
+            "muerto o se cierra algo.",
+        },
+      },
+      required: ["estado"],
+    },
+  },
+  {
+    name: "ilustrar",
+    description:
+      "Pinta una ilustración de lo que está pasando AHORA y la pone en pantalla, encima del arte " +
+      "de la localización. Para eso están los momentos que merecen una imagen: una pelea, la " +
+      "aparición de algo, un hallazgo, el final de una escena. Tarda unos quince segundos y la " +
+      "mesa ve que se está pintando, así que sigue narrando mientras: NO te calles a esperarla.\n\n" +
+      "El `prompt` va en INGLÉS, describiendo lo que se ve como si fuera un cuadro, no como una " +
+      "orden. Nada de nombres propios de la campaña —el generador no los conoce— y nada de " +
+      "describir cuerpos, piel ni ropa escasa: el filtro del proveedor lo bloquea y devuelve una " +
+      "imagen negra. Del estilo no te ocupes, se añade solo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "En inglés. Lo que se ve: quién, haciendo qué, dónde, con qué luz. Por ejemplo " +
+            "«four ragged travellers with torches fighting a bloated drowned corpse beside a " +
+            "stone well at night, mud, thick fog».",
+        },
+        pie: { type: "string", description: "Una línea en español para debajo de la imagen." },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
     name: "mostrar",
     description:
       "Cambia lo que se ve en el tablet. La pantalla la manejas TÚ: si alguien pide el mapa, " +
@@ -709,6 +756,11 @@ LOS OBJETOS Y LA PANTALLA LOS MANEJAS TÚ. Esto es lo que la mesa espera de ti:
   dejan atrás.
 - **El dinero también es tuyo.** cambiar_oro cuando encuentren monedas, cobren o paguen. Si la mesa
   tiene que apuntar el dinero a mano, no lo apunta.
+- **Ilustra los momentos que lo merecen.** Con ilustrar pintas lo que está pasando y sale en
+  pantalla: una pelea, la aparición de algo, un hallazgo. Tarda unos quince segundos y la mesa ve
+  que está en marcha, así que **sigue narrando mientras**, no te calles a esperarla. El prompt en
+  inglés, sin nombres propios de la campaña y sin describir cuerpos ni piel: el filtro del
+  proveedor lo bloquea y devuelve una imagen negra.
 - **Tú decides qué se ve.** Con mostrar cambias la pantalla del tablet: si preguntan dónde están o
   piden el mapa, saca el mapa; si vais a hablar de lo que lleva alguien, abre su ficha; si acaba
   la sesión, saca el cierre. Y hazlo también sin que lo pidan, cuando lo que estás contando se vea
@@ -794,6 +846,12 @@ let A = cargar(CLAVE_AJUSTES) ?? {
   clave11: "", claveCl: "", modelo: "claude-sonnet-5", vozModelo: "eleven_multilingual_v2",
 };
 if (!CAMPANAS[A.aventura]) A.aventura = CAMPANA_POR_DEFECTO;
+
+// Volúmenes. La voz alta por defecto —es lo que hay que oír— y el ambiente bajo: suena DEBAJO
+// de la voz, y si compite gana el ambiente y la mesa se pierde la mitad de lo que dice el DJ.
+A.volVoz ??= 1;
+A.volAmb ??= 0.35;
+A.ambiente ??= false;
 
 // Migración de una sola vez: el modelo de voz rápido era el de por defecto, y en mesa se dijo
 // que la voz sonaba mal. Cambiar el valor por defecto no arregla un dispositivo que ya tiene
@@ -1528,10 +1586,13 @@ function pintarGasto() {
   const stt = (g.sttSeg / 3600) * 0.22;
   const cl = (g.entrada / 1e6) * 3 + (g.salida / 1e6) * 15;
   const tts = (g.ttsCar / 1000) * (A.vozModelo === "eleven_flash_v2_5" ? 0.05 : 0.1);
-  const t = stt + cl + tts;
+  // fal.ai flux/dev: unos 0,025 $ por imagen de 1024×576.
+  const img = (g.imagenes ?? 0) * 0.025;
+  const t = stt + cl + tts + img;
   $("#gasto").innerHTML =
     `Transcripción ${Math.round(g.sttSeg)} s · Claude ${g.entrada}+${g.salida} tok · ` +
-    `voz ${g.ttsCar} car.<br><b>Estimado: ${t.toFixed(2)} $</b>`;
+    `voz ${g.ttsCar} car.${g.imagenes ? ` · ${g.imagenes} ilustración${
+      g.imagenes === 1 ? "" : "es"}` : ""}<br><b>Estimado: ${t.toFixed(2)} $</b>`;
 }
 
 function pintarRegistro() {
@@ -1781,6 +1842,7 @@ function sonarNarracionSiToca() {
   const a = $("#esc-audio");
   if (!a.getAttribute("src") || $("#acc-narracion").disabled) return;
   a.currentTime = 0;
+  a.volume = A.volVoz;
   // Si no se puede reproducir no se avisa: no lo ha pedido nadie, y un aviso rojo por algo que
   // pasa solo asusta más de lo que informa. El botón sigue ahí para intentarlo a mano.
   a.play().catch(() => {});
@@ -1789,7 +1851,10 @@ function sonarNarracionSiToca() {
 {
   const a = $("#esc-audio"), b = $("#acc-narracion");
   b.addEventListener("click", () => {
-    if (a.paused) { a.play().catch(() => avisar("No he podido reproducir el audio.")); }
+    if (a.paused) {
+      a.volume = A.volVoz;
+      a.play().catch(() => avisar("No he podido reproducir el audio."));
+    }
     else a.pause();
   });
   a.addEventListener("play", () => (b.querySelector(".icono").textContent = "❚❚"));
@@ -1807,6 +1872,7 @@ function sonarNarracionSiToca() {
 
 // ── Ajustes ──────────────────────────────────────────────────────────────────
 $("#clave-11").value = A.clave11;
+$("#clave-fal").value = A.claveFal ?? "";
 $("#clave-cl").value = A.claveCl;
 $("#modelo").value = A.modelo;
 $("#voz-modelo").value = A.vozModelo;
@@ -1844,6 +1910,7 @@ $("#guardar").addEventListener("click", () => {
   // pierde `aventura`, y la app volvería a la aventura por defecto al guardar una clave.
   A.clave11 = $("#clave-11").value.trim();
   A.claveCl = $("#clave-cl").value.trim();
+  A.claveFal = $("#clave-fal").value.trim();
   A.modelo = $("#modelo").value;
   A.vozModelo = $("#voz-modelo").value;
   A.vozTocada = true;
@@ -2373,6 +2440,9 @@ function ejecutarHerramienta(nombre, e) {
     // La narración grabada del sitio nuevo suena SOLA, pero al acabar el turno: si arrancara
     // aquí se pisaría con lo que el DJ está diciendo en ese momento por la voz en vivo.
     narracionPendiente = !!l.audio;
+    // Al llegar a un sitio nuevo, el ambiente que le corresponda. El DJ puede cambiarlo después
+    // con `ambiente`, pero así no hace falta que se acuerde en cada movimiento.
+    ponerAmbiente(l.ambiente ?? "calma");
     return nota(
       `La pantalla ya muestra ${l.id} · ${l.nombre}.` +
         (l.audio ? " Su narración grabada suena en cuanto acabes de hablar, no la repitas." : ""),
@@ -2513,6 +2583,33 @@ function ejecutarHerramienta(nombre, e) {
     const [fuera] = p.mochila.splice(i, 1);
     registrar("otro", `${p.pj} suelta ${nombreObj(fuera)}`, p.pj);
     return nota(`${nombreObj(fuera)} sale de la mochila de ${p.pj}.`);
+  }
+
+  if (nombre === "ambiente") {
+    const cuales = ["calma", "tension", "combate", "horror", "duelo"];
+    if (!cuales.includes(e.estado)) return `"${e.estado}" no vale. Son: ${cuales.join(", ")}.`;
+    ponerAmbiente(e.estado);
+    return nota(
+      A.ambiente
+        ? `El ambiente pasa a ${e.estado}.`
+        : `Ambiente anotado (${e.estado}). La mesa lo tiene apagado, así que no suena.`,
+    );
+  }
+
+  if (nombre === "ilustrar") {
+    if (!A.claveFal) {
+      return "No hay clave de fal.ai en Ajustes, así que no puedo pintar. Sigue narrando sin " +
+        "imagen y dilo si viene al caso.";
+    }
+    const prompt = (e.prompt ?? "").trim();
+    if (!prompt) return "Falta el prompt de la ilustración.";
+    // Se lanza y NO se espera: son 10-20 segundos y el turno del DJ no puede quedarse parado
+    // mirando. La imagen entra en pantalla cuando llegue, y si falla se avisa a la mesa.
+    ilustrarEscena(prompt, e.pie);
+    registrar("hallazgo", `Ilustración: ${prompt.slice(0, 70)}`);
+    return nota(
+      "Ya se está pintando; la mesa ve que está en marcha. Sigue narrando, no esperes a la imagen.",
+    );
   }
 
   if (nombre === "mostrar") {
@@ -2756,6 +2853,7 @@ class ColaVoz {
   reproducir(url) {
     return new Promise((res) => {
       const a = new Audio(url);
+      a.volume = A.volVoz;
       this.suena = a;
       const fin = () => { URL.revokeObjectURL(url); if (this.suena === a) this.suena = null; res(); };
       a.onended = fin; a.onerror = fin;
@@ -2800,6 +2898,196 @@ class ColaVoz {
   }
   terminar() { return this.cadena; }
 }
+
+
+// ── Ambiente sonoro ──────────────────────────────────────────────────────────
+/**
+ * La música y el ambiente están **sintetizados en el navegador** (`app/musica.js`), no son
+ * ficheros. Motivo: la app tiene que funcionar sin conexión, unos loops pregenerados costarían
+ * dinero, meterían megas en el repo y se oiría el bucle a la tercera vuelta.
+ *
+ * El módulo se carga con `import()` dinámico y **solo cuando se enciende**, por dos razones: no
+ * cargar un motor de audio a quien no lo va a usar, y porque los navegadores exigen un gesto del
+ * usuario para arrancar el audio — un `AudioContext` creado al abrir la página nace suspendido.
+ */
+let amb = null;
+let ambEstado = "calma";
+
+async function motorAmbiente() {
+  if (amb) return amb;
+  const { crearAmbiente } = await import("./musica.js");
+  amb = crearAmbiente();
+  amb.volumen(A.volAmb);
+  return amb;
+}
+
+async function encenderAmbiente(si) {
+  A.ambiente = si;
+  guardarAjustes();
+  pintarBotonAmbiente();
+  try {
+    if (!si) { amb?.parar(); return; }
+    const m = await motorAmbiente();
+    m.volumen(A.volAmb);
+    m.poner(ambEstado);
+  } catch (err) {
+    A.ambiente = false;
+    guardarAjustes();
+    pintarBotonAmbiente();
+    avisar(`El ambiente no ha arrancado (${err?.message ?? "error"}). La partida va igual.`);
+  }
+}
+
+function pintarBotonAmbiente() {
+  $("#acc-ambiente").dataset.on = A.ambiente ? "si" : "no";
+  $("#acc-ambiente-txt").textContent = A.ambiente ? "Ambiente ♪" : "Ambiente";
+}
+
+/** Cambia de ambiente. Si está apagado se recuerda, y al encender suena el que toca. */
+async function ponerAmbiente(estado) {
+  ambEstado = estado;
+  if (!A.ambiente) return;
+  try { (await motorAmbiente()).poner(estado); } catch { /* ya se avisó al encender */ }
+}
+
+$("#acc-ambiente").addEventListener("click", () => encenderAmbiente(!A.ambiente));
+$("#acc-sonido").addEventListener("click", () => {
+  const m = $("#mandos-sonido");
+  m.hidden = !m.hidden;
+});
+
+{
+  const vv = $("#vol-voz"), va = $("#vol-amb");
+  vv.value = Math.round(A.volVoz * 100);
+  va.value = Math.round(A.volAmb * 100);
+  $("#vol-voz-num").textContent = vv.value;
+  $("#vol-amb-num").textContent = va.value;
+  vv.addEventListener("input", () => {
+    A.volVoz = +vv.value / 100;
+    $("#vol-voz-num").textContent = vv.value;
+    guardarAjustes();
+    // Lo que ya está sonando también obedece: subir el volumen y no oír el cambio hasta la
+    // frase siguiente parece que el mando no funciona.
+    if (cola?.suena) cola.suena.volume = A.volVoz;
+    const n = $("#esc-audio");
+    if (n) n.volume = A.volVoz;
+  });
+  va.addEventListener("input", () => {
+    A.volAmb = +va.value / 100;
+    $("#vol-amb-num").textContent = va.value;
+    guardarAjustes();
+    amb?.volumen(A.volAmb);
+  });
+}
+
+
+// ── Ilustrar la escena en vivo ───────────────────────────────────────────────
+/**
+ * El estilo se añade aquí y no lo escribe el DJ, por dos motivos: que todas las ilustraciones de
+ * la campaña salgan del mismo cuadro, y que no se le pueda olvidar. Es el mismo texto que usa
+ * `scripts/lib.mjs` para el arte pregenerado.
+ */
+const ESTILO_ILUSTRACION =
+  "estética folk horror, pintura al óleo sombría, paleta desaturada de verdes musgo y grises turba";
+
+/** La última ilustración de la sesión, para poder volver a ella y para que sobreviva a recargar. */
+const CLAVE_ILUSTRACION = "corvalar.ilustracion.v1";
+let ilustrando = false;
+
+async function ilustrarEscena(prompt, pie) {
+  if (ilustrando) return; // una a la vez: dos en paralelo se pisan en pantalla y cuestan doble
+  ilustrando = true;
+  pintarIlustracion({ estado: "pintando", pie });
+
+  const lim = conLimite(90_000, "la ilustración");
+  try {
+    const r = await fetch("https://fal.run/fal-ai/flux/dev", {
+      method: "POST",
+      headers: { Authorization: `Key ${A.claveFal}`, "content-type": "application/json" },
+      signal: lim.señal,
+      body: JSON.stringify({
+        prompt: `${prompt}. ${ESTILO_ILUSTRACION}`,
+        image_size: { width: 1024, height: 576 },
+        num_images: 1,
+        enable_safety_checker: true,
+      }),
+    });
+    if (!r.ok) throw new Error(explicar("fal.ai", r.status));
+    const j = await r.json();
+    // El filtro de contenido de fal.ai NO falla: devuelve una imagen negra. Sin esto, en mesa
+    // aparece un rectángulo negro y nadie sabe por qué.
+    if (j.has_nsfw_concepts?.[0]) {
+      throw new Error("El filtro del generador ha bloqueado la escena. Pídele al DJ otra imagen.");
+    }
+    const url = j.images?.[0]?.url;
+    if (!url) throw new Error("El generador no ha devuelto imagen.");
+
+    E.gasto.imagenes = (E.gasto.imagenes ?? 0) + 1;
+
+    // Se intenta descargar para guardarla como data URL: un `blob:` no sobrevive a recargar y la
+    // URL del proveedor caduca. Pero eso necesita que el proveedor sirva CORS, y si no lo hace la
+    // imagen ya está pintada y sería absurdo perderla: en ese caso se usa la URL remota tal cual
+    // en el `<img>` —que no necesita CORS— y solo se pierde el sobrevivir a recargar.
+    let datos = null;
+    try {
+      const bytes = await (await fetch(url, { signal: lim.señal })).blob();
+      if (!bytes.type.startsWith("image/")) throw new Error(`no es una imagen (${bytes.type})`);
+      if (bytes.size < 20_000) {
+        throw new Error(`imagen vacía (${(bytes.size / 1024) | 0} KB)`);
+      }
+      datos = await new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.onerror = () => rej(new Error("no se ha podido leer"));
+        fr.readAsDataURL(bytes);
+      });
+      guardarIlustracion({ datos, pie: pie ?? "", prompt });
+    } catch (e2) {
+      if (e2?.name === "AbortError") throw e2;
+      datos = url;
+      ponEstado(`La ilustración se ve, pero no he podido guardarla (${e2.message}).`, "");
+    }
+    pintarIlustracion({ estado: "lista", datos, pie });
+  } catch (err) {
+    pintarIlustracion({ estado: "no" });
+    avisar(err?.message ?? "La ilustración no ha salido.");
+  } finally {
+    lim.listo();
+    ilustrando = false;
+    pintarGasto();
+  }
+}
+
+/**
+ * Se guarda aparte del estado de la partida, no dentro: son cientos de kilobytes en base64 y
+ * meterlos en `estado.json` haría que cada `guardarEstado()` —que pasa en cada golpe— reescribiera
+ * medio megabyte. Y si no cabe, se descarta sin romper nada: la imagen ya está en pantalla.
+ */
+function guardarIlustracion(x) {
+  try { localStorage.setItem(CLAVE_ILUSTRACION, JSON.stringify(x)); }
+  catch { localStorage.removeItem(CLAVE_ILUSTRACION); }
+}
+
+function pintarIlustracion({ estado, datos, pie }) {
+  const caja = $("#ilustracion"), img = $("#ilus-img");
+  caja.dataset.estado = estado;
+  caja.hidden = estado === "no";
+  $("#ilus-pie").textContent = pie ?? "";
+  if (estado === "lista" && datos) img.src = datos;
+  if (estado === "no") img.removeAttribute("src");
+}
+
+/** Al arrancar, si la sesión anterior dejó una ilustración, se recupera. */
+function recuperarIlustracion() {
+  let x = null;
+  try { x = JSON.parse(localStorage.getItem(CLAVE_ILUSTRACION)); } catch { /* nada */ }
+  if (x?.datos) pintarIlustracion({ estado: "lista", datos: x.datos, pie: x.pie });
+}
+
+$("#ilus-cerrar").addEventListener("click", () => {
+  pintarIlustracion({ estado: "no" });
+  localStorage.removeItem(CLAVE_ILUSTRACION);
+});
 
 
 // ── Cierre de sesión: resumen escrito y audio para mandar por WhatsApp ───────
@@ -2982,6 +3270,21 @@ $("#cierre-copiar").addEventListener("click", async () => {
 
 // ── Arranque ─────────────────────────────────────────────────────────────────
 pintarTodo();
+pintarBotonAmbiente();
+recuperarIlustracion();
+
+// Si el ambiente quedó encendido, arranca en el PRIMER gesto y no antes: un `AudioContext`
+// creado al abrir la página nace suspendido, y llamarle `resume()` sin que nadie haya tocado
+// nada no hace nada en ningún navegador moderno.
+if (A.ambiente) {
+  const arrancar = () => {
+    removeEventListener("pointerdown", arrancar);
+    removeEventListener("keydown", arrancar);
+    encenderAmbiente(true);
+  };
+  addEventListener("pointerdown", arrancar, { once: false });
+  addEventListener("keydown", arrancar, { once: false });
+}
 actualizarBotonHablar();
 irA(location.hash.slice(1) || "escena", false);
 

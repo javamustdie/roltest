@@ -7,7 +7,7 @@
  *
  * Sube VERSION al cambiar cualquier fichero de app/ para forzar la actualización.
  */
-const VERSION = "corvalar-v11";
+const VERSION = "corvalar-v12";
 
 const BASE = [
   "./",
@@ -18,6 +18,7 @@ const BASE = [
   "./rasgos.js",
   "./mapa.js",
   "./objetos.js",
+  "./musica.js",
   "./ornado.css",
   "./manifest.webmanifest",
   "./icono.svg",
@@ -44,8 +45,14 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
 
-  // Las APIs nunca se cachean: siempre a la red.
-  if (url.hostname.endsWith("elevenlabs.io") || url.hostname.endsWith("anthropic.com")) return;
+  // SOLO lo de esta misma web. Todo lo de fuera —las APIs de voz y de Claude, el generador de
+  // imágenes, las imágenes que devuelve— va a la red sin pasar por aquí.
+  //
+  // Antes se filtraban las APIs por nombre de host una a una, y cualquier otra cosa de fuera caía
+  // en el «resto» de abajo, que ante un fallo contesta con index.html. Eso significa que una
+  // ilustración que no se puede descargar devolvía la PÁGINA con estado 200: quien la pedía no
+  // tenía forma de saber que había fallado, y en pantalla salía una imagen rota sin explicación.
+  if (url.origin !== self.location.origin) return;
   if (e.request.method !== "GET") return;
 
   // Los medios (audio y arte) son inmutables: caché primero, y si no está, red
@@ -66,12 +73,23 @@ self.addEventListener("fetch", (e) => {
 
   // El resto: red primero para recibir actualizaciones, con la caché de reserva
   // cuando no hay cobertura.
+  //
+  // El respaldo a index.html es SOLO para navegaciones. Devolver la página cuando lo que falta es
+  // un módulo o una imagen es peor que fallar: el navegador intenta parsear HTML como JavaScript
+  // y la app se queda en blanco sin decir por qué.
+  const esNavegacion = e.request.mode === "navigate";
   e.respondWith(
     fetch(e.request)
       .then((r) => {
         if (r.ok) caches.open(VERSION).then((c) => c.put(e.request, r.clone()));
         return r;
       })
-      .catch(() => caches.match(e.request).then((hit) => hit ?? caches.match("./index.html"))),
+      .catch(() =>
+        caches.match(e.request).then((hit) => {
+          if (hit) return hit;
+          if (esNavegacion) return caches.match("./index.html");
+          return new Response("", { status: 504, statusText: "sin conexión" });
+        }),
+      ),
   );
 });

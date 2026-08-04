@@ -122,6 +122,18 @@
   .utiles button { min-height:34px; padding:0 8px; font:400 .74rem/1 var(--mono);
                    letter-spacing:.04em; color:var(--tiza-baja); gap:5px; }
   .utiles button .icono { font-size:.8rem; }
+  .utiles button[data-on="si"] { color:var(--sebo); border-color:var(--sebo); background:#2A2415; }
+
+  /* Volúmenes. Plegados por defecto: se tocan al empezar y no vuelven a hacer falta. */
+  .mandos { display:flex; flex-direction:column; gap:8px; padding:9px 10px;
+            background:var(--musgo-alto); border:1px solid var(--liquen); }
+  .mandos label { display:grid; grid-template-columns:auto 1fr 2.6em; align-items:center; gap:8px;
+                  font:500 .64rem/1 var(--mono); letter-spacing:.08em; text-transform:uppercase;
+                  color:var(--tiza-baja); }
+  .mandos b { font:500 .74rem/1 var(--mono); color:var(--sebo); text-align:right;
+              font-variant-numeric:tabular-nums; }
+  .mandos input[type="range"] { width:100%; min-width:0; accent-color:var(--sebo);
+                                height:22px; margin:0; }
 
   .barra-progreso { height:3px; background:#FFFFFF12; margin-top:8px; }
   .barra-progreso i { display:block; height:100%; background:var(--sebo); width:0; }
@@ -290,6 +302,29 @@
   .capa-cuerpo { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
                  padding:14px 16px calc(var(--alto-banda, 200px) + 20px);
                  display:flex; flex-direction:column; gap:14px; }
+
+  /* ── Ilustración en vivo ────────────────────────────────────────────
+     Se pone por encima de las capas (6) y por debajo de la banda (8): cuando hay una pelea la
+     imagen es lo que se mira, pero los personajes no desaparecen. */
+  .ilustracion { position:absolute; inset:0; z-index:7; display:flex; align-items:center;
+                 justify-content:center; background:#07080590; }
+  .ilustracion img { max-width:100%; max-height:100%; object-fit:contain; display:block;
+                     box-shadow:0 0 40px #000000C0; }
+  .ilustracion[data-estado="pintando"] img { display:none; }
+  .ilus-pintando { display:none; align-items:center; gap:10px; padding:14px 20px;
+                   background:#12140EE8; border:1px solid var(--sebo);
+                   font:400 1rem/1 var(--serif); color:var(--tiza); }
+  .ilustracion[data-estado="pintando"] .ilus-pintando { display:flex; }
+  /* Una mecha que late: mientras se pinta hay que ver que la app está viva, no colgada. */
+  .mecha { width:9px; height:9px; background:var(--sebo); border-radius:50%;
+           animation:mecha 1.4s ease-in-out infinite; }
+  @keyframes mecha { 0%,100% { opacity:.25; transform:scale(.8) } 50% { opacity:1; transform:scale(1.25) } }
+  .ilus-pie { position:absolute; left:0; right:0; bottom:calc(var(--alto-banda, 200px) + 10px);
+              margin:0; padding:0 24px; text-align:center; font:400 .92rem/1.4 var(--serif);
+              font-style:italic; color:var(--tiza); text-shadow:0 1px 4px #000; }
+  .ilustracion[data-estado="pintando"] .ilus-pie { display:none; }
+  .ilus-cerrar { position:absolute; top:12px; left:12px; min-height:38px; min-width:42px;
+                 padding:0; background:#12140EDD; color:var(--tiza-baja); }
 
   /* ── Miniatura del mapa, sobre la escena ────────────────────────────
      Los rótulos, la escala y la rosa se esconden: a este tamaño no se leen y solo ensucian. Lo
@@ -884,6 +919,10 @@
           <small>El cerebro del DJ. console.anthropic.com → API keys.</small>
           <input type="password" id="clave-cl" autocomplete="off" placeholder="sk-ant-...">
         </label>
+        <label>fal.ai <small>Para que el DJ pinte escenas en vivo. Sin ella la partida va igual,
+          pero no ilustra. fal.ai → Keys.</small>
+          <input type="password" id="clave-fal" autocomplete="off" placeholder="clave de fal.ai">
+        </label>
         <label>
           Modelo
           <small>Sonnet 5 es el equilibrio bueno entre latencia e inteligencia.</small>
@@ -917,6 +956,16 @@
         <button id="gasto-reset"><span class="icono">⟲</span><span>Poner el contador a cero</span></button>
       </section>
       </div>
+    </div>
+
+    <!-- La ilustración que pinta el DJ en vivo. Va encima de todo lo demás de la escena menos la
+         banda: cuando hay una pelea es lo que se mira. Mientras se pinta se ve que está en
+         marcha, porque son diez o veinte segundos. -->
+    <div class="ilustracion" id="ilustracion" data-estado="no" hidden>
+      <img id="ilus-img" alt="Ilustración de la escena">
+      <div class="ilus-pintando"><span class="mecha"></span>pintando la escena…</div>
+      <p class="ilus-pie" id="ilus-pie"></p>
+      <button class="ilus-cerrar" id="ilus-cerrar" title="Quitar la ilustración">✕</button>
     </div>
 
     <!-- Los personajes, integrados sobre la ilustración. Van DESPUÉS de las capas para quedar
@@ -993,6 +1042,26 @@
         <button id="acc-antorcha" title="Descuenta una antorcha de los suministros del grupo">
           <span class="icono">🔥</span><span>Antorcha</span>
         </button>
+        <button id="acc-ambiente" data-on="no"
+                title="Enciende o apaga la música y el ambiente. Lo cambia el DJ según la escena.">
+          <span class="icono">♪</span><span id="acc-ambiente-txt">Ambiente</span>
+        </button>
+        <button id="acc-sonido" title="Volúmenes de la voz y del ambiente">
+          <span class="icono">🔉</span><span>Sonido</span>
+        </button>
+      </div>
+
+      <!-- Los volúmenes, plegados: se tocan una vez al empezar y no vuelven a hacer falta, así
+           que no pueden estar ocupando sitio en la lateral toda la partida. -->
+      <div class="mandos" id="mandos-sonido" hidden>
+        <label>Voz del DJ
+          <input type="range" id="vol-voz" min="0" max="100" step="5">
+          <b id="vol-voz-num">100</b>
+        </label>
+        <label>Ambiente
+          <input type="range" id="vol-amb" min="0" max="100" step="5">
+          <b id="vol-amb-num">35</b>
+        </label>
       </div>
     </div>
 
