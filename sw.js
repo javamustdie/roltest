@@ -7,7 +7,7 @@
  *
  * Sube VERSION al cambiar cualquier fichero de app/ para forzar la actualización.
  */
-const VERSION = "corvalar-v19";
+const VERSION = "corvalar-v23";
 
 const BASE = [
   "./",
@@ -21,7 +21,13 @@ const BASE = [
   "./musica.js",
   "./figura.js",
   "./acciones.js",
+  "./relojes.js",
+  "./documentos.js",
+  "./quienes.js",
+  "./narracion.js",
+  "./sesion.js",
   "./ornado.css",
+  "./movil.css",
   "./manifest.webmanifest",
   "./icono.svg",
 ];
@@ -62,6 +68,22 @@ self.addEventListener("fetch", (e) => {
   // tenía forma de saber que había fallado, y en pantalla salía una imagen rota sin explicación.
   if (url.origin !== self.location.origin) return;
   if (e.request.method !== "GET") return;
+
+  // El servidor de mesa NO pasa por aquí, aunque sea del mismo origen y sea GET. Dos razones, y
+  // las dos se vieron romper cosas:
+  //
+  //   · `GET /mesa/flujo` es un text/event-stream: un 200 que no termina NUNCA. El «resto» de
+  //     abajo hace `c.put(request, r.clone())` con toda respuesta correcta, así que se quedaba
+  //     intentando guardar en caché un cuerpo infinito, y de paso consumiendo el clon: el estado
+  //     de la partida no llegaba a la app.
+  //   · `GET /mesa/salud` es la sonda que decide si hay servidor de mesa. Cacheada, un día SIN
+  //     Pocophone contestaría desde la caché y la app se creería en red: se quedaría esperando un
+  //     estado que nadie va a publicar. Justo el fallo que no se puede permitir, porque el modo
+  //     de hoy —estado en localStorage y claves de Ajustes— tiene que seguir funcionando solo.
+  //
+  // El proxy de las APIs (`/api/…`) se salta por lo mismo: son respuestas de un turno concreto,
+  // varias en streaming, y ninguna tiene sentido servida de la caché.
+  if (/(^|\/)(mesa|api)\//.test(url.pathname)) return;
 
   // Los medios (audio y arte) son inmutables: caché primero, y si no está, red
   // y se guarda para la próxima.

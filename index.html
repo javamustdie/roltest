@@ -10,8 +10,38 @@
      abajo: todos sus selectores empiezan por .ficha, así que ganan por especificidad. Si esta
      hoja no llega a cargar, la ficha sigue siendo usable con el estilo base. -->
 <link rel="stylesheet" href="ornado.css">
+<!-- La vista de MANDO: el móvil de un jugador, en vertical. Todos sus selectores empiezan por
+     :root[data-modo="mando"], así que si este aparato no es un mando —la tablet, la tele, o la app
+     de hoy sin servidor de mesa— esta hoja no cambia absolutamente nada. Va después de ornado.css
+     a propósito: es la última palabra sobre el reparto de la pantalla en un móvil. -->
+<link rel="stylesheet" href="movil.css">
 <link rel="icon" href="icono.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icono.svg">
+<script>
+  /* El modo de ESTE aparato, puesto antes de que se pinte nada.
+     app.js es un módulo, o sea diferido: si el atributo lo pusiera solo él, un móvil que ya eligió
+     «mando» pintaría primero el tablero de tablet entero —escena al 44 %, botón de hablar en mitad
+     de la pantalla— y saltaría al reparto de móvil un instante después. Ese salto es fácil de
+     confundir con «la app se ha cargado mal», así que se lee aquí lo que sesion.js dejó recordado
+     (CLAVE_MESA = "corvalar.mesa.v1") y se aplica de una vez.
+
+     Envuelto en try porque en modo incógnito de algunos navegadores leer localStorage LANZA, y un
+     error aquí, síncrono y antes del body, dejaría la página a medio pintar. Si algo falla no se
+     pone nada: la app arranca como el primer día, que es el camino que no se puede caer.
+     Con ?tele no se toca: esa pantalla es un segundo monitor de la mesa, no un mando.
+
+     Esto es una apuesta, no la decisión: app.js manda. Si al sondear resulta que no hay servidor de
+     mesa, puede quitar el atributo (`delete document.documentElement.dataset.modo`) y la app vuelve
+     al reparto de siempre. */
+  try {
+    if (!location.search.includes("tele")) {
+      const guardado = JSON.parse(localStorage.getItem("corvalar.mesa.v1") || "null");
+      if (guardado && (guardado.modo === "mando" || guardado.modo === "mesa")) {
+        document.documentElement.dataset.modo = guardado.modo;
+      }
+    }
+  } catch (_) { /* sin recuerdo: se elige al entrar */ }
+</script>
 <style>
   /* Misma paleta y tipografía que el resto del material de mesa.
      Compromiso deliberado con el tema oscuro: se juega con poca luz. */
@@ -658,11 +688,24 @@
   .lateral { flex:none; width:clamp(250px, 21%, 400px); display:flex; flex-direction:column;
              min-height:0; border-left:1px solid var(--liquen); background:var(--turba); }
 
-  .dj { flex:none; display:flex; align-items:center; gap:10px; padding:9px 11px;
+  /* `flex-wrap` para que quepan dos cosas nuevas en esta franja sin tocar la primera línea: el
+     chip de conexión con la mesa (a la derecha, en la misma fila) y la línea de «lo que está
+     haciendo» (debajo, a todo el ancho). Las dos nacen ocultas, así que en la tablet de hoy la
+     franja se ve exactamente igual: con dos hijos que caben, envolver no envuelve nada. */
+  .dj { flex:none; display:flex; align-items:center; gap:10px; padding:9px 11px; flex-wrap:wrap;
         border-bottom:1px solid var(--liquen); background:var(--musgo); }
   .dj .cara-dj { width:58px; height:58px; flex:none; position:relative; overflow:hidden;
                  border:1px solid #0A0B07; box-shadow:inset 0 0 0 1px #2E3422;
                  background:#0B0D07; transition:box-shadow 180ms, filter 180ms; }
+  /* El retrato del DJ ES el botón de hablar: se toca la cara a la que se le habla, que es lo que
+     todo el mundo intentaba hacer con el dedo antes de buscar el botón. El elemento pasó de <span>
+     a <button> y con eso heredaba el relleno de 12/16 px, los 48 px de alto mínimo y el fondo verde
+     al pulsar de los botones de la app, que le rompían el recuadro cuadrado. Se le devuelve el
+     aspecto de retrato aquí; el botón grande de arriba (#hablar) sigue existiendo y haciendo lo
+     mismo, porque a ciegas se busca ese. */
+  .dj button.cara-dj { display:block; padding:0; min-height:0; }
+  .dj button.cara-dj:active:not(:disabled) { background:#0B0D07; }
+  .dj button.cara-dj:focus-visible { outline:2px solid var(--sebo); outline-offset:2px; }
   .dj .cara-dj img { width:100%; height:100%; object-fit:cover; object-position:50% 30%;
                      transition:filter 180ms; }
   /* En reposo, apagado: si brilla siempre, brillar no significa nada. */
@@ -810,6 +853,144 @@
   .ficha-rejilla span { font:500 .6rem/1.4 var(--mono); letter-spacing:.1em;
                         text-transform:uppercase; color:var(--tiza-baja); }
 
+  /* ── Lo que el DJ está haciendo ────────────────────────────────────────
+     Segunda línea de la franja del DJ: «buscando la escena», «pintando», «lo ha dicho Nuria por el
+     móvil». No va en la conversación a propósito — eso no es algo que el DJ haya DICHO, y mezclarlo
+     con lo dicho ensuciaba el resumen de la sesión, que se escribe justo de ahí. Nace con [hidden]:
+     en la tablet no aparece hasta que app.js le pone texto. */
+  .dj-hace { flex:1 1 100%; margin:0; min-width:0;
+             font:500 .62rem/1.4 var(--mono); letter-spacing:.04em; color:var(--sebo); }
+  .dj-hace::before { content:"› "; color:var(--tiza-baja); }
+
+  /* ── El estado de la conexión con la mesa ──────────────────────────────
+     Si el servidor del Pocophone se cae, un móvil se queda pintando el último estado que recibió y
+     TODO parece ir bien: la escena está, los personajes están, y lo que ves es de hace cinco
+     minutos. Eso es lo único que esta app no se puede permitir, así que el chip va siempre a la
+     vista en la franja del DJ, con tres estados que se distinguen de un vistazo y un texto que dice
+     desde cuándo.
+
+     Es un botón, no un adorno: tocarlo fuerza el reintento, que es lo único que se puede hacer al
+     verlo en rojo. Y nace con [hidden], así que sin servidor de mesa no existe. */
+  .mesa-estado {
+    margin-left:auto; flex:none; min-height:0; padding:5px 9px; gap:6px;
+    border:1px solid var(--liquen); background:#0E100A;
+    font:500 .58rem/1 var(--mono); letter-spacing:.08em; text-transform:uppercase;
+    color:var(--tiza-baja);
+  }
+  .mesa-estado .mesa-punto { width:7px; height:7px; flex:none; border-radius:50%;
+                             background:var(--tiza-baja); }
+  .mesa-estado b { font-weight:500; }
+  .mesa-estado[data-conexion="conectado"] { border-color:#4A5F26; color:#9CBE5A; }
+  .mesa-estado[data-conexion="conectado"] .mesa-punto { background:#7C9455; }
+  .mesa-estado[data-conexion="conectando"] { border-color:var(--sebo); color:var(--ambar);
+                                             background:#2A2415; }
+  .mesa-estado[data-conexion="conectando"] .mesa-punto { background:var(--ambar);
+                                             animation:latir-mesa 1.2s ease-in-out infinite; }
+  /* «Sin conexión», «cerrado», «hace falta la contraseña» y «esto es de hace un rato» comparten
+     aspecto a propósito: las cuatro quieren decir lo mismo para quien mira —lo que hay en pantalla
+     puede estar viejo— y cuatro colores distintos solo obligan a aprenderse una tabla. */
+  .mesa-estado[data-conexion="sin-conexion"],
+  .mesa-estado[data-conexion="cerrado"],
+  .mesa-estado[data-conexion="clave"],
+  .mesa-estado[data-viejo="si"] { border-color:var(--herrumbre); color:#E4A898; background:#1E1310; }
+  .mesa-estado[data-conexion="sin-conexion"] .mesa-punto,
+  .mesa-estado[data-conexion="cerrado"] .mesa-punto,
+  .mesa-estado[data-conexion="clave"] .mesa-punto,
+  .mesa-estado[data-viejo="si"] .mesa-punto { background:var(--herrumbre); }
+  @keyframes latir-mesa { 0%,100% { opacity:.3 } 50% { opacity:1 } }
+
+  /* ── La mesa en red, dentro de Grupo ───────────────────────────────────
+     Para cantar el id y la dirección a los demás sin salir de la app, ver quién ha entrado, y poder
+     cambiar de idea sobre lo que es este aparato. Oculto mientras no haya servidor. */
+  .mesa-linea { margin:0; font:400 .9rem/1.45 var(--serif); color:var(--tiza-baja); }
+  .mesa-linea b { font:500 1.02rem/1 var(--mono); letter-spacing:.08em; color:var(--sebo);
+                  word-break:break-all; }
+  .mesa-aparatos { display:flex; flex-direction:column; gap:5px; }
+  .mesa-aparato { display:flex; align-items:baseline; gap:9px; padding:7px 10px;
+                  background:var(--musgo-alto); border:1px solid var(--liquen);
+                  font:400 .88rem/1.3 var(--serif); }
+  .mesa-aparato .que { margin-left:auto; font:500 .6rem/1 var(--mono); letter-spacing:.1em;
+                       text-transform:uppercase; color:var(--tiza-baja); }
+  .mesa-aparato[data-aqui="si"] { border-color:var(--sebo); }
+  .mesa-aparato[data-conectado="no"] { opacity:.5; }
+
+  /* ── Entrar en la mesa ─────────────────────────────────────────────────
+     Aparece SOLO si esta página la sirve el servidor de mesa (app.js lo comprueba con /mesa/salud y
+     le quita el [hidden]). Sin servidor no existe y la app arranca como el primer día: eso es lo que
+     tiene que seguir funcionando si mañana el Pocophone no enciende.
+
+     Esta pantalla la usan cuatro personas que no la han visto nunca, de pie y con el móvil en una
+     mano, así que: el id de la mesa GRANDE porque se canta en voz alta, la contraseña solo si el
+     servidor dice que la hay, y dos botones enormes que dicen en una línea qué es cada aparato.
+     Por encima de todo lo demás (la tarjeta X va en 60, el telón de pausa en 63): mientras no se
+     ha elegido, no hay escena que parar. */
+  .entrada { position:fixed; inset:0; z-index:70; display:flex; align-items:center;
+             justify-content:center; padding:14px; overflow-y:auto;
+             -webkit-overflow-scrolling:touch;
+             background:radial-gradient(130% 100% at 50% 0%, #1E2216 0%, var(--turba) 68%); }
+  /* `margin:auto` con el flex de arriba centra en vertical pero deja desplazar cuando no cabe: en un
+     móvil corto con el teclado abierto, `align-items:center` solo recortaba la caja por arriba. */
+  .entrada-caja { width:100%; max-width:440px; margin:auto; display:flex; flex-direction:column;
+                  gap:11px;
+                  padding:max(16px, env(safe-area-inset-top)) 16px
+                          max(16px, env(safe-area-inset-bottom)); }
+  .entrada-marca { margin:0; font:500 .6rem/1 var(--mono); letter-spacing:.24em;
+                   text-transform:uppercase; color:var(--sebo); }
+  .entrada-caja h2 { font:400 1.5rem/1.2 var(--serif); letter-spacing:0; text-transform:none;
+                     color:var(--tiza); }
+  .entrada-sesion { margin:0; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+                    padding:10px 13px; background:var(--musgo); border:1px solid var(--liquen);
+                    font:400 .82rem/1.35 var(--serif); color:var(--tiza-baja); }
+  .entrada-sesion b { font:500 1.2rem/1 var(--mono); letter-spacing:.1em; color:var(--sebo); }
+  .entrada-pregunta { margin:5px 0 0; font:400 1.02rem/1.35 var(--serif); color:var(--tiza); }
+  .entrada-modos { display:flex; flex-direction:column; gap:10px; }
+  /* Rejilla y no fila: el icono ocupa las dos líneas a la izquierda, y el rótulo y la explicación
+     quedan alineados entre sí. Con `inline-flex` (lo que trae un botón) la explicación no cabía en
+     la misma línea que el nombre y se partía a la mitad de una palabra. */
+  .entrada-opcion { display:grid; grid-template-columns:auto 1fr; gap:3px 14px;
+                    align-items:center; justify-items:start; text-align:left;
+                    min-height:78px; padding:13px 15px;
+                    border-color:var(--sebo); background:var(--musgo-alto); }
+  .entrada-opcion .eo-icono { grid-row:span 2; font-size:1.7rem; line-height:1; color:var(--sebo); }
+  .entrada-opcion b { font:400 1.12rem/1.2 var(--serif); }
+  .entrada-opcion .eo-que { font:400 .84rem/1.42 var(--serif); color:var(--tiza-baja); }
+  .entrada-opcion[data-elegido="si"] { background:#2A2415; }
+  .entrada-opcion[aria-disabled="true"] { opacity:.5; }
+
+  /* La contraseña. `type=password` sin estilo sale como caja blanca del navegador, y a 13 px iOS
+     amplía la página al enfocarla: de ahí el 1rem y el alto de dedo. */
+  .entrada-clave { display:flex; flex-direction:column; gap:7px; margin:0;
+                   padding:12px 13px; background:var(--musgo); border:1px solid var(--liquen); }
+  .entrada-clave label { font:500 .62rem/1.4 var(--mono); letter-spacing:.1em;
+                         text-transform:uppercase; color:var(--tiza-baja); }
+  .entrada-clave small { font:400 .8rem/1.4 var(--serif); font-style:italic;
+                         color:var(--tiza-baja); }
+  .entrada-clave input { min-height:50px; padding:11px 12px; width:100%;
+                         font:400 1rem/1.2 var(--mono); letter-spacing:.06em;
+                         color:var(--tiza); background:#0E100A; border:1px solid var(--liquen); }
+  .entrada-clave input:focus { outline:1px solid var(--sebo); }
+  .entrada-clave button { min-height:50px; border-color:var(--sebo); }
+  .entrada-fallo { margin:0; padding:10px 12px; background:#2A1512; border:1px solid #8D3524;
+                   font:400 .88rem/1.45 var(--serif); color:#F0C4B4; }
+  .entrada-espera { margin:0; display:flex; align-items:center; gap:9px;
+                    font:400 .88rem/1.3 var(--serif); color:var(--tiza-baja); }
+  .entrada-pie { margin:0; font:400 .8rem/1.5 var(--serif); font-style:italic;
+                 color:var(--tiza-baja); }
+  /* La salida: jugar sin el servidor, con el estado en este aparato y las claves de Ajustes, o sea
+     la app de siempre. Discreta pero SIEMPRE presente: si el Pocophone se pone tonto a la hora de
+     empezar, nadie tiene que saber apagar nada para poder jugar. */
+  .entrada-solo { min-height:44px; padding:10px; border:none; background:none;
+                  font:400 .84rem/1.3 var(--serif); color:var(--tiza-baja);
+                  text-decoration:underline; text-underline-offset:3px; }
+  .entrada-solo:active:not(:disabled) { background:none; color:var(--tiza); }
+  /* La puerta es opaca y va en 70, así que ya tapa lo que hay debajo (la tarjeta X en 60, el chip
+     de «pintando» en 59, el telón de pausa en 63). Pero tapado no es lo mismo que ausente: la
+     tarjeta X sigue siendo un botón, y un botón invisible al que se llega con el tabulador es una
+     trampa. Se quitan del todo mientras no se haya elegido aparato — antes de entrar no hay escena
+     que parar ni ilustración que esperar. */
+  :root:has(.entrada:not([hidden])) .tarjeta-x,
+  :root:has(.entrada:not([hidden])) .pintando-chip { display:none; }
+
   /* En pantalla estrecha la lateral pasa debajo: en vertical no caben dos columnas. */
   @media (max-width: 780px) {
     .tablero { flex-direction:column; }
@@ -866,6 +1047,11 @@
       <span>mapa</span>
     </button>
 
+    <!-- Los relojes de tensión, sobre la escena y siempre a la vista. Aquí van SOLO los que están
+         en marcha (tres como mucho): la presión que hay que esconder para verla no presiona. Los
+         archivados se quedan en la Misión, que es donde se mira hacia atrás. -->
+    <div class="relojes" id="relojes" hidden></div>
+
     <div class="pie-escena" id="esc-pie"></div>
 
     <!-- Capa «Misión y mapa»: se abre SOBRE la escena, no en otra pantalla. La lateral con el
@@ -904,7 +1090,26 @@
         <ul class="sabeis" id="esc-sabeis"></ul>
         </section>
         <section>
-        <h2 id="reloj-titulo">El reloj</h2>
+        <!-- Lo que habéis averiguado vosotros, que no es lo mismo que lo que se sabe de entrada.
+             Aquí solo llega lo que el DJ ya ha soltado: lo que no ha revelado no se pinta nunca,
+             porque esta pantalla la miráis vosotros. -->
+        <h2>Lo que habéis averiguado</h2>
+        <ul class="sabeis" id="secretos"></ul>
+        </section>
+        <section>
+        <h2>Relojes de tensión</h2>
+        <div class="relojes-lista" id="relojes-mision"></div>
+        </section>
+        <section>
+        <!-- Los mejores momentos. Antes cada ilustración pisaba la anterior en la misma clave del
+             almacén, así que de una sesión sobrevivía una sola imagen. Ahora se quedan todas, con
+             lo que estaba pasando cuando se pintaron: sin eso, en tres semanas es una imagen
+             bonita de la que nadie se acuerda. -->
+        <h2>Los mejores momentos</h2>
+        <div class="momentos" id="momentos"></div>
+        </section>
+        <section>
+        <h2 id="reloj-titulo">El reloj de la aventura</h2>
         <div class="fila" id="reloj-botones">
         <button id="noche-mas"><span class="icono">☾</span><span>Cae la noche</span></button>
         <button id="noche-menos"><span class="icono">↺</span><span>Deshacer</span></button>
@@ -943,8 +1148,30 @@
              última al empezar, y con eso sabe dónde lo dejasteis sin que se lo contéis. -->
         <section>
           <h2>El diario de la campaña</h2>
+          <!-- «En capítulos anteriores…»: locuta la última entrada del diario con la voz del DJ,
+               para arrancar la sesión sabiendo dónde lo dejasteis. No pasa por Claude a propósito
+               —el texto ya está escrito para escucharse— así que no cuesta tokens ni puede
+               inventarse nada que no pasara. -->
+          <div class="fila">
+            <button id="recap"><span class="icono">⏵</span>
+              <span>En capítulos anteriores…</span></button>
+          </div>
+          <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="recap-nota"></p>
           <div id="diario" class="diario"></div>
         </section>
+      </div>
+    </div>
+
+    <!-- Capa «Quién es quién»: a quién habéis conocido y cómo os trata. Con cuatro jugadores
+         nuevos los nombres se pierden a la tercera sesión, y luego nadie sabe quién era Olen.
+         Solo sale quien ya habéis conocido: el resto destriparía la aventura. -->
+    <div class="capa" id="capa-quienes" hidden>
+      <div class="capa-cab">
+        <h2>Quién es quién</h2>
+        <button class="capa-cerrar" data-cerrarcapa title="Volver a la escena">✕</button>
+      </div>
+      <div class="capa-cuerpo">
+        <div id="quienes"></div>
       </div>
     </div>
 
@@ -961,6 +1188,16 @@
       </section>
       <section>
         <h2>Vuestros personajes</h2>
+        <!-- Los retratos desde una foto. Se hace antes de empezar, con la tablet en la mesa: cada
+             uno se pone delante, foto, y sale su cara pintada al óleo en la barra de personajes.
+             La foto se manda al generador SOLO en ese momento y no se guarda; lo que se guarda es
+             el retrato. Que quien salga en la foto lo sepa. -->
+        <h2>Vuestras caras</h2>
+        <div id="caras"></div>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)" id="caras-nota">
+          La foto se manda al generador para que el retrato se os parezca, y no se guarda.
+          Hace falta la clave de fal.ai en Ajustes.
+        </p>
         <button id="editar-grupo"><span class="icono">✎</span><span>Editar personajes</span></button>
         <div id="editor" hidden>
           <p style="margin:0;font-size:.82rem;color:var(--tiza-baja)">
@@ -973,6 +1210,27 @@
             <button id="restaurar-pj"><span class="icono">⟲</span><span>Volver a los pregenerados</span></button>
           </div>
         </div>
+      </section>
+      <!-- La mesa en red. Oculto mientras no haya servidor de mesa: en la app de siempre esto no
+           existe. Sirve para cantar el id y la dirección a quien llega tarde, ver quién ha entrado,
+           y cambiar de idea sobre lo que es este aparato sin recargar nada. -->
+      <section id="mesa-panel" hidden>
+        <h2>La mesa en red</h2>
+        <p class="mesa-linea">Sesión <b id="mesa-panel-sesion">—</b></p>
+        <p class="mesa-linea">Los demás abren esto en el navegador del móvil:
+          <b id="mesa-panel-url">—</b></p>
+        <div class="mesa-aparatos" id="mesa-aparatos"></div>
+        <div class="fila">
+          <button id="mesa-modo"><span class="icono">⇄</span>
+            <span id="mesa-modo-txt">Cambiar lo que es este aparato</span></button>
+          <button id="mesa-solo"><span class="icono">⏏</span>
+            <span>Jugar sin la mesa</span></button>
+        </div>
+        <p style="margin:0;font-size:.82rem;color:var(--tiza-baja);font-style:italic"
+           id="mesa-panel-nota">
+          Solo el aparato en modo <b>mesa</b> reproduce la voz del DJ: cinco altavoces con la misma
+          voz desfasada en la misma habitación suenan a cueva. Los móviles la leen.
+        </p>
       </section>
       <section>
         <h2>Jugar en la tele</h2>
@@ -1171,13 +1429,27 @@
     </button>
     <button id="cancelar" hidden><span class="icono">■</span><span>Cancelar</span></button>
 
-    <!-- El narrador. Se ilumina cuando habla. -->
+    <!-- El narrador. Se ilumina cuando habla.
+         Su retrato ES el botón de hablar: la mesa le hablaba a la cara y luego buscaba el botón, así
+         que ahora la cara hace lo mismo que #hablar. El botón grande de arriba se queda —es el que
+         se encuentra a ciegas y el que crece en el móvil—; son dos puertas al mismo turno. -->
     <div class="dj" id="dj" data-estado="listo">
-      <span class="cara-dj"><img id="dj-cara" alt="" src="retratos/dj.webp"></span>
+      <button type="button" class="cara-dj" id="dj-hablar"
+              title="Toca la cara del DJ para hablarle">
+        <img id="dj-cara" alt="" src="retratos/dj.webp">
+      </button>
       <span class="quien-dj">
         <b>Director de juego</b>
         <span id="dj-estado">esperando a la mesa</span>
       </span>
+      <!-- La conexión con la mesa, siempre a la vista mientras haya servidor. Tocarlo reintenta. -->
+      <button type="button" class="mesa-estado" id="mesa-estado" data-conexion="conectando" hidden
+              title="Conexión con la mesa. Tócalo para reintentar.">
+        <i class="mesa-punto" aria-hidden="true"></i><b id="mesa-estado-txt">conectando</b>
+      </button>
+      <!-- Lo que el DJ está haciendo AHORA: pensando, pintando, o leyendo lo que ha llegado de un
+           móvil. Va aquí y no en la conversación porque no es algo que el DJ haya dicho. -->
+      <p class="dj-hace" id="dj-hace" hidden></p>
     </div>
 
     <div class="charla" id="charla"></div>
@@ -1220,6 +1492,9 @@
         <button data-capa="grupo" title="El grupo, los suministros y el oro">
           <span class="g">🛡</span><span>Grupo</span>
         </button>
+        <button data-capa="quienes" title="A quién habéis conocido y cómo os trata">
+          <span class="g">☗</span><span>Quiénes</span>
+        </button>
         <button data-capa="ajustes" title="Claves, aventura y modo sesión cero">
           <span class="g">⚙</span><span>Ajustes</span>
         </button>
@@ -1256,6 +1531,15 @@
           <b id="vol-amb-num">35</b>
         </label>
       </div>
+
+      <!-- «Lo mío»: las dos cosas que un jugador abre sin parar en su propio móvil. Solo sale en
+           modo mando —lo quita app.js— y movil.css la coloca la última, o sea la más cerca del
+           pulgar después de HABLAR. En la tablet sigue oculta: allí la ficha se abre tocando la cara
+           en la banda y la cámara está en Grupo → Vuestras caras, que siguen funcionando igual. -->
+      <div class="mio" id="mio" hidden>
+        <button id="mi-ficha"><span class="g">🛡</span><span>Mi ficha</span></button>
+        <button id="mi-cara"><span class="g">☺</span><span>Mi cara</span></button>
+      </div>
     </div>
 
     <!-- Los avisos, al pie de la lateral: siempre a la vista y en la misma zona que el DJ.
@@ -1268,6 +1552,123 @@
 <!-- Ficha del personaje: capa sobre todo, se abre tocando un retrato. -->
 <div class="ficha" id="ficha" hidden>
   <div class="ficha-caja" id="ficha-caja"></div>
+</div>
+
+<!-- El papel que el DJ pone sobre la mesa: una carta, una inscripción, una página arrancada. Se
+     lee, se señala y se discute, que es lo que no pasa cuando el DJ lo lee en voz alta. Va fuera
+     del tablero para que tape también las capas, pero por debajo de la tarjeta X: parar la escena
+     tiene que poder hacerse con un papel puesto. -->
+<div class="documento" id="documento" hidden>
+  <div class="documento-hoja" id="documento-hoja"></div>
+  <button class="documento-cerrar" id="documento-cerrar">Ya lo hemos leído</button>
+</div>
+
+<!-- ── La tarjeta X ─────────────────────────────────────────────────────────────────
+     Estos cuatro bloques viven FUERA del tablero a propósito. Dentro del escenario los taparían
+     una capa en vertical o la ficha, que van fijas y por encima, y la tarjeta X no puede depender
+     de lo que la mesa tenga abierto en ese momento: o se alcanza siempre o no sirve de nada. -->
+<button class="tarjeta-x" id="tarjeta-x" aria-label="Parar la escena"
+        title="Parar la escena. No hay que explicar por qué.">
+  <span class="tx-aspa">✕</span><span class="tx-rotulo">parar</span>
+</button>
+
+<div class="tx-fondo" id="tx-fondo" hidden></div>
+
+<!-- Un toque en la tarjeta X calla todo y abre esto; lo que cambia la ficción es la SEGUNDA
+     pulsación. Así un roce con la palma solo produce silencio, que se deshace solo. -->
+<div class="tx-panel" id="tx-panel" role="dialog" aria-label="Parar la escena" hidden>
+  <p class="tx-titular">Paramos.
+    <span>No hace falta decir por qué. Nadie lo va a preguntar.</span>
+  </p>
+  <button class="tx-opcion" id="tx-rebobinar">
+    <b>Rebobinar</b><span>eso no ha pasado · volvemos atrás</span>
+  </button>
+  <button class="tx-opcion" id="tx-pausa">
+    <b>Pausa</b><span>paramos un momento · seguimos cuando queráis</span>
+  </button>
+  <button class="tx-opcion" id="tx-saltar">
+    <b>Saltar</b><span>adelante · esto no lo jugamos</span>
+  </button>
+  <button id="tx-seguir">Falsa alarma, seguimos</button>
+</div>
+
+<!-- El telón de pausa: local, instantáneo y sin hablar con nadie. Nadie tiene que oír al DJ decir
+     nada mientras la mesa respira. -->
+<div class="pausa" id="pausa" hidden>
+  <b>PAUSA</b>
+  <p>La mesa ha parado. No hace falta explicar nada.</p>
+  <button id="pausa-reanudar"><span class="icono">▸</span><span>Seguimos</span></button>
+</div>
+
+<!-- «Se está pintando», al lado de la tarjeta X. El indicador de dentro de la ilustración se queda
+     tapado si hay una capa abierta en vertical, y entonces la mesa no ve que la imagen va en
+     marcha: a los diez segundos eso ya parece colgado. El punto que late es un ::before, así que
+     escribir aquí los segundos con textContent no se lo lleva por delante. -->
+<div class="pintando-chip" id="pintando" hidden>pintando…</div>
+
+<!-- ── Entrar en la mesa ────────────────────────────────────────────────────────────────
+     Solo sale si esta página la está sirviendo el servidor de mesa del Pocophone: app.js pregunta
+     por /mesa/salud y, si contesta, le quita el [hidden]. Si no contesta —o si el móvil no tiene
+     wifi, o si mañana ese cacharro no arranca— esta puerta no aparece nunca y la app se abre como
+     el primer día, con la partida en este aparato y las claves de Ajustes. Eso es lo que no se
+     puede caer, así que este bloque nace oculto y nadie lo despierta sin servidor.
+
+     Lo van a leer cuatro personas que no lo han visto nunca, de pie, con el móvil en una mano. De
+     ahí que no haya nada que rellenar salvo la contraseña (y solo si la hay), que el id de la mesa
+     esté en grande porque se canta en voz alta, y que cada opción diga en una línea qué implica. -->
+<div class="entrada" id="entrada" role="dialog" aria-modal="true"
+     aria-labelledby="entrada-titulo" hidden>
+  <div class="entrada-caja">
+    <p class="entrada-marca">El Bosque · mesa compartida</p>
+    <h2 id="entrada-titulo">Entrar en la partida</h2>
+
+    <p class="entrada-sesion">
+      Mesa <b id="entrada-sesion">—</b>
+      <span id="entrada-donde"></span>
+    </p>
+
+    <!-- La contraseña. Oculta si el servidor dice que no la hay (`clave:false` en /mesa/salud);
+         se queda a la vista si el servidor la rechaza, con el motivo en #entrada-fallo. -->
+    <form class="entrada-clave" id="entrada-clave" hidden>
+      <label for="entrada-pase">Contraseña de la mesa</label>
+      <small>La dice el que ha puesto el servidor. Se recuerda en este aparato.</small>
+      <input id="entrada-pase" type="password" autocomplete="off"
+             enterkeyhint="go" placeholder="la que os han dicho">
+      <button type="submit" id="entrada-clave-enviar">
+        <span class="icono">✓</span><span>Comprobar</span>
+      </button>
+    </form>
+
+    <p class="entrada-pregunta">¿Qué es este aparato?</p>
+    <div class="entrada-modos" id="entrada-modos">
+      <!-- Esto NO es un reparto de permisos: los dos aparatos ven exactamente lo mismo. Es reparto
+           de trabajo, y el motivo es físico: la voz tiene que salir por un solo altavoz. -->
+      <button type="button" class="entrada-opcion" id="entrada-mesa">
+        <span class="eo-icono" aria-hidden="true">🔊</span>
+        <b>La mesa</b>
+        <span class="eo-que">La tablet del centro: pone la voz del DJ y lleva la partida.
+          Solo un aparato.</span>
+      </button>
+      <button type="button" class="entrada-opcion" id="entrada-mando">
+        <span class="eo-icono" aria-hidden="true">📱</span>
+        <b>Un mando</b>
+        <span class="eo-que">Tu móvil: le hablas al DJ, ves tu ficha y te haces el retrato.
+          Aquí no suena la voz.</span>
+      </button>
+    </div>
+
+    <p class="entrada-fallo" id="entrada-fallo" hidden></p>
+    <p class="entrada-espera" id="entrada-espera" hidden>
+      <span class="mecha"></span><span id="entrada-espera-txt">entrando…</span>
+    </p>
+
+    <p class="entrada-pie" id="entrada-pie">
+      Se puede cambiar luego en Grupo → La mesa en red.
+    </p>
+    <button type="button" class="entrada-solo" id="entrada-solo">
+      Jugar solo en este aparato, sin la mesa
+    </button>
+  </div>
 </div>
 
 <script type="module" src="app.js"></script>

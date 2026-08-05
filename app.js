@@ -1,11 +1,34 @@
 /**
  * Centro de mandos — El Diezmo de Corvalar
  *
- * Todo ocurre en el tablet. No hay servidor:
+ * Por defecto todo ocurre en el tablet y no hay servidor:
  *   micrófono → Scribe (STT) → API de Claude → ElevenLabs (TTS) → altavoz
  *
  * Las claves las pone el dueño del dispositivo en Ajustes y viven en
  * localStorage. Nunca salen de aquí salvo hacia el servicio al que pertenecen.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * Y ADEMÁS, SI LO HAY, UN SERVIDOR DE MESA
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * Cuando la página la sirve `servidor/mesa.mjs` (el Pocophone de casa), la app
+ * detecta el servidor con `conectarMesa()` y entra en uno de dos modos:
+ *
+ *   · `mesa`  — el tablet. Es el ÚNICO que ejecuta el bucle del DJ y el único
+ *               que suena. Publica el estado y se come la cola de turnos que
+ *               llegan de los móviles.
+ *   · `mando` — un móvil. Manda turnos, ve el estado y se hace el selfie.
+ *               **No reproduce la voz del DJ jamás**: cinco altavoces con la
+ *               misma frase y décimas de desfase suenan a cueva. Eso no es un
+ *               permiso, es reparto de trabajo por una razón física.
+ *
+ * Con servidor, las tres APIs van por su proxy (`API` más abajo) y las claves
+ * las pone él desde su `.env`: ningún móvil necesita claves.
+ *
+ * Sin servidor —si mañana el Pocophone no arranca— `conectarMesa()` devuelve
+ * `null` en menos de segundo y medio y la app se queda EXACTAMENTE como estaba:
+ * estado en `localStorage`, claves de Ajustes. Eso es innegociable, y por eso
+ * cada cosa que toca la mesa pregunta antes si hay mesa.
  */
 
 import { CAMPANAS, CAMPANA_POR_DEFECTO } from "./campana.js";
@@ -15,6 +38,15 @@ import { pintarMapaEn } from "./mapa.js";
 import { iconoObjeto } from "./objetos.js";
 import { figura, HUECOS_FIGURA, LIENZO, marcoHueco, interiorHueco } from "./figura.js";
 import { accionesDe, COMUNES, COSTES } from "./acciones.js";
+import {
+  MAX_RELOJES, crearReloj, girar, estadoDeReloj, cuentaDeReloj, svgReloj,
+} from "./relojes.js";
+import { htmlDocumento } from "./documentos.js";
+import { htmlGaleria } from "./quienes.js";
+import { NARRACION } from "./narracion.js";
+import {
+  conectarMesa, apis as apisDe, modoRecordado, recordarModo,
+} from "./sesion.js";
 
 /**
  * El muñeco de equipo lo dibuja `app/figura.js`: un cuerpo con volumen y **marcos cuadrados**
@@ -560,12 +592,13 @@ const HERRAMIENTAS = [
       properties: {
         vista: {
           type: "string",
-          enum: ["mesa", "mapa", "mision", "grupo", "ficha", "cierre"],
+          enum: ["mesa", "mapa", "mision", "grupo", "quienes", "ficha", "cierre"],
           description:
             "«mesa» es la escena con las caras; «mapa» el mapa de la aventura a pantalla " +
-            "completa; «mision» lo que saben, el reloj y lo que han ido haciendo; «grupo» las " +
-            "barras, los suministros y el oro; «ficha» la hoja de un personaje (hace falta " +
-            "`pj`); «cierre» las estadísticas y el resumen del final.",
+            "completa; «mision» lo que saben, lo que han averiguado, los relojes y lo que han " +
+            "ido haciendo; «grupo» las barras, los suministros y el oro; «quienes» a quién han " +
+            "conocido y cómo les trata; «ficha» la hoja de un personaje (hace falta `pj`); " +
+            "«cierre» las estadísticas y el resumen del final.",
         },
         pj: { type: "string", description: "De quién es la ficha, si `vista` es «ficha»." },
       },
@@ -611,6 +644,158 @@ const HERRAMIENTAS = [
       required: ["que", "tipo"],
     },
   },
+  {
+    name: "sonido",
+    description:
+      "Dispara un efecto de sonido MIENTRAS hablas. Es para el golpe seco de lo que pasa: la " +
+      "espada que cae al suelo, la puerta que cruje, la campana de la iglesia. Suena a la vez que " +
+      "narras, así que llámalo en el mismo turno en el que lo cuentas y no antes.\n\n" +
+      "Úsalo poco y en lo que importa. Un sonido cada vez que alguien se mueve deja de significar " +
+      "nada; uno bien puesto en una casa en silencio levanta a la mesa de la silla.",
+    input_schema: {
+      type: "object",
+      properties: {
+        que: {
+          type: "string",
+          enum: ["golpe", "crujido", "campana", "cuerno", "gota", "susurro", "rasca", "agudo"],
+          description:
+            "«golpe» algo que cae o se cierra de golpe —una espada al suelo, una puerta—; " +
+            "«crujido» madera, una tabla, algo que cede despacio; «campana» la iglesia, o algo " +
+            "que se acaba; «cuerno» una llamada lejana, gente que viene; «gota» agua en piedra, " +
+            "un pozo, una cueva; «susurro» algo que habla y no debería; «rasca» algo arañando " +
+            "al otro lado de la madera; «agudo» el pinchazo de cuando se ve lo que no se " +
+            "esperaba.",
+        },
+      },
+      required: ["que"],
+    },
+  },
+  {
+    name: "crear_reloj",
+    description:
+      "Abre un RELOJ DE TENSIÓN: un círculo de segmentos que se rellena y que la mesa ve en " +
+      "pantalla todo el rato. Es para lo que avanza tenga alguien delante o no —un rito que se " +
+      "prepara, una aldea que empieza a sospechar, algo que se acerca—, y sirve para que la " +
+      "presión se vea en vez de tener que anunciarla cada dos por tres.\n\n" +
+      "OJO: esto NO es la cuenta atrás de noches hasta la Luna Muerta; esa va sola y se mueve con " +
+      "`avanzar_noche`. Abre un reloj cuando empiece una amenaza concreta, no al principio de la " +
+      "sesión y de golpe: como mucho tres a la vez, y lo normal es uno o dos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        titulo: {
+          type: "string",
+          description: "Corto y en voz de la mesa: «El rito», «La aldea sospecha», «Se acaba la luz».",
+        },
+        segmentos: {
+          type: "integer",
+          description:
+            "4 si es cosa de una escena, 6 si cuesta una sesión, 8 si es el hilo de toda la " +
+            "aventura. Por defecto 6.",
+        },
+        que_pasa: {
+          type: "string",
+          description: "Qué ocurre cuando se llene. Escríbelo ahora: al llenarse tendrás que cumplirlo.",
+        },
+      },
+      required: ["titulo", "que_pasa"],
+    },
+  },
+  {
+    name: "girar_reloj",
+    description:
+      "Rellena (o vacía) segmentos de un reloj de tensión. Gíralo cuando la mesa gaste tiempo, " +
+      "haga ruido, falle una tirada que importaba o simplemente se demore: uno o dos segmentos, y " +
+      "DILO EN VOZ ALTA. Un reloj que se mueve en silencio no presiona a nadie.\n" +
+      "Con avance negativo se deshace, que para eso está: si te has pasado, vuelve atrás.",
+    input_schema: {
+      type: "object",
+      properties: {
+        reloj: { type: "string", description: "El título del reloj, o parte de él." },
+        avance: { type: "integer", description: "Cuántos segmentos. Normalmente 1 o 2." },
+        motivo: { type: "string", description: "Por qué, en cuatro palabras. Sale en el registro." },
+      },
+      required: ["reloj", "avance"],
+    },
+  },
+  {
+    name: "archivar_reloj",
+    description:
+      "Quita un reloj de la escena cuando ya no viene a cuento o cuando se ha cumplido lo que " +
+      "anunciaba. No lo borra: sigue apuntado en la Misión, para que en el resumen se vea por " +
+      "dónde pasó la partida. Hazlo también si necesitas hueco para uno nuevo.",
+    input_schema: {
+      type: "object",
+      properties: { reloj: { type: "string", description: "El título del reloj, o parte de él." } },
+      required: ["reloj"],
+    },
+  },
+  {
+    name: "revelar_secreto",
+    description:
+      "Suelta una de las cosas que la mesa puede llegar a saber. Los secretos NO están atados a " +
+      "un sitio ni a una tirada concreta: tú tienes la lista, y sueltas el que encaje cuando se " +
+      "lo hayan ganado —una buena idea, una conversación que va bien, un registro que sí miran—. " +
+      "Es lo que evita que la trama se atasque porque nadie registró el cadáver.\n\n" +
+      "Suelta uno por escena tranquila y dos si la cosa va rápida. Dilo con tus palabras, no lo " +
+      "leas tal cual. Lo que sueltas se apunta en la Misión; lo que no, no lo ve nadie.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "El id del secreto del catálogo de la aventura." },
+        texto: {
+          type: "string",
+          description: "Solo si es algo que has improvisado y no está en el catálogo.",
+        },
+        como: { type: "string", description: "Cómo se han enterado, en media línea. Va al registro." },
+      },
+    },
+  },
+  {
+    name: "apuntar_npc",
+    description:
+      "Apunta a alguien en «Quién es quién» la primera vez que la mesa lo conoce, y vuelve a " +
+      "llamarlo cuando cambie su actitud o cuando muera. Con cuatro jugadores nuevos, los nombres " +
+      "se pierden a la tercera sesión y luego nadie sabe quién era Olen.\n" +
+      "Vale también para gente que te hayas inventado tú: se apunta igual.",
+    input_schema: {
+      type: "object",
+      properties: {
+        npc: { type: "string", description: "Su nombre." },
+        disposicion: {
+          type: "string",
+          description:
+            "Cómo os trata AHORA: tenso, hostil, evasivo, impaciente, neutral, asustado, " +
+            "aliado, desconocido.",
+        },
+        nota: { type: "string", description: "Media línea que la mesa puede leer sin destriparse nada." },
+        muerto: { type: "boolean" },
+      },
+      required: ["npc"],
+    },
+  },
+  {
+    name: "mostrar_documento",
+    description:
+      "Pone un papel en pantalla para que lo LEAN ellos: una carta, una inscripción en piedra, " +
+      "una página de un registro, una lista de nombres. Es mejor que leerlo en voz alta —lo " +
+      "miran, lo señalan, discuten— y hace que el hallazgo pese.\n\n" +
+      "Dales tiempo y **quítalo con `cerrar` cuando acabéis**, que si no tapa la escena.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "El id del documento del catálogo de la aventura." },
+        titulo: { type: "string", description: "Si te lo inventas: qué es." },
+        texto: { type: "string", description: "Si te lo inventas: lo que pone. Cuanto más corto, más se lee." },
+        tipo: {
+          type: "string",
+          enum: ["carta", "inscripcion", "pagina", "registro"],
+          description: "Cómo se dibuja el papel.",
+        },
+        cerrar: { type: "boolean", description: "true para quitarlo de la pantalla." },
+      },
+    },
+  },
 ];
 
 // ── Voces (mismos ids que scripts/lib.mjs) ───────────────────────────────────
@@ -627,9 +812,10 @@ const VOZ = {
   narrador: "DdKbXdRlBmj7Ty7N0FVr",
   domar: "DdKbXdRlBmj7Ty7N0FVr",
   olen: "DdKbXdRlBmj7Ty7N0FVr",
-  mirena: "OTsv82NplloP7M5TyIJ3",
-  vesna: "OTsv82NplloP7M5TyIJ3",
-  sela: "OTsv82NplloP7M5TyIJ3",
+  // Paloma, madura y peninsular. Antes era Marisa, y se rechazó en escucha en mesa.
+  mirena: "CS57JcynCr2pHsVpogbW",
+  vesna: "CS57JcynCr2pHsVpogbW",
+  sela: "CS57JcynCr2pHsVpogbW",
   acreedor: "PRfCKe8kdrG3nuXOAnoH",
 };
 
@@ -805,6 +991,27 @@ LOS OBJETOS Y LA PANTALLA LOS MANEJAS TÚ. Esto es lo que la mesa espera de ti:
   la sesión, saca el cierre. Y hazlo también sin que lo pidan, cuando lo que estás contando se vea
   mejor en otra pantalla. No les digas nunca qué pestaña tocar: llévalos tú.
 
+- **Los relojes de tensión son tu forma de apretar sin avisar cada dos por tres.** Abre uno con
+  crear_reloj en cuanto empiece una amenaza que avanza tenga alguien delante o no: un rito que se
+  prepara, una aldea que empieza a sospechar, algo que se acerca. Cuatro segmentos si es cosa de
+  una escena, seis si cuesta una sesión, ocho si es el hilo de la aventura. Gíralo con girar_reloj
+  cuando se demoren, hagan ruido o fallen algo que importaba, **y dilo en voz alta cada vez**: un
+  reloj que se mueve en silencio no presiona a nadie. Al llenarse, cumple lo que anunciaste en esa
+  misma escena y sin volver a avisar. Como mucho tres a la vez; lo normal es uno o dos.
+  Cuidado, que hay dos cosas que se llaman reloj: **esto no es la cuenta atrás de noches**, que va
+  aparte y se mueve con avanzar_noche.
+- **Suelta secretos en vez de esconderlos detrás de una tirada.** Con revelar_secreto tienes una
+  lista de cosas que pueden llegar a saber, y NO están atadas a un sitio concreto: sueltas la que
+  encaje cuando se lo hayan ganado, por donde sea. Uno por escena tranquila, dos si va rápido.
+  Así la trama no se atasca porque a nadie se le ocurrió registrar el cadáver. Dilo con tus
+  palabras, no leas la frase tal cual.
+- **Apunta a la gente.** La primera vez que conozcan a alguien, apuntar_npc; y otra vez cuando
+  cambie cómo os trata o cuando muera. Son cuatro jugadores nuevos: sin esto, a la tercera sesión
+  nadie se acuerda de quién era Olen.
+- **Enséñales los papeles en vez de leerlos.** Con mostrar_documento pones en pantalla una carta,
+  una inscripción o una página de un registro, y ellos la leen, la señalan y discuten. Pesa mucho
+  más que si la lees tú. Dales tiempo y quítalo con \`cerrar\` cuando acaben.
+
 Puedes llamar a varias en el mismo turno. Después de usarlas, di en una o dos frases lo que ha
 pasado en la ficción — no leas los números como un contable, ya se ven en pantalla.
 
@@ -913,12 +1120,36 @@ const porDefecto = () => ({
   suministros: { ...CAMPANA.suministrosIniciales },
   charla: [],
   gasto: { sttSeg: 0, entrada: 0, salida: 0, ttsCar: 0 },
+
+  /** Relojes de tensión. No se borran nunca: se archivan, y siguen a la vista en la Misión. */
+  relojes: [],
+  /** Secretos ya soltados. Los que NO están aquí no se pintan jamás: el tablet lo ve la mesa. */
+  secretos: [],
+  /** Quién habéis conocido, por clave: { conocido, disposicion, nota, muerto }. */
+  npcs: {},
+  /** El papel que hay ahora mismo en pantalla, o null. */
+  documento: null,
 });
+
+/**
+ * Rellena lo que falte en un estado guardado ANTES de que nadie lo lea.
+ *
+ * Hay partidas a medias en el `localStorage` de la tablet, guardadas por versiones que no tenían
+ * relojes ni secretos ni NPC. Sin esto, el primer `E.relojes.filter(...)` revienta y la app se
+ * queda en blanco a mitad de sesión, que es el peor momento posible para descubrirlo.
+ */
+function sanearEstado() {
+  E.relojes = Array.isArray(E.relojes) ? E.relojes : [];
+  E.secretos = Array.isArray(E.secretos) ? E.secretos : [];
+  E.npcs = E.npcs && typeof E.npcs === "object" ? E.npcs : {};
+  if (E.documento && typeof E.documento !== "object") E.documento = null;
+}
 
 let E = cargar(claveEstado(A.aventura)) ?? porDefecto();
 // Si la aventura cambió de forma bajo un estado guardado, la localización puede no existir
 // ya: sin esto la app arranca en blanco y no dice por qué.
 if (!CAMPANA.localizaciones.some((l) => l.id === E.local)) E = porDefecto();
+sanearEstado();
 
 /**
  * MODO TELE
@@ -939,11 +1170,90 @@ if (!CAMPANA.localizaciones.some((l) => l.id === E.local)) E = porDefecto();
 const ES_TELE = new URLSearchParams(location.search).has("tele");
 const canal = "BroadcastChannel" in window ? new BroadcastChannel("corvalar") : null;
 
+// ── Las tres APIs, por un solo sitio ─────────────────────────────────────────
+/**
+ * Había ONCE `fetch` con el host escrito a mano —`api.anthropic.com`,
+ * `api.elevenlabs.io`, `fal.run`— y con las cabeceras montadas en cada sitio. Eso hacía imposible
+ * lo que pide la mesa: que los móviles llamen a las mismas APIs **por el proxy del servidor**, que
+ * es quien tiene las claves. Ahora todos pasan por aquí.
+ *
+ * `API` arranca apuntando a los hosts de siempre con las claves de Ajustes —o sea, la app de hoy,
+ * bit a bit— y `apisPara(mesa)` la reapunta al mismo origen cuando hay servidor de mesa. Las
+ * funciones de cabeceras reciben la clave local y **la ignoran si hay servidor**: así el mismo
+ * código de llamada sirve para un tablet con claves y para un móvil sin ninguna.
+ *
+ * `once` en vez de `eleven` porque el resto del fichero está en español; el módulo de sesión lo
+ * llama `eleven` y la traducción se hace aquí, en un sitio.
+ */
+let API = apisPara(null);
+
+/**
+ * Se decide **por servicio**, no en bloque, y eso es una corrección: si el Pocophone sirve la app
+ * pero su `.env` está a medias —tiene la de Claude y no la de fal, que es exactamente lo que pasa
+ * cuando se monta con prisa— mandar todo por el proxy dejaría al tablet sin poder ilustrar aunque
+ * tenga esa clave en Ajustes. Cada servicio va por el proxy solo si el servidor tiene ESA clave; si
+ * no, se llama al host de siempre con la de este aparato.
+ */
+function apisPara(mesa) {
+  const proxy = apisDe(mesa);     // mismo origen, claves del servidor
+  const directo = apisDe(null);   // los hosts de siempre, claves de Ajustes
+  const cual = (s) => (mesa && CLAVES_SERVIDOR[s] ? proxy : directo);
+  const c = cual("claude"), o = cual("once"), f = cual("fal");
+  return {
+    claude: c.claude,   // el endpoint completo de /v1/messages
+    once: o.eleven,     // la base, sin barra final: `${API.once}/text-to-speech/…`
+    fal: f.fal,         // la base: `${API.fal}/fal-ai/flux/dev`
+    conServidor: !!mesa,
+    cab: {
+      claude: (k) => c.cabeceras.claude(k),
+      eleven: (k, op) => o.cabeceras.eleven(k, op),
+      fal: (k, op) => f.cabeceras.fal(k, op),
+    },
+  };
+}
+
+// ── Modo de mesa ─────────────────────────────────────────────────────────────
+/** El objeto de `sesion.js`, o null mientras no se sepa (y para siempre si no hay servidor). */
+let MESA = null;
+/** `solo` es la app de hoy: un tablet y nada más. Ver la cabecera del fichero. */
+let MODO = "solo";
+const enMando = () => MODO === "mando";
+const enMesa = () => MODO === "mesa";
+/**
+ * Quién puede hacer ruido. Un móvil NUNCA: cinco altavoces reproduciendo la misma voz en la misma
+ * habitación con décimas de desfase suena a cueva, y eso incluye la narración pregenerada, el
+ * ambiente y el «repetir» de un mensaje. El texto sí lo ven todos.
+ */
+const puedeSonar = () => MODO !== "mando";
+
+/**
+ * De qué claves dispone el servidor (lo dice `/mesa/salud` en `apis`). Sin servidor no hay
+ * ninguna y manda Ajustes, que es como funciona hoy.
+ *
+ * Se pregunta en vez de suponerse porque el fallo que evita es concreto: un móvil sin claves
+ * enseñando «Falta la clave de fal.ai en Ajustes» cuando la clave la tiene el Pocophone.
+ */
+let CLAVES_SERVIDOR = { claude: false, once: false, fal: false };
+/** Hay clave si la tiene el servidor **o** este aparato. Cualquiera de las dos sirve. */
+const hayClave = (servicio, local) => (API.conServidor && CLAVES_SERVIDOR[servicio]) || !!local;
+const faltaClaude = () => !hayClave("claude", A.claveCl);
+const faltaOnce = () => !hayClave("once", A.clave11);
+const faltaFal = () => !hayClave("fal", A.claveFal);
+/** El mensaje de «no hay clave» tiene que decir DÓNDE se pone, y eso depende de quién llama. */
+const sinClave = (servicio, para) =>
+  API.conServidor
+    ? `Nadie tiene clave de ${servicio} —ni el servidor de la mesa, en su .env, ni este aparato, ` +
+      `en Ajustes—, así que no puedo ${para}.`
+    : `Falta la clave de ${servicio} en Ajustes para ${para}.`;
+
 function guardarEstado() {
   localStorage.setItem(claveEstado(A.aventura), JSON.stringify(E));
   // La pestaña de la tele no manda avisos: solo escucha. Si los mandara, las dos se repintarían
   // en bucle la una a la otra.
   if (!ES_TELE) canal?.postMessage({ que: "estado", aventura: A.aventura });
+  // Y si hay servidor de mesa y este aparato ES la mesa, el estado nuevo va a todos. Va agrupado
+  // (ver `publicarPartida`): guardarEstado se llama varias veces por turno.
+  publicarPartida();
 }
 function guardarAjustes() { localStorage.setItem(CLAVE_AJUSTES, JSON.stringify(A)); }
 
@@ -956,6 +1266,7 @@ function cambiarAventura(clave) {
   CAMPANA = CAMPANAS[clave];
   E = cargar(claveEstado(clave)) ?? porDefecto();
   if (!CAMPANA.localizaciones.some((l) => l.id === E.local)) E = porDefecto();
+  sanearEstado();
   pintarTodo();
   irA("escena");
 }
@@ -976,7 +1287,7 @@ const actual = () => loc(E.local);
  * personajes por encima, y el rótulo del lugar sigue arriba. `irA` mantiene su nombre y sus
  * argumentos porque la llaman `moverA`, la herramienta `mostrar` y el arranque por hash.
  */
-const CAPAS = ["mapa", "mision", "grupo", "ajustes"];
+const CAPAS = ["mapa", "mision", "grupo", "quienes", "ajustes"];
 
 function irA(nombre, tocarHash = true) {
   const capa = CAPAS.includes(nombre) ? nombre : null; // cualquier otra cosa es «la escena»
@@ -1080,17 +1391,30 @@ function pintarCharla() {
   const c = $("#charla");
   if (!E.charla.length) {
     c.innerHTML = `<div class="turno" data-de="dj"><div class="quien">director de juego</div>
-      <p>Toca el botón de abajo, habla, y vuelve a tocarlo para enviar. O escríbeme aquí.</p></div>`;
+      <p>Toca mi cara o el botón de abajo, habla, y vuelve a tocar para enviar. O escríbeme aquí.</p></div>`;
+    pintarCola();
+    pintarParte();
     return;
   }
   const desde = Math.max(0, E.charla.length - 12);
   c.innerHTML = E.charla
     .slice(desde)
     .map((t, k) => `<div class="turno" data-de="${t.de}">
-        <div class="quien">${t.de === "mesa" ? "la mesa" : "director de juego"}${
+        <div class="quien">${
+          t.de === "mesa" ? "la mesa"
+            : t.de === "grabada" ? `narración · ${esc(t.lugar ?? "")}`
+            : "director de juego"
+        }${
           t.de === "dj"
             ? `<button class="repe" data-repetir="${desde + k}" data-suena="no"
                  title="Repetir en voz. Vuelve a tocarlo para parar."><span>▶</span></button>`
+            : ""
+        }${
+          // La grabada se relanza con su propio MP3, no volviendo a sintetizarla: ya existe, suena
+          // mejor que la voz en vivo y repetirla por TTS costaría dinero por algo que ya está.
+          t.de === "grabada"
+            ? `<button class="repe" data-regrabada="${esc(t.audio)}"
+                 title="Volver a poner la grabación"><span>▶</span></button>`
             : ""
         }</div>
         <p>${esc(t.texto)}</p>${
@@ -1099,7 +1423,44 @@ function pintarCharla() {
             : ""
         }</div>`)
     .join("");
+  // Estos dos van DESPUÉS y por su cuenta porque no viven en `E.charla`: son lo que está pasando
+  // ahora mismo y todavía no es historia. Y porque el `innerHTML` de arriba los borraría.
+  pintarCola();
+  pintarParte();
   c.lastElementChild?.scrollIntoView({ block: "nearest" });
+}
+
+/**
+ * Lo que los móviles han dicho y el DJ todavía no ha atendido.
+ *
+ * Sin esto, hablar desde un móvil es un acto de fe: tocas, sueltas, y no pasa nada visible hasta
+ * que la tablet termina el turno entero —que puede ser medio minuto—. Con esto la frase aparece en
+ * la conversación en cuanto el servidor la transcribe, marcada como pendiente, y quien la dijo sabe
+ * que ha llegado. En la tablet vale para lo contrario: ver cuánta gente está esperando turno.
+ */
+function pintarCola() {
+  $("#cola-mesa")?.remove();
+  // Un turno que la mesa ya ha metido en la conversación no se pinta dos veces. Pasa de verdad:
+  // mientras el DJ resuelve la frase de un móvil, esa frase está a la vez en `E.charla` (porque la
+  // mesa publica en cuanto la apunta) y en la cola del servidor (que no se vacía hasta el final).
+  const dichas = E.charla.slice(-4).filter((t) => t.de === "mesa").map((t) => t.texto);
+  const pendientes = COLA_MESA.filter(
+    (t) => t?.texto && t.estado !== "hecho" && !dichas.some((d) => d.endsWith(t.texto)),
+  );
+  if (!pendientes.length) return;
+  const c = $("#charla");
+  if (!c) return;
+  const n = document.createElement("div");
+  n.id = "cola-mesa";
+  n.innerHTML = pendientes
+    .map((t) => `<div class="turno" data-de="mesa" data-cola="${esc(t.estado ?? "pendiente")}">
+        <div class="quien">${esc(t.nombre || "un móvil")} · ${
+          t.estado === "atendido" ? "el DJ lo está atendiendo" : "en la cola"
+        }</div>
+        <p>${esc(t.texto)}</p>
+      </div>`)
+    .join("");
+  c.append(n);
 }
 
 function estadoPj(p) {
@@ -1110,6 +1471,208 @@ function estadoPj(p) {
 }
 
 // ── Banda de personajes ──────────────────────────────────────────────────────
+/**
+ * RETRATOS HECHOS EN MESA, A PARTIR DE UNA FOTO
+ *
+ * Antes el único camino era: el jugador manda la foto por el chat, yo la miro, escribo una
+ * descripción de rasgos y el TEXTO va al generador. La foto no salía de la conversación. Es lo
+ * prudente, pero el resultado no valía: una cara generada desde «mandíbula marcada, pelo castaño»
+ * no es la de nadie, y un retrato que no se reconoce no pinta nada en la barra de personajes.
+ *
+ * Así que ahora la foto va al proveedor, a un modelo hecho para conservar el parecido. Lo decidió
+ * el dueño del proyecto a sabiendas. Lo que hay que tener presente:
+ *   · La foto sale del dispositivo. Si es de otra persona, tiene que saberlo.
+ *   · Se manda SOLO al generar. No se guarda la foto: se guarda el retrato pintado.
+ *   · Se reduce a 768 px antes de mandarla. Una foto de móvil son 4 MB y no hacen falta.
+ *
+ * Los retratos generados viven aparte del estado, como las ilustraciones: son data URL de cientos
+ * de kilobytes y `guardarEstado()` se llama en cada golpe.
+ */
+const CLAVE_CARAS = "corvalar.caras.v1";
+
+function leerCaras() {
+  try { return JSON.parse(localStorage.getItem(CLAVE_CARAS)) ?? {}; }
+  catch { return {}; }
+}
+
+/** El retrato de un personaje: primero el hecho en mesa, y si no, el fichero pregenerado. */
+function caraDe(p) {
+  const propia = leerCaras()[p.pj];
+  if (propia) return propia;
+  return p.retrato ? `retratos/${encodeURIComponent(p.retrato)}.webp` : null;
+}
+
+/** El concepto visual de cada clase, para que el retrato no salga en vaqueros. */
+const CONCEPTO_CLASE = {
+  explorador: "cazador de bosque, capucha de lana basta, cuero gastado, mirada cansada",
+  guerrero: "soldado curtido, cota de malla remendada, cicatrices, mandíbula apretada",
+  clerigo: "religiosa de aldea, hábito pardo, símbolo de madera al cuello, gesto severo",
+  picaro: "ladrón de caminos, capa oscura, media sonrisa, ojos que miran a los lados",
+};
+
+function conceptoDe(p) {
+  const c = norm(p.clase).replace(/[^a-z]/g, "");
+  return (
+    Object.entries(CONCEPTO_CLASE).find(([k]) => c.startsWith(k))?.[1] ??
+    "campesino de aldea, ropa basta de lana, gesto endurecido"
+  );
+}
+
+/**
+ * El encuadre del retrato. Es el mismo que usa `scripts/retrato.mjs`, y tiene que seguir siéndolo:
+ * las medidas de la cara de `app/rasgos.js` —donde van los párpados y la boca— están tomadas con
+ * este encuadre. Si cambia, la animación de la cara se descoloca.
+ */
+const ENCUADRE_RETRATO =
+  "primer plano muy cerrado de la CARA, de frente, mirando a cámara, la cabeza llena el encuadre, " +
+  "vestuario de campesino o soldado del siglo XIV, sin ropa moderna, sin cremalleras, " +
+  "fondo liso muy oscuro, luz lateral suave de vela, pintura al óleo sobria, folk horror";
+
+function pintarCaras() {
+  const caja = $("#caras");
+  if (!caja) return;
+  const hechas = leerCaras();
+  caja.innerHTML = E.partida
+    .map((p, i) => {
+      const src = caraDe(p);
+      return `<div class="cara-fila">
+        <span class="cara-mini">${
+          src ? `<img alt="" src="${esc(src)}">` : `<span class="ini">${esc(iniciales(p.pj))}</span>`
+        }</span>
+        <span class="cara-quien"><b>${esc(p.pj)}</b><span>${esc(p.clase)}</span></span>
+        <label class="cara-hacer">
+          <input type="file" accept="image/*" capture="user" data-foto="${i}" hidden>
+          <span class="icono">◉</span><span>${hechas[p.pj] ? "Otra vez" : "Hacer foto"}</span>
+        </label>
+        ${hechas[p.pj]
+          ? `<button class="cara-quitar" data-quitarcara="${esc(p.pj)}"
+               title="Quitar el retrato hecho en mesa">✕</button>`
+          : ""}
+      </div>`;
+    })
+    .join("");
+}
+
+/**
+ * Reduce la foto antes de mandarla. Una foto de tablet son 3-5 MB en base64 y el modelo solo
+ * necesita la cara: a 768 px el parecido es el mismo y la petición deja de tardar en subir.
+ */
+function reducirFoto(archivo, lado = 768) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error("no he podido leer la foto"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => rej(new Error("esa foto no se puede abrir"));
+      img.onload = () => {
+        // Recorte cuadrado centrado: el encuadre del retrato es cuadrado y así no se deforma.
+        const corte = Math.min(img.width, img.height);
+        const c = document.createElement("canvas");
+        c.width = c.height = lado;
+        const cx = c.getContext("2d");
+        cx.drawImage(img, (img.width - corte) / 2, (img.height - corte) / 2, corte, corte, 0, 0, lado, lado);
+        res(c.toDataURL("image/jpeg", 0.9));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(archivo);
+  });
+}
+
+async function hacerRetrato(indice, archivo) {
+  const p = E.partida[indice];
+  if (!p) return;
+  if (faltaFal()) return avisar(sinClave("fal.ai", "hacer retratos"));
+  limpiarAviso();
+  const nota = $("#caras-nota");
+  nota.textContent = `Pintando el retrato de ${p.pj}… tarda unos veinte segundos.`;
+  const paraElChip = chipPintando();
+
+  const lim = conLimite(90_000, "el retrato");
+  try {
+    const foto = await reducirFoto(archivo);
+    // Con servidor de mesa esto sale por su proxy, así que un móvil sin claves puede hacerse el
+    // selfie: es lo que convierte «apiñaos alrededor del tablet» en «cada uno con el suyo».
+    const r = await fetch(`${API.fal}/fal-ai/flux-pulid`, {
+      method: "POST",
+      headers: API.cab.fal(A.claveFal),
+      signal: lim.señal,
+      body: JSON.stringify({
+        prompt: `${conceptoDe(p)}, ${ENCUADRE_RETRATO}`,
+        reference_image_url: foto,
+        image_size: "square_hd",
+        num_inference_steps: 20,
+        guidance_scale: 4,
+        // A 1 sale calcado pero parece un filtro de móvil; por debajo de 0,8 deja de
+        // reconocerse. 0,9 es donde se parece Y parece pintado.
+        id_weight: 0.9,
+        enable_safety_checker: true,
+      }),
+    });
+    if (!r.ok) throw new Error(explicar("fal.ai", r.status));
+    const j = await r.json();
+    if (j.has_nsfw_concepts?.[0]) {
+      throw new Error(
+        "El filtro del generador ha bloqueado la foto. Prueba otra: de frente, con luz y de " +
+          "hombros para arriba.",
+      );
+    }
+    const url = j.images?.[0]?.url;
+    if (!url) throw new Error("El generador no ha devuelto retrato.");
+
+    // Se guarda como data URL para que sobreviva a recargar y funcione sin conexión: la URL del
+    // proveedor caduca en unas horas y entonces la barra de personajes se queda con huecos.
+    const bytes = await (await fetch(url, { signal: lim.señal })).blob();
+    const datos = await new Promise((res2, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res2(fr.result);
+      fr.onerror = () => rej(new Error("no se ha podido guardar el retrato"));
+      fr.readAsDataURL(bytes);
+    });
+
+    const caras = leerCaras();
+    caras[p.pj] = datos;
+    try { localStorage.setItem(CLAVE_CARAS, JSON.stringify(caras)); }
+    catch { throw new Error("No cabe otro retrato en el dispositivo. Quita alguno y reintenta."); }
+
+    E.gasto.imagenes = (E.gasto.imagenes ?? 0) + 1;
+    guardarEstado();
+    pintarTodo();
+    nota.textContent = `Listo. Si no le gusta, que se haga otra: se sobrescribe.`;
+    // Quien se hace la foto es quien está mirando el móvil: eso es lo que hace que «Mi ficha» y
+    // «Mi cara» sepan de quién hablan sin inventar roles ni logins.
+    recordarMiPj(p.pj);
+    // Y el retrato tiene que acabar en la tablet y en la tele, no solo en este aparato.
+    await compartirCara(p.pj, datos);
+  } catch (e) {
+    nota.textContent = `No ha salido: ${e.message}`;
+  } finally {
+    lim.listo();
+    paraElChip();
+  }
+}
+
+$("#caras").addEventListener("change", (ev) => {
+  const inp = ev.target.closest("input[data-foto]");
+  if (!inp?.files?.[0]) return;
+  const i = +inp.dataset.foto;
+  const archivo = inp.files[0];
+  inp.value = ""; // para que elegir la misma foto otra vez vuelva a disparar el evento
+  // Quien se hace la foto es quien tiene el móvil en la mano, y eso se apunta ya —antes de que el
+  // generador conteste— para que «Mi ficha» funcione aunque el retrato no salga.
+  if (enMando()) recordarMiPj(E.partida[i]?.pj);
+  hacerRetrato(i, archivo);
+});
+
+$("#caras").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-quitarcara]");
+  if (!b) return;
+  const caras = leerCaras();
+  delete caras[b.dataset.quitarcara];
+  localStorage.setItem(CLAVE_CARAS, JSON.stringify(caras));
+  pintarTodo();
+});
+
 /** Iniciales para el hueco de quien aún no tiene retrato. */
 const iniciales = (n) =>
   n.trim().split(/\s+/).slice(0, 2).map((x) => x[0] ?? "").join("").toUpperCase() || "?";
@@ -1183,20 +1746,28 @@ function pintarBanda() {
   $("#banda").innerHTML = E.partida
     .map((p, i) => {
       const pct = Math.max(0, Math.min(100, (p.pg / Math.max(1, p.pgMax)) * 100));
-      const cara = p.retrato
-        ? `<img alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp"
+      const src = caraDe(p);
+      const cara = src
+        ? `<img alt="" src="${esc(src)}"
              onerror="this.replaceWith(Object.assign(document.createElement('span'),
                       {className:'inicial',textContent:${JSON.stringify(iniciales(p.pj))}}))">`
         : `<span class="inicial">${esc(iniciales(p.pj))}</span>`;
       // La segunda barra es el agotamiento, en el sitio donde el original ponía los puntos de
       // hechizo. Se llena al empeorar, al contrario que la vida, y a 6 mata.
       const agot = Math.max(0, Math.min(6, p.agotamiento ?? 0));
-      return `<button class="pj-banda" data-estado="${estadoPj(p)}" data-pjbanda="${i}"
+      // `data-mio` enciende el marco en ámbar en el móvil de quien lleva ese personaje: en una
+      // banda de cuatro caras de 44 px, encontrar la tuya de un vistazo importa.
+      return `<button class="pj-banda" data-estado="${estadoPj(p)}" data-pjbanda="${i}"${
+                 A.miPj && p.pj === A.miPj ? ' data-mio="si"' : ""
+               }
                  aria-label="${esc(p.pj)}, ${p.pg} de ${p.pgMax} puntos de golpe${
                    agot ? `, agotamiento ${agot} de 6` : ""
                  }">
         <span class="marco"><span class="cara">${cara}</span>
-          ${p.retrato ? capaCara(p.retrato, p.heridas) : ""}
+          ${/* Con retrato hecho en mesa no hay medidas de la cara, pero POR_DEFECTO acierta
+                bastante con este encuadre: mejor animar y dibujar heridas con valores por
+                defecto que dejar la cara quieta porque nadie la ha medido todavía. */ ""}
+          ${src ? capaCara(p.retrato ?? "", p.heridas) : ""}
           <span class="vidrio"></span></span>
         <span class="nom">${esc(p.pj)}</span>
         <!-- Sin icono de clase aquí, y es una decisión: los iconos de objetos.js están dibujados
@@ -1283,8 +1854,9 @@ function abrirFicha(i) {
   p.equipo ??= {};
   p.ficha ??= {};
 
-  const cara = p.retrato
-    ? `<img class="retrato-grande" alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp">`
+  const srcCara = caraDe(p);
+  const cara = srcCara
+    ? `<img class="retrato-grande" alt="" src="${esc(srcCara)}">`
     : `<div class="retrato-grande sin-foto">${esc(iniciales(p.pj))}
          <small>sin foto todavía</small></div>`;
 
@@ -1574,8 +2146,9 @@ function pintarGrupo() {
     .map((p, i) => {
       const pct = Math.max(0, Math.min(100, (p.pg / Math.max(1, p.pgMax)) * 100));
       const agot = Math.max(0, Math.min(6, p.agotamiento ?? 0));
-      const cara = p.retrato
-        ? `<img alt="" src="retratos/${encodeURIComponent(p.retrato)}.webp">`
+      const src = caraDe(p);
+      const cara = src
+        ? `<img alt="" src="${esc(src)}">`
         : `<span class="ini">${esc(iniciales(p.pj))}</span>`;
       return `
     <article class="tarjeta-pj" data-estado="${estadoPj(p)}">
@@ -1814,10 +2387,70 @@ function pintarCierre() {
       : `<li>Nadie sale con una herida persistente.</li>`);
 }
 
+/**
+ * Los relojes de tensión, en dos sitios y a propósito.
+ *
+ * Sobre la escena van solo los que están en marcha —hasta tres— porque son los que aprietan
+ * ahora; en la Misión van todos, incluidos los archivados, porque al cerrar la sesión enseñan por
+ * dónde pasó la partida. Un reloj que no se ve no presiona a nadie, que es justamente su oficio.
+ */
+function pintarRelojes() {
+  const vivos = E.relojes.filter((r) => !r.archivado).slice(0, MAX_RELOJES);
+  const caja = $("#relojes");
+  if (caja) {
+    caja.hidden = !vivos.length;
+    caja.innerHTML = vivos.map((r) => fichaReloj(r, 62)).join("");
+  }
+  const todos = $("#relojes-mision");
+  if (todos) {
+    todos.innerHTML = E.relojes.length
+      ? E.relojes.map((r) => fichaReloj(r, 54)).join("")
+      : `<p class="vacio">Ninguno todavía. El DJ los abre cuando algo empieza a apretar.</p>`;
+  }
+}
+
+/** Un reloj con su título y, debajo, lo que pasa al llenarse. */
+function fichaReloj(r, tam) {
+  const estado = estadoDeReloj(r);
+  return (
+    `<figure class="reloj-t" data-estado="${estado}" title="${esc(r.quePasa)}">` +
+    svgReloj(r.segmentos, r.lleno, { tam, estado }) +
+    `<figcaption><b>${esc(r.titulo)}</b><span>${esc(cuentaDeReloj(r))}</span></figcaption>` +
+    `</figure>`
+  );
+}
+
+/** Lo que la mesa ha averiguado. Lo que NO se ha revelado no pasa por aquí nunca. */
+function pintarSecretos() {
+  const caja = $("#secretos");
+  if (!caja) return;
+  caja.innerHTML = E.secretos.length
+    ? E.secretos.map((s) => `<li>${esc(s.texto)}</li>`).join("")
+    : `<li class="vacio">Todavía nada. Lo que vayáis averiguando se apunta aquí.</li>`;
+}
+
+/** La galería de quien habéis conocido. El filtro de «conocido» lo hace `quienes.js`. */
+function pintarQuienes() {
+  const caja = $("#quienes");
+  if (!caja) return;
+  caja.innerHTML = htmlGaleria(CAMPANA.npcs ?? [], E.npcs);
+}
+
+/** El papel que el DJ ha puesto sobre la mesa, si hay alguno. */
+function pintarDocumento() {
+  const caja = $("#documento");
+  if (!caja) return;
+  const d = E.documento;
+  caja.hidden = !d;
+  $("#documento-hoja").innerHTML = d ? htmlDocumento(d) : "";
+}
+
 function pintarTodo() {
   pintarCabecera(); pintarEscena(); pintarCharla(); pintarGrupo(); pintarBanda();
   pintarMapa(); pintarGasto(); pintarArrancar(); pintarRegistro(); pintarCierre();
   pintarResumen(); pintarTirada(); pintarIniciativa(); pintarDiario();
+  pintarRelojes(); pintarSecretos(); pintarQuienes(); pintarDocumento(); pintarMomentos();
+  pintarCaras(); pintarMio();
 }
 
 const esc = (s) =>
@@ -1829,6 +2462,10 @@ $("#grupo-lista").addEventListener("click", (ev) => {
   if (!b) return;
   // Tocar la cara abre su ficha, igual que en la banda de la mesa: es el gesto que ya se conoce.
   if (b.dataset.verficha !== undefined) {
+    // En un móvil, abrir una ficha desde la lista del grupo es decir «este soy yo»: es lo que
+    // hace que «Mi ficha» y «Mi cara» sepan de quién hablan sin roles, sin logins y sin que
+    // nadie tenga que configurar nada. Si te equivocas, tocas otra y ya está.
+    if (enMando()) recordarMiPj(E.partida[+b.dataset.verficha]?.pj);
     irA("escena");
     abrirFicha(+b.dataset.verficha);
     return;
@@ -1959,7 +2596,9 @@ $("#charla-limpiar").addEventListener("click", () => {
 });
 
 $("#gasto-reset").addEventListener("click", () => {
-  E.gasto = { sttSeg: 0, entrada: 0, salida: 0, ttsCar: 0 };
+  // Con `imagenes`, como hace el cierre de sesión. Sin él, el botón dejaba el contador de
+  // ilustraciones donde estaba y el coste volvía a salir a mitad de cero.
+  E.gasto = { sttSeg: 0, entrada: 0, salida: 0, ttsCar: 0, imagenes: 0 };
   guardarEstado(); pintarGasto();
 });
 
@@ -1976,6 +2615,9 @@ let narracionPendiente = false;
 function sonarNarracionSiToca() {
   if (!narracionPendiente) return;
   narracionPendiente = false;
+  // La narración grabada es voz del DJ: suena en la tablet y en ningún móvil. El texto sí entra en
+  // la conversación de todos por `apuntarNarracion`, que es lo que hace falta para seguirla.
+  if (!puedeSonar()) { apuntarNarracion(); return; }
   const a = $("#esc-audio");
   if (!a.getAttribute("src") || $("#acc-narracion").disabled) return;
   a.currentTime = 0;
@@ -1983,11 +2625,38 @@ function sonarNarracionSiToca() {
   // Si no se puede reproducir no se avisa: no lo ha pedido nadie, y un aviso rojo por algo que
   // pasa solo asusta más de lo que informa. El botón sigue ahí para intentarlo a mano.
   a.play().catch(() => {});
+  apuntarNarracion();
+}
+
+/**
+ * Mete la narración grabada en la conversación.
+ *
+ * Sin esto pasaban las dos cosas de las que se quejó la mesa. Una: la grabación sonaba y no
+ * quedaba rastro, así que no había forma de releerla ni de volver a lanzarla. Y dos, que es peor:
+ * **el director de juego no se enteraba de que había sonado**. Él solo veía el resultado de
+ * `mover_escena`; el audio lo dispara la app por su cuenta. Así que la mesa oía a Domar pedir que
+ * encontraran a su hija y, acto seguido, el DJ preguntaba qué querían hacer como si Domar no
+ * hubiera abierto la boca — o peor, volvía a contarlo.
+ *
+ * Entra como turno de la conversación con `de: "grabada"`, que es lo que la distingue en pantalla
+ * y lo que hace que el DJ la reciba como algo YA DICHO y no como algo que tenga que decir.
+ */
+function apuntarNarracion() {
+  const l = actual();
+  const texto = NARRACION[l.audio];
+  if (!texto) return;
+  const ultimo = E.charla[E.charla.length - 1];
+  // Al volver a un sitio ya visitado se repite el audio; repetir la entrada no aporta nada.
+  if (ultimo?.de === "grabada" && ultimo.audio === l.audio) return;
+  E.charla.push({ de: "grabada", texto, audio: l.audio, lugar: l.nombre });
+  guardarEstado();
+  pintarCharla();
 }
 
 {
   const a = $("#esc-audio"), b = $("#acc-narracion");
   b.addEventListener("click", () => {
+    if (!puedeSonar()) return avisar("La narración suena en la tablet de la mesa, no en los móviles.");
     if (a.paused) {
       a.volume = A.volVoz;
       a.play().catch(() => avisar("No he podido reproducir el audio."));
@@ -2077,13 +2746,17 @@ function explicar(servicio, estado, excepcion) {
 }
 
 $("#probar").addEventListener("click", async () => {
-  if (!A.clave11 && !A.claveCl) { ponEstado("Pon las claves y dale a Guardar primero.", "mal"); return; }
-  ponEstado("Comprobando…", "neutro");
+  // Con servidor de mesa no hay claves que probar en este aparato: se prueban las de él, por su
+  // proxy, que es exactamente lo que interesa comprobar antes de empezar.
+  if (!API.conServidor && !A.clave11 && !A.claveCl) {
+    ponEstado("Pon las claves y dale a Guardar primero.", "mal"); return;
+  }
+  ponEstado(API.conServidor ? "Comprobando las claves del servidor…" : "Comprobando…", "neutro");
   const r = [];
 
   try {
-    const a = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
-      headers: { "xi-api-key": A.clave11 },
+    const a = await fetch(`${API.once}/user/subscription`, {
+      headers: API.cab.eleven(A.clave11, { json: false }),
     });
     if (a.ok) {
       const s = await a.json();
@@ -2093,7 +2766,7 @@ $("#probar").addEventListener("click", async () => {
   } catch (e) { r.push(explicar("ElevenLabs", 0, e)); }
 
   try {
-    const b = await fetch("https://api.anthropic.com/v1/messages", {
+    const b = await fetch(API.claude, {
       method: "POST",
       headers: cabecerasClaude(),
       body: JSON.stringify({
@@ -2176,14 +2849,13 @@ $("#aviso").addEventListener("click", () => {
   limpiarAviso();
 });
 
+/**
+ * Las cabeceras de Claude. Las monta `sesion.js` porque cambian según haya servidor o no: sin
+ * servidor van la clave de Ajustes y la cabecera que el navegador exige para llamar a la API
+ * directamente; con servidor van las de sesión y la clave la pone él.
+ */
 function cabecerasClaude() {
-  return {
-    "x-api-key": A.claveCl,
-    "anthropic-version": "2023-06-01",
-    "content-type": "application/json",
-    // Sin esta cabecera el navegador no puede llamar a la API de Claude.
-    "anthropic-dangerous-direct-browser-access": "true",
-  };
+  return API.cab.claude(A.claveCl);
 }
 
 // ── Voz: micrófono → texto → Claude → voz ────────────────────────────────────
@@ -2221,14 +2893,140 @@ function modo(m, txt) {
   $("#dj-estado").textContent = TEXTO_DJ[m] ?? m;
   // Cancelar solo tiene sentido mientras hay algo en marcha.
   $("#cancelar").hidden = !(m === "pensando" || m === "hablando");
+  // Y los móviles se enteran de en qué anda el DJ. Va aquí y no en cada llamada porque este es el
+  // único sitio por el que pasan TODOS los cambios de estado.
+  anunciarDj(m);
 }
 function actualizarBotonHablar() {
-  const falta = !A.clave11 || !A.claveCl;
+  // Un móvil no necesita claves para hablar: graba, sube el audio al servidor y él lo transcribe.
+  // Así que su botón no se desactiva nunca; si el servidor no puede, lo dirá al intentarlo.
+  if (enMando()) {
+    bHablar.disabled = false;
+    if (ocupado) return;
+    return modo("listo", grabadora ? "Enviar a la mesa" : "Toca para hablar");
+  }
+  const falta = faltaOnce() || faltaClaude();
   // Ocupado NO desactiva el botón: mientras piensa sirve para cancelar.
   bHablar.disabled = falta;
-  if (falta) return modo("listo", "Pon las claves en Ajustes");
+  if (falta) {
+    return modo("listo", API.conServidor ? "El servidor no tiene claves" : "Pon las claves en Ajustes");
+  }
   if (ocupado) return;
   modo("listo", grabadora ? "Enviar" : "Toca para hablar");
+}
+
+// ── El parte del DJ: todo lo que está haciendo, en su lateral ─────────────────
+/**
+ * Lo que el DJ hace estaba repartido por tres sitios y ninguno lo contaba entero: los estados
+ * («pensando», «transcribiendo») en dos rótulos de dos palabras, lo que CAMBIA en `E.hechos` —que
+ * solo aparece cuando el turno ya ha acabado— y lo que dice, que tampoco se veía hasta el final
+ * aunque llegara en streaming. En mesa eso se lee como «la app no hace nada»: pasan veinte
+ * segundos con la palabra «pensando…» y nadie sabe si está pensando, pintando o colgada.
+ *
+ * El parte lo junta todo en el sitio donde la mesa ya está mirando: el último bloque de la
+ * conversación, debajo del retrato. Se abre al empezar el turno, va apuntando cada herramienta que
+ * el DJ llama y cada cambio que hace, muestra el texto según llega, y se cierra al acabar —porque
+ * entonces el turno de verdad ya está en la conversación, con sus hechos debajo.
+ */
+let PARTE = [];        // los pasos, en orden
+let parteTexto = "";   // lo que va diciendo, mientras llega
+let partePintar = null;
+
+/** Qué es cada herramienta, en palabras de la mesa. Es lo que se lee en el parte. */
+const QUE_HACE = {
+  cambiar_pg: "toca los puntos de golpe",
+  anadir_herida: "apunta una herida",
+  cambiar_agotamiento: "toca el agotamiento",
+  gastar_suministro: "gasta suministros",
+  mover_escena: "os cambia de sitio",
+  avanzar_noche: "hace caer la noche",
+  escribir_ficha: "reescribe una ficha",
+  equipar: "equipa a alguien",
+  dar_objeto: "reparte un objeto",
+  cambiar_oro: "toca el oro",
+  quitar_objeto: "quita un objeto",
+  pedir_tirada: "pide una tirada",
+  iniciativa: "monta la iniciativa",
+  siguiente_turno: "pasa el turno",
+  ambiente: "cambia el ambiente",
+  ilustrar: "manda pintar la escena",
+  mostrar: "abre una pantalla",
+  escribir_entrevista: "apunta en la entrevista",
+  registrar_accion: "apunta en el registro",
+  sonido: "lanza un sonido",
+  crear_reloj: "abre un reloj de tensión",
+  girar_reloj: "gira un reloj",
+  archivar_reloj: "archiva un reloj",
+  revelar_secreto: "suelta un secreto",
+  apuntar_npc: "apunta a alguien que habéis conocido",
+  mostrar_documento: "pone un papel sobre la mesa",
+};
+
+function abrirParte(primero) {
+  PARTE = [];
+  parteTexto = "";
+  if (primero) PARTE.push(primero);
+  pintarParte();
+}
+
+function apuntarParte(txt) {
+  if (!txt) return;
+  PARTE.push(String(txt));
+  // Tope: un turno de combate largo puede encadenar diez herramientas y el parte no es un diario,
+  // es lo que está pasando ahora. Los hechos completos quedan bajo el turno al acabar.
+  if (PARTE.length > 14) PARTE.splice(0, PARTE.length - 14);
+  pintarParte();
+}
+
+function cerrarParte() {
+  PARTE = [];
+  parteTexto = "";
+  clearTimeout(partePintar);
+  partePintar = null;
+  pintarParte();
+}
+
+/**
+ * El texto que llega en streaming. Se repinta como mucho cada 120 ms: llamar a esto por token
+ * (son cientos por turno) tira el navegador del tablet, y ya se vio que la fluidez no se nota por
+ * encima de diez repintados por segundo.
+ */
+function parteDiciendo(texto) {
+  parteTexto = texto;
+  if (partePintar) return;
+  partePintar = setTimeout(() => { partePintar = null; pintarParte(); }, 120);
+}
+
+function pintarParte() {
+  // La línea corta va en la cabecera del DJ, junto a su cara: se ve TAMBIÉN con una capa abierta —el
+  // mapa, la misión— que es cuando más falta hace saber si el DJ sigue trabajando. El detalle
+  // completo va en la conversación, que es donde hay sitio para desplazarse.
+  const hace = $("#dj-hace");
+  if (hace) {
+    const ultimo = PARTE[PARTE.length - 1] ?? "";
+    hace.textContent = ultimo;
+    hace.hidden = !ultimo;
+  }
+
+  const c = $("#charla");
+  if (!c) return;
+  let n = $("#dj-parte");
+  if (!PARTE.length && !parteTexto) { n?.remove(); return; }
+  if (!n) {
+    n = document.createElement("div");
+    n.id = "dj-parte";
+    n.className = "turno";
+    n.dataset.de = "dj";
+    n.dataset.parte = "si";
+    c.append(n);
+  }
+  n.innerHTML =
+    `<div class="quien">director de juego · ahora mismo</div>` +
+    (parteTexto ? `<p>${esc(parteTexto)}</p>` : "") +
+    (PARTE.length
+      ? `<ul class="hechos">${PARTE.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`
+      : "");
+  n.scrollIntoView({ block: "nearest" });
 }
 
 /** Pide el micrófono una vez y se queda con el flujo. Devuelve null si no se puede. */
@@ -2295,6 +3093,35 @@ bHablar.addEventListener("click", () => {
   grabadora ? pararGrabacion() : empezarGrabacion();
 });
 
+/**
+ * TOCAR LA CARA DEL DJ ES HABLARLE.
+ *
+ * Lo pidió la mesa y tiene toda la razón: el retrato es lo que la gente mira y lo que señala cuando
+ * le habla, y justo encima había un botón rectangular que hacía una cosa distinta de la cara que
+ * tenía debajo. Ahora la cara hace lo mismo, y lo hace **reenviando el clic** al botón en vez de
+ * duplicar la lógica: así tocar para empezar, tocar para enviar y cortar mientras habla se
+ * comportan exactamente igual por las dos puertas, y no hay dos sitios donde arreglar un fallo.
+ *
+ * `click()` sobre un botón desactivado no dispara nada, así que la cara también queda muerta cuando
+ * faltan las claves, que es justo lo que se quiere.
+ *
+ * `#dj-hablar` es el botón que envuelve el retrato en `index.html`. Se cae con elegancia a `#dj`
+ * entero si esa versión del marcado no lo tiene: mejor una zona de toque más grande que ninguna.
+ */
+{
+  const cara = $("#dj-hablar") ?? $("#dj");
+  if (cara) {
+    if (!cara.title) cara.title = "Tócame y te escucho. Otra vez para enviar; mientras hablo, me cortas.";
+    if (cara.tagName !== "BUTTON") { cara.tabIndex = 0; cara.setAttribute("role", "button"); }
+    cara.addEventListener("click", (ev) => { ev.stopPropagation(); bHablar.click(); });
+    cara.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      bHablar.click();
+    });
+  }
+}
+
 // ── Repetir lo que dijo el DJ ────────────────────────────────────────────────
 // Un icono por mensaje. En mesa se pierde una frase constantemente —alguien tosió, alguien
 // preguntó algo— y hasta ahora la única forma de recuperarla era leerla.
@@ -2310,7 +3137,8 @@ async function repetir(indice, boton) {
   // Si ya está sonando esa misma, el botón para. Un icono que solo empieza es medio icono.
   if (boton.dataset.suena === "si") { pararRepeticion(); return; }
   pararRepeticion();
-  if (!A.clave11) { avisar("Falta la clave de ElevenLabs en Ajustes para repetir en voz."); return; }
+  if (!puedeSonar()) { avisar("La voz suena en la tablet de la mesa, no en los móviles."); return; }
+  if (faltaOnce()) { avisar(sinClave("ElevenLabs", "repetir en voz")); return; }
   const t = E.charla[indice];
   if (!t?.texto) return;
 
@@ -2329,6 +3157,18 @@ async function repetir(indice, boton) {
 $("#charla").addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-repetir]");
   if (b) repetir(+b.dataset.repetir, b);
+
+  // Volver a poner la grabación de la escena. Se usa el reproductor que ya la tiene cargada, así
+  // que suena al instante y no cuesta nada: el MP3 está en la caché del service worker.
+  const g = ev.target.closest("button[data-regrabada]");
+  if (g) {
+    if (!puedeSonar()) { avisar("La grabación suena en la tablet, no en los móviles."); return; }
+    const a = $("#esc-audio");
+    if (!a.paused) { a.pause(); return; }
+    a.currentTime = 0;
+    a.volume = A.volVoz;
+    a.play().catch(() => avisar("No he podido volver a poner la grabación."));
+  }
 });
 
 // ── Cancelar ─────────────────────────────────────────────────────────────────
@@ -2372,6 +3212,99 @@ function desatascar() {
 }
 $("#desatascar").addEventListener("click", desatascar);
 
+// ── La tarjeta X ─────────────────────────────────────────────────────────────
+/**
+ * Cualquiera de la mesa la toca y la escena para. **No hay que explicar por qué, y nadie
+ * pregunta.** Las líneas y los velos se pactan en la sesión cero, antes de describir nada; esto
+ * es la herramienta para el durante, que es cuando de verdad hace falta.
+ *
+ * Va en dos pulsaciones a propósito: la primera CALLA —corta la voz y la petición en curso— y
+ * abre las opciones; la segunda es la que cambia la ficción. Así un roce con la palma produce
+ * silencio y nada más, y el silencio se deshace solo.
+ *
+ * Se reutiliza el corte de `desatascar` porque ya resuelve el fallo que costó dos rondas: `pause()`
+ * no dispara `ended` ni `error`, así que la promesa de la frase hay que cortarla a mano o la app
+ * se queda colgada esperando a un audio que ya no va a sonar.
+ */
+function callarTodo() {
+  try { enCurso?.ac.abort(new Error("la mesa ha parado la escena")); } catch { /* da igual */ }
+  enCurso = null;
+  cola?.cortar(); cola = null;
+  pararRepeticion();
+  try { $("#esc-audio").pause(); } catch { /* da igual */ }
+  ocupado = false;
+  actualizarBotonHablar();
+}
+
+function abrirTarjetaX() {
+  callarTodo();
+  // Desde un móvil, callar aquí no calla nada: la voz sale de la tablet. Y la tarjeta X es una
+  // herramienta de seguridad, así que «para AHORA» no puede esperar a que el DJ acabe el turno y
+  // lea un mensaje de la cola. Va por el cajón compartido, que llega por SSE en milisegundos.
+  if (enMando()) MESA?.enviar({ tipo: "anexo", clave: "parar", valor: { cuando: Date.now() } });
+  $("#tx-fondo").hidden = false;
+  $("#tx-panel").hidden = false;
+}
+
+function cerrarTarjetaX() {
+  $("#tx-fondo").hidden = true;
+  $("#tx-panel").hidden = true;
+}
+
+$("#tarjeta-x").addEventListener("click", abrirTarjetaX);
+$("#tx-fondo").addEventListener("click", cerrarTarjetaX);
+$("#tx-seguir").addEventListener("click", cerrarTarjetaX);
+
+/**
+ * Lo que se le dice al DJ. Va como turno normal, así que se entera por el mismo camino que todo
+ * lo demás, pero el texto es una ORDEN y no una pregunta: no debe contestar «¿qué ha pasado?».
+ */
+async function pedirCambioDeTercio(que) {
+  cerrarTarjetaX();
+  registrar("decision", "La mesa ha parado la escena.");
+  guardarEstado();
+  if (faltaClaude() && !enMando()) {
+    avisar("Parado. Sin clave de Anthropic no puedo avisar al DJ, pero la escena ya está cortada.");
+    return;
+  }
+  await turno(null, 0, que);
+}
+
+$("#tx-rebobinar").addEventListener("click", () =>
+  pedirCambioDeTercio(
+    "ALTO. Alguien de la mesa ha tocado la tarjeta X y hemos elegido REBOBINAR. Lo último que has " +
+      "narrado no ha pasado: deshazlo y vuelve a justo antes. NO preguntes por qué, no lo " +
+      "menciones, no pidas explicaciones y no lo conviertas en tema. Retoma la escena por otro " +
+      "sitio, con otro tono, y sigue como si nada.",
+  ),
+);
+
+$("#tx-saltar").addEventListener("click", () =>
+  pedirCambioDeTercio(
+    "ALTO. Alguien de la mesa ha tocado la tarjeta X y hemos elegido SALTAR. Da por resuelto lo " +
+      "que estaba pasando sin describirlo, corta hasta después, y cuéntanos dónde estamos ahora. " +
+      "NO preguntes por qué, no lo menciones y no pidas explicaciones.",
+  ),
+);
+
+// La pausa es LOCAL y no habla con nadie: nadie tiene que oír al DJ decir nada mientras la mesa
+// respira. Por eso no llama a `turno` ni gasta un token.
+$("#tx-pausa").addEventListener("click", () => {
+  cerrarTarjetaX();
+  registrar("otro", "La mesa ha pedido una pausa.");
+  guardarEstado();
+  $("#pausa").hidden = false;
+});
+$("#pausa-reanudar").addEventListener("click", () => { $("#pausa").hidden = true; });
+
+// El papel se quita desde la mesa sin tener que pedírselo al DJ: cuando han acabado de leerlo,
+// han acabado. El DJ también puede quitarlo con `mostrar_documento` y `cerrar`.
+$("#documento-cerrar").addEventListener("click", () => {
+  E.documento = null;
+  guardarEstado();
+  pintarDocumento();
+});
+
 // ── Cantar una tirada ────────────────────────────────────────────────────────
 // Es lo que más se hace en mesa, y dictar números por voz es justo lo que peor transcribe.
 $("#tirada-forma").addEventListener("submit", async (ev) => {
@@ -2379,7 +3312,7 @@ $("#tirada-forma").addEventListener("submit", async (ev) => {
   const c = $("#tirada");
   const n = c.value.trim();
   if (!n || ocupado) return;
-  if (!A.claveCl) { avisar("Falta la clave de Anthropic en Ajustes."); return; }
+  if (faltaClaude() && !enMando()) { avisar(sinClave("Anthropic", "hablar con el DJ")); return; }
   c.value = "";
   await turno(null, 0, `Hemos tirado y sale ${n}.`);
 });
@@ -2402,7 +3335,7 @@ $("#escribir-forma").addEventListener("submit", async (ev) => {
   const c = $("#escribir");
   const texto = c.value.trim();
   if (!texto || ocupado) return;
-  if (!A.claveCl) { avisar("Falta la clave de Anthropic en Ajustes."); return; }
+  if (faltaClaude() && !enMando()) { avisar(sinClave("Anthropic", "hablar con el DJ")); return; }
   c.value = "";
   await turno(null, 0, texto);
 });
@@ -2418,7 +3351,7 @@ function pintarArrancar() {
 
 $("#arrancar").addEventListener("click", async () => {
   if (ocupado) return;
-  if (!A.claveCl) { avisar("Falta la clave de Anthropic en Ajustes."); return; }
+  if (faltaClaude() && !enMando()) { avisar(sinClave("Anthropic", "hablar con el DJ")); return; }
   await turno(
     null,
     0,
@@ -2486,9 +3419,14 @@ function porHablantes(tr) {
 
 /** Envía un turno a Claude: desde el micrófono (blob) o escrito (texto). */
 async function turno(blob, segundos, textoEscrito) {
+  // Un móvil no ejecuta el bucle del DJ: lo suyo va a la cola del servidor y lo resuelve la
+  // tablet, que es la única que suena. Ver `turnoDeMando`.
+  if (enMando()) return turnoDeMando(blob, textoEscrito);
+
   limpiarAviso();
   ocupado = true;
   vigilar();
+  abrirParte(textoEscrito ? "Le habéis dicho algo." : "Escuchando lo que habéis dicho…");
   modo("pensando", (textoEscrito ? "Pensando…" : "Transcribiendo…") + " · toca para cancelar");
   actualizarBotonHablar();
   try {
@@ -2503,8 +3441,13 @@ async function turno(blob, segundos, textoEscrito) {
       if (A.diarizar) fd.append("diarize", "true");
       const lim = conLimite(30_000, "la transcripción");
       enCurso = lim;
-      const rs = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
-        method: "POST", headers: { "xi-api-key": A.clave11 }, body: fd, signal: lim.señal,
+      // `json: false` a propósito: poner `content-type: application/json` sobre un `FormData` hace
+      // que el navegador no escriba la frontera del multipart y ElevenLabs contesta 400.
+      const rs = await fetch(`${API.once}/speech-to-text`, {
+        method: "POST",
+        headers: API.cab.eleven(A.clave11, { json: false }),
+        body: fd,
+        signal: lim.señal,
       }).finally(lim.listo);
       if (!rs.ok) throw new Error(`no he podido transcribir. ${explicar("ElevenLabs", rs.status)}`);
       const tr = await rs.json();
@@ -2519,6 +3462,7 @@ async function turno(blob, segundos, textoEscrito) {
     // 2. Claude responde, en streaming, y se va troceando por frases para que
     //    la voz empiece antes de que termine de escribir.
     modo("pensando", "Pensando…");
+    apuntarParte("Pensando la respuesta…");
     cola = new ColaVoz(VOZ_DJ);
     let respuesta = "";
     let pendiente = "";
@@ -2526,6 +3470,9 @@ async function turno(blob, segundos, textoEscrito) {
     const res = await claudeStream(dicho, (t) => {
       respuesta += t;
       pendiente += t;
+      // El texto se ve LLEGAR en el parte, no al final. Es lo que convierte veinte segundos de
+      // «pensando…» en veinte segundos de leerle mientras escribe.
+      parteDiciendo(respuesta);
       const corte = pendiente.search(/[.!?…]["»]?\s/);
       if (corte > 20) {
         const frase = pendiente.slice(0, corte + 1).trim();
@@ -2562,6 +3509,64 @@ async function turno(blob, segundos, textoEscrito) {
     enCurso = null;
     cola = null;
     dejarDeVigilar();
+    // El parte se cierra aquí: a partir de ahora lo que hizo el DJ vive bajo su turno, en la
+    // conversación, que es donde se puede releer mañana.
+    cerrarParte();
+    actualizarBotonHablar();
+    // Y si había más turnos de los móviles esperando, el siguiente. Sin esto, dos jugadores
+    // hablando a la vez dejarían el segundo en la cola hasta que alguien tocara la tablet.
+    if (enMesa()) atenderCola();
+  }
+}
+
+/**
+ * Un turno DESDE UN MÓVIL: no se resuelve aquí, se pone en la cola del servidor.
+ *
+ * El audio se manda en crudo a `/mesa/voz` y lo transcribe el servidor, que es quien tiene la clave
+ * de ElevenLabs; el texto entra en la cola atribuido a ESTE aparato, así que se sabe quién habló
+ * sin separar voces. La tablet lo recoge por SSE y lo ejecuta como si se hubiera dicho allí, y la
+ * frase vuelve escrita a este móvil en el estado que publica.
+ *
+ * `ocupado` se usa igual que en la tablet para que el botón no mande dos veces, pero aquí nunca
+ * suena nada ni hay nada que cancelar más allá de la subida.
+ */
+async function turnoDeMando(blob, textoEscrito) {
+  limpiarAviso();
+  const texto = textoEscrito?.trim();
+  if (!texto && !blob) return;
+  if (!MESA) return avisar("Este móvil ha perdido el servidor de la mesa. Recarga la página.");
+  ocupado = true;
+  modo("pensando", texto ? "Mandándolo a la mesa…" : "Transcribiendo…");
+  actualizarBotonHablar();
+  const lim = conLimite(45_000, "el servidor de la mesa");
+  enCurso = lim;
+  try {
+    if (texto) {
+      const ok = await MESA.decir(texto, { nombre: A.miPj ?? "" });
+      if (!ok) {
+        avisar("Sin conexión con la mesa: lo mando en cuanto vuelva. No lo repitas.");
+      }
+    } else {
+      const tipo = blob.type || "audio/webm";
+      const r = await MESA.pedir(`/mesa/voz?tipo=${encodeURIComponent(tipo)}`, {
+        method: "POST",
+        headers: { "content-type": tipo },
+        body: blob,
+        signal: lim.señal,
+      });
+      const d = await r.json().catch(() => null);
+      // El servidor contesta con un `error` en español pensado para leerse en mesa: se enseña tal
+      // cual en vez de traducir un número de estado que aquí no significa nada.
+      if (!r.ok) throw new Error(d?.error ?? `el servidor de la mesa dice ${r.status}`);
+      if (!d?.texto) throw new Error("no he entendido nada. Prueba a hablar más cerca");
+    }
+  } catch (e) {
+    const m = e?.name === "AbortError" ? (e.message || "cancelado") : e.message;
+    avisar(`No ha salido: ${m}`);
+  } finally {
+    lim.listo();
+    enCurso = null;
+    ocupado = false;
     actualizarBotonHablar();
   }
 }
@@ -2571,6 +3576,55 @@ async function turno(blob, segundos, textoEscrito) {
 /** Minúsculas y sin acentos, para comparar lo que escribe el DJ con lo que hay guardado. */
 const norm = (x) =>
   String(x ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+/**
+ * Busca un reloj de tensión por título, tolerando que el DJ lo escriba a medias.
+ *
+ * Se buscan primero los que están en marcha: si archivas «La niebla» y luego abres otro con el
+ * mismo nombre, girar_reloj tiene que mover el vivo, no el que ya está guardado.
+ */
+function buscarReloj(titulo) {
+  const n = norm(titulo);
+  if (!n) return null;
+  const porOrden = [...E.relojes.filter((r) => !r.archivado), ...E.relojes.filter((r) => r.archivado)];
+  return (
+    porOrden.find((r) => norm(r.titulo) === n || norm(r.id) === n) ??
+    porOrden.find((r) => norm(r.titulo).includes(n) || n.includes(norm(r.titulo))) ??
+    null
+  );
+}
+
+/** Para decirle al DJ qué relojes hay cuando se equivoca de nombre. */
+function cualesHayRelojes() {
+  const vivos = E.relojes.filter((r) => !r.archivado);
+  if (!vivos.length) return "Ahora mismo no hay ninguno en marcha.";
+  return `Los que hay son: ${vivos.map((r) => `«${r.titulo}» (${cuentaDeReloj(r)})`).join(", ")}.`;
+}
+
+/**
+ * Gira un reloj y deja el mundo al día: registro, guardado, pantalla y aviso.
+ *
+ * El módulo `relojes.js` solo sabe de aritmética de segmentos; todo lo que se ve y se recuerda
+ * pasa por aquí. Un reloj que se completa se anuncia en pantalla como se anuncia caer a 0 PG: la
+ * mesa tiene que verlo llegar, porque en eso consiste la tensión.
+ */
+function girarReloj(reloj, avance, motivo) {
+  const g = girar(reloj, avance);
+  if (!g.movidos) return g;
+  // `girar` es aritmética pura y no toca el reloj: aplicarlo es cosa de aquí.
+  reloj.lleno = g.lleno;
+  registrar(
+    "decision",
+    `«${reloj.titulo}»: ${cuentaDeReloj(reloj)}${motivo ? ` — ${motivo}` : ""}`,
+  );
+  guardarEstado();
+  pintarRelojes();
+  if (g.completado) {
+    sonarSuceso("campana");
+    alarma(`Se ha llenado «${reloj.titulo}». ${reloj.quePasa}`);
+  }
+  return g;
+}
 
 /** Busca un personaje por nombre, tolerando mayúsculas y acentos. */
 function buscarPj(nombre) {
@@ -2595,7 +3649,11 @@ function registrar(tipo, que, pj) {
  * excepción, la conversación se rompe y la mesa no sabe por qué.
  */
 function ejecutarHerramienta(nombre, e) {
-  const nota = (t) => { E.hechos ??= []; E.hechos.push(t); return t; };
+  // `nota` es lo que se le enseña a la mesa: va a `E.hechos` —que queda bajo el turno en la
+  // conversación, para poder auditar al DJ después— y además al parte, que lo cuenta EN EL MOMENTO
+  // en que pasa. Antes solo hacía lo primero, así que un cambio de números durante un turno largo
+  // no se veía hasta que el DJ terminaba de hablar.
+  const nota = (t) => { E.hechos ??= []; E.hechos.push(t); apuntarParte(`→ ${t}`); return t; };
 
   if (nombre === "cambiar_pg") {
     const p = buscarPj(e.pj);
@@ -2875,11 +3933,11 @@ function ejecutarHerramienta(nombre, e) {
   }
 
   if (nombre === "ilustrar") {
-    if (!A.claveFal) {
+    if (faltaFal()) {
       // El aviso va a la MESA, no solo al DJ. Antes esto devolvía un texto y el DJ decidía si lo
       // mencionaba o no: se pidió una ilustración, no salió nada, y nadie supo por qué.
-      avisar("El DJ ha querido ilustrar la escena pero falta la clave de fal.ai. Está en Ajustes.");
-      return "No hay clave de fal.ai en Ajustes, así que no puedo pintar. DILE A LA MESA que le " +
+      avisar(`El DJ ha querido ilustrar la escena. ${sinClave("fal.ai", "pintarla")}`);
+      return "No hay clave de fal.ai, así que no puedo pintar. DILE A LA MESA que le " +
         "falta esa clave, y sigue narrando sin imagen.";
     }
     const prompt = (e.prompt ?? "").trim();
@@ -2908,16 +3966,19 @@ function ejecutarHerramienta(nombre, e) {
     }
     cerrarFicha();
     const vistas = { mesa: "escena", mapa: "mapa", mision: "mision", grupo: "grupo",
-                     cierre: "mision" };
+                     quienes: "quienes", cierre: "mision" };
     const destino = vistas[e.vista];
-    if (!destino) return `"${e.vista}" no es una vista. Son: mesa, mapa, grupo, ficha, cierre.`;
+    if (!destino) {
+      return `"${e.vista}" no es una vista. Son: mesa, mapa, mision, grupo, quienes, ficha, cierre.`;
+    }
     irA(destino);
     // El cierre vive al final de la pestaña Misión, así que además hay que bajar hasta él.
     if (e.vista === "cierre") {
       $("#cierre-tabla")?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     const comoSeLlama = { mesa: "la mesa", mapa: "el mapa", mision: "la misión",
-                          grupo: "el grupo", cierre: "el cierre de la sesión" };
+                          grupo: "el grupo", quienes: "quién es quién",
+                          cierre: "el cierre de la sesión" };
     return nota(`En pantalla: ${comoSeLlama[e.vista]}.`);
   }
 
@@ -2937,6 +3998,165 @@ function ejecutarHerramienta(nombre, e) {
   if (nombre === "registrar_accion") {
     registrar(e.tipo ?? "otro", e.que, e.pj);
     return "Anotado.";
+  }
+
+  if (nombre === "sonido") {
+    // Si la mesa tiene el ambiente apagado no suena nada, y eso no es un error: se le contesta al
+    // DJ que siga narrando, porque el sonido era un adorno y la frase es lo que cuenta.
+    sonarSuceso(e.que);
+    return A.ambiente
+      ? `Suena. Sigue hablando encima, no esperes a que acabe.`
+      : `La mesa tiene el ambiente apagado, así que no ha sonado. Cuéntalo con palabras.`;
+  }
+
+  if (nombre === "crear_reloj") {
+    E.relojes ??= [];
+    const vivos = E.relojes.filter((r) => !r.archivado);
+    // Un DJ que no se acuerda de haberlo creado lo crea otra vez con el mismo nombre, y en pantalla
+    // salen dos ritos de Corvalar por la mitad cada uno. Se le devuelve el que ya tenía.
+    const repetido = vivos.find((r) => norm(r.titulo) === norm(e.titulo));
+    if (repetido) {
+      return `Ese reloj ya está en marcha: «${repetido.titulo}», ${cuentaDeReloj(repetido)}. ` +
+        `Gíralo con girar_reloj en vez de crear otro igual.`;
+    }
+    if (vivos.length >= MAX_RELOJES) {
+      return `Ya hay ${MAX_RELOJES} relojes en marcha (${vivos.map((r) => `«${r.titulo}»`).join(", ")}). ` +
+        `Archiva uno con archivar_reloj antes de crear otro: cuatro relojes no los sigue nadie.`;
+    }
+    const r = crearReloj(
+      { titulo: e.titulo, segmentos: e.segmentos, quePasa: e.que_pasa }, E.relojes,
+    );
+    E.relojes.push(r);
+    registrar("decision", `Reloj nuevo: «${r.titulo}», de ${r.segmentos} — ${r.quePasa}`);
+    guardarEstado();
+    pintarRelojes();
+    return nota(
+      `Reloj nuevo en pantalla: «${r.titulo}», ${cuentaDeReloj(r)}. Al llenarse: ${r.quePasa}. ` +
+        `DILO EN VOZ ALTA: la gracia del reloj es que sepan que corre.`,
+    );
+  }
+
+  if (nombre === "girar_reloj") {
+    E.relojes ??= [];
+    const r = buscarReloj(e.reloj);
+    if (!r) return `No hay ningún reloj llamado "${e.reloj}". ${cualesHayRelojes()}`;
+    const g = girarReloj(r, e.avance, e.motivo);
+    if (!g.movidos) {
+      return `«${r.titulo}» se queda en ${cuentaDeReloj(r)}: ya estaba ` +
+        `${g.lleno === 0 ? "vacío" : "completo"} y ahí no se puede mover más.`;
+    }
+    return nota(
+      `«${r.titulo}»: ${cuentaDeReloj(r)}${e.motivo ? ` (${e.motivo})` : ""}.` +
+        (g.completado
+          ? ` SE HA COMPLETADO. Haz que pase YA lo que anunciaste —${r.quePasa}— en esta misma ` +
+            `escena y sin volver a avisar.`
+          : ""),
+    );
+  }
+
+  if (nombre === "archivar_reloj") {
+    E.relojes ??= [];
+    const r = buscarReloj(e.reloj);
+    if (!r) return `No hay ningún reloj llamado "${e.reloj}". ${cualesHayRelojes()}`;
+    if (r.archivado) return `«${r.titulo}» ya estaba archivado, y sigue apuntado en la Misión.`;
+    r.archivado = true;
+    registrar("otro", `Archivado el reloj «${r.titulo}» (${cuentaDeReloj(r)})`);
+    guardarEstado();
+    pintarRelojes();
+    return nota(
+      `Archivado el reloj «${r.titulo}» (${cuentaDeReloj(r)}). No se borra: sigue en la Misión.`,
+    );
+  }
+
+  if (nombre === "revelar_secreto") {
+    E.secretos ??= [];
+    const catalogo = CAMPANA.secretos ?? [];
+    const dados = new Set(E.secretos.map((x) => x.id).filter(Boolean));
+    const quedan = catalogo.filter((x) => !dados.has(x.id)).map((x) => x.id).join(", ");
+    const id = String(e.id ?? "").trim();
+    const s = id ? catalogo.find((x) => norm(x.id) === norm(id)) : null;
+    const texto = (e.texto ?? "").trim() || s?.texto || "";
+    if (!texto) {
+      return id
+        ? `No hay ningún secreto con id "${id}", y no me has dado texto. Quedan por soltar: ${quedan || "ninguno"}.`
+        : `Para soltar un secreto necesito su \`id\` del catálogo o el \`texto\` de lo que ` +
+          `averiguan. Quedan por soltar: ${quedan || "ninguno"}.`;
+    }
+    const yaEsta = E.secretos.find(
+      (x) => (s && x.id === s.id) || norm(x.texto) === norm(texto),
+    );
+    if (yaEsta) return "Ese secreto ya lo soltaste antes y la mesa lo tiene apuntado. Suelta otro.";
+    E.secretos.push({ id: s?.id ?? null, texto, escena: E.local });
+    registrar("hallazgo", e.como?.trim() ? `${texto} — ${e.como.trim()}` : texto);
+    guardarEstado();
+    pintarSecretos();
+    return nota(
+      `Ya lo saben, y lo tienen apuntado en la Misión: ${texto} Dilo con tus palabras, no lo leas.`,
+    );
+  }
+
+  if (nombre === "apuntar_npc") {
+    E.npcs ??= {};
+    const n = norm(e.npc);
+    if (!n) return "Falta a quién apunto.";
+    const catalogo = CAMPANA.npcs ?? [];
+    const f =
+      catalogo.find((x) => norm(x.id) === n || norm(x.nombre) === n) ??
+      catalogo.find((x) => norm(x.nombre).startsWith(n) || n.startsWith(norm(x.nombre)));
+    // Los NPC que el DJ se inventa también son gente que la mesa ha conocido, así que se apuntan
+    // igual con una clave sacada del nombre; `quienes.js` sabe pintarlos sin ficha de catálogo.
+    const suelto = n.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const clave = f?.id ?? (suelto || "npc");
+    const nuevo = !E.npcs[clave]?.conocido;
+    const ficha = (E.npcs[clave] ??= {});
+    ficha.conocido = true;
+    if (!f) ficha.nombre = String(e.npc).trim();
+    if (e.disposicion) ficha.disposicion = e.disposicion;
+    ficha.disposicion ??= "desconocido";
+    if (e.nota?.trim()) ficha.nota = e.nota.trim();
+    if (typeof e.muerto === "boolean") ficha.muerto = e.muerto;
+    const quien = f?.nombre ?? ficha.nombre ?? clave;
+    registrar(
+      ficha.muerto ? "muerte" : "otro",
+      `${quien}: ${ficha.disposicion}${ficha.muerto ? ", muerto" : ""}` +
+        (ficha.nota ? ` — ${ficha.nota}` : ""),
+    );
+    guardarEstado();
+    pintarQuienes();
+    return nota(
+      `${quien}, ${ficha.disposicion}${ficha.muerto ? ", muerto" : ""}. ` +
+        (nuevo ? "Ya sale en «Quién es quién»." : "Actualizado en «Quién es quién».") +
+        (f ? "" : " No estaba en el guion de la aventura, así que lo he apuntado como tuyo."),
+    );
+  }
+
+  if (nombre === "mostrar_documento") {
+    if (e.cerrar) {
+      E.documento = null;
+      guardarEstado();
+      pintarDocumento();
+      return nota("Documento quitado de la pantalla.");
+    }
+    const catalogo = CAMPANA.documentos ?? [];
+    const cuales = catalogo.map((x) => `${x.id} (${x.titulo})`).join(", ") || "ninguno";
+    const id = String(e.id ?? "").trim();
+    const d = id ? catalogo.find((x) => norm(x.id) === norm(id)) : null;
+    if (id && !d) return `No hay ningún documento con id "${id}". Los que hay son: ${cuales}.`;
+    const titulo = (e.titulo ?? "").trim() || d?.titulo || "";
+    const texto = (e.texto ?? "").trim() || d?.texto || "";
+    const tipo = e.tipo || d?.tipo || "carta";
+    if (!texto) {
+      return `Para enseñar un papel me hace falta su \`id\` del catálogo o el \`texto\` de lo que ` +
+        `pone. Los del catálogo son: ${cuales}.`;
+    }
+    E.documento = { titulo, texto, tipo };
+    registrar("hallazgo", `Documento en pantalla: ${titulo || tipo}`);
+    guardarEstado();
+    pintarDocumento();
+    return nota(
+      `En pantalla: «${titulo || "el papel"}». Dales tiempo a leerlo y a discutirlo antes de ` +
+        `seguir, y quítalo con \`cerrar\` cuando acabéis: si lo dejas puesto, tapa la escena.`,
+    );
   }
 
   return `No tengo ninguna herramienta llamada "${nombre}".`;
@@ -2982,6 +4202,44 @@ async function claudeStream(pregunta, alRecibir) {
             `Grupo: ${grupo}.`,
             `Suministros: ${Object.entries(E.suministros).map(([k, v]) => `${k} ${v}`).join(", ")}.`,
             `Localizaciones a las que puedes mover: ${CAMPANA.localizaciones.map((x) => x.id).join(", ")}.`,
+            // Los relojes van SIEMPRE, también cuando los gira la mesa a mano desde la Misión: si
+            // no, el DJ sigue creyendo que el rito va por dos y narra una presión que ya no es la
+            // que se ve en pantalla.
+            (() => {
+              const vivos = (E.relojes ?? []).filter((r) => !r.archivado);
+              return vivos.length
+                ? `Relojes en marcha: ${vivos
+                    .map((r) => `«${r.titulo}» ${r.lleno}/${r.segmentos} (al llenarse: ${r.quePasa})`)
+                    .join("; ")}.`
+                : "";
+            })(),
+            // Los secretos que QUEDAN, con su id y su peso. Esto es lo único de toda la app que
+            // sabe lo que la mesa todavía no sabe, y por eso no se pinta en ninguna pantalla: vive
+            // aquí, en el bloque volátil del prompt —el que no se cachea—, y muere con la
+            // petición. La lista mengua sola según se van soltando.
+            (() => {
+              const dados = new Set((E.secretos ?? []).map((s) => s.id).filter(Boolean));
+              const quedan = (CAMPANA.secretos ?? []).filter((s) => !dados.has(s.id));
+              return quedan.length
+                ? "SECRETOS QUE AÚN NO SABEN (suelta el que cuadre con revelar_secreto, nunca los " +
+                  `leas tal cual): ${quedan.map((s) => `[${s.id}|${s.peso}] ${s.texto}`).join(" ")}`
+                : "";
+            })(),
+            Object.keys(E.npcs ?? {}).length
+              ? `Ya han conocido a: ${Object.entries(E.npcs)
+                  .map(([k, v]) => `${v.nombre ?? k} (${v.disposicion ?? "?"}${v.muerto ? ", muerto" : ""})`)
+                  .join(", ")}.`
+              : "",
+            (CAMPANA.documentos ?? []).length
+              ? `Papeles que puedes enseñar por id con mostrar_documento: ${CAMPANA.documentos
+                  .map((d) => `${d.id} (${d.titulo})`).join(", ")}.`
+              : "",
+            (CAMPANA.relojesSugeridos ?? []).length
+              ? `Relojes previstos para esta aventura: ${CAMPANA.relojesSugeridos
+                  .map((r) => `«${r.titulo}» de ${r.segmentos}`).join(", ")}.`
+              : "",
+            E.documento ? `En pantalla hay un documento abierto: «${E.documento.titulo}».` : "",
+            E.pausa ? "LA MESA TIENE LA PARTIDA EN PAUSA." : "",
             // El «dónde lo dejamos», que es para lo que existe el diario. Solo la última entrada:
             // son unos 200 tokens y ahorran que la mesa se lo cuente al DJ cada vez. El diario
             // entero no cabe en cada turno.
@@ -2993,10 +4251,23 @@ async function claudeStream(pregunta, alRecibir) {
     ).filter(Boolean).join("\n");
   };
 
-  const historial = E.charla.slice(-8).map((t) => ({
-    role: t.de === "mesa" ? "user" : "assistant",
-    content: t.texto,
-  }));
+  /**
+   * Las narraciones grabadas van como ACOTACIÓN, no como turno del DJ.
+   *
+   * Si fueran `assistant`, el modelo las leería como algo que dijo él y acabaría imitando el
+   * registro de la narración pregenerada, que es otro. Y si no van, pasa lo que se quejó la mesa:
+   * suena Domar pidiendo que encuentren a su hija y el DJ contesta como si nadie hubiera hablado.
+   * Como acotación de la mesa queda claro que ya se ha oído y que no hay que repetirlo.
+   */
+  const historial = E.charla.slice(-8).map((t) =>
+    t.de === "grabada"
+      ? {
+          role: "user",
+          content:
+            `[Ha sonado la narración grabada de la escena. La mesa la ha oído entera, ` +
+            `palabra por palabra: «${t.texto}» — NO la repitas ni la resumas: sigue desde ahí.]`,
+        }
+      : { role: t.de === "mesa" ? "user" : "assistant", content: t.texto });
   const mensajes = [...historial, { role: "user", content: pregunta }];
 
   const lim = conLimite(120_000, "el DJ");
@@ -3033,7 +4304,7 @@ async function claudeStream(pregunta, alRecibir) {
         () => lim.ac.abort(new Error("el DJ no ha contestado en 25 s")), 25_000,
       );
 
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
+      const r = await fetch(API.claude, {
         method: "POST", headers: cabecerasClaude(), body: JSON.stringify(cuerpo), signal: lim.señal,
       }).catch((e) => {
         clearTimeout(primerByte);
@@ -3098,11 +4369,16 @@ async function claudeStream(pregunta, alRecibir) {
       mensajes.push({ role: "assistant", content: contenidoAsistente });
       mensajes.push({
         role: "user",
-        content: usos.map((b) => ({
-          type: "tool_result",
-          tool_use_id: b.cb.id,
-          content: ejecutarHerramienta(b.cb.name, parsearJson(b.json)),
-        })),
+        content: usos.map((b) => {
+          // Se anuncia la herramienta ANTES de ejecutarla: si una tarda o falla, la mesa ve en qué
+          // se ha quedado el DJ en vez de un «pensando…» que no dice nada.
+          apuntarParte(`⚙ ${QUE_HACE[b.cb.name] ?? b.cb.name}`);
+          return {
+            type: "tool_result",
+            tool_use_id: b.cb.id,
+            content: ejecutarHerramienta(b.cb.name, parsearJson(b.json)),
+          };
+        }),
       });
 
       guardarEstado();
@@ -3129,6 +4405,9 @@ class ColaVoz {
   }
   encolar(frase) {
     if (!frase) return;
+    // Un móvil no sintetiza ni suena: ni gasta caracteres de ElevenLabs ni añade un altavoz más a
+    // la habitación. El texto lo ve igual en la conversación.
+    if (!puedeSonar()) return;
     const pedir = this.sintetizar(frase); // arranca ya, en paralelo
     this.cadena = this.cadena.then(async () => {
       const url = await pedir;
@@ -3190,10 +4469,10 @@ class ColaVoz {
     (this.enVuelo ??= []).push(lim);
     try {
       const r = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${this.voz}?output_format=mp3_44100_128`,
+        `${API.once}/text-to-speech/${this.voz}?output_format=mp3_44100_128`,
         {
           method: "POST",
-          headers: { "xi-api-key": A.clave11, "content-type": "application/json" },
+          headers: API.cab.eleven(A.clave11),
           body: JSON.stringify({
             text: texto, model_id: A.vozModelo, language_code: "es",
             voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 },
@@ -3347,6 +4626,13 @@ async function motorAmbiente() {
 }
 
 async function encenderAmbiente(si) {
+  // El ambiente es sonido de mesa, y cuatro móviles con el mismo bucle desfasado es el mismo
+  // problema que la voz. Se apunta el interruptor —para que se vea igual en todas las pantallas—
+  // pero el motor solo arranca donde de verdad suena.
+  if (si && !puedeSonar()) {
+    avisar("El ambiente suena en la tablet de la mesa. Enciéndelo allí.");
+    return;
+  }
   A.ambiente = si;
   guardarAjustes();
   pintarBotonAmbiente();
@@ -3383,7 +4669,7 @@ function sonarSuceso(tipo) {
 /** Cambia de ambiente. Si está apagado se recuerda, y al encender suena el que toca. */
 async function ponerAmbiente(estado) {
   ambEstado = estado;
-  if (!A.ambiente) return;
+  if (!A.ambiente || !puedeSonar()) return;
   try { (await motorAmbiente()).poner(estado); } catch { /* ya se avisó al encender */ }
 }
 
@@ -3481,6 +4767,13 @@ function cerrarSesion() {
   E.gasto = { sttSeg: 0, entrada: 0, salida: 0, ttsCar: 0, imagenes: 0 };
   E.tirada = null;
   E.iniciativa = null;
+  // Lo que era de esta sesión y de ninguna más: el papel que hubiera en pantalla, la pausa y la
+  // cuenta de cortes. Los relojes, los secretos y la gente conocida NO se tocan: son avance de
+  // campaña. Un reloj como «El rito de Corvalar» tarda tres sesiones en llenarse, y vaciarlo al
+  // cerrar sería tirar a la basura justo la presión que la pieza existe para sostener.
+  E.documento = null;
+  E.pausa = false;
+  E.cortes = [];
   guardarEstado();
   pintarTodo();
   ponEstado(`Sesión ${n} guardada en el diario.`, "bien");
@@ -3506,26 +4799,127 @@ function pintarDiario() {
 
 $("#cerrar-sesion").addEventListener("click", cerrarSesion);
 
+// ── «En capítulos anteriores…» ───────────────────────────────────────────────
+/**
+ * Arranque de sesión: la última entrada del diario, contada con la voz del DJ.
+ *
+ * Con cuatro jugadores nuevos y una semana entre partidas, lo primero que pasa siempre es diez
+ * minutos de «¿dónde estábamos?». Esto lo resuelve en cuarenta segundos y además arranca la
+ * sesión con la voz de la campaña, que es mejor sitio para empezar que un silencio.
+ *
+ * NO pasa por Claude a propósito: el resumen del diario ya está escrito para escucharse, así que
+ * locutarlo tal cual no cuesta tokens, no tarda en pensar y, sobre todo, no puede inventarse nada
+ * que no pasara. Un recap que se equivoca es peor que no tener recap.
+ */
+let urlRecap = null;
+
+async function recapHablado() {
+  const d = leerDiario();
+  const ultima = d[d.length - 1];
+  const b = $("#recap");
+  const nota = $("#recap-nota");
+  if (!ultima) {
+    nota.textContent = "Todavía no hay ninguna sesión cerrada que resumir.";
+    return;
+  }
+  if (!puedeSonar()) {
+    nota.textContent = `El recap suena en la tablet. Aquí lo tienes escrito: «${ultima.texto}»`;
+    return;
+  }
+  if (faltaOnce()) {
+    // Sin clave no hay voz, pero el texto está y se puede leer en alto. Mejor eso que un botón
+    // que no hace nada.
+    nota.textContent = `Sin clave de ElevenLabs, así que léelo tú: «${ultima.texto}»`;
+    return;
+  }
+  limpiarAviso();
+  b.disabled = true;
+  b.querySelector("span:last-child").textContent = "preparando la voz…";
+  nota.textContent = "";
+
+  const lim = conLimite(60_000, "el recap");
+  try {
+    const r = await fetch(
+      `${API.once}/text-to-speech/${VOZ_DJ}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: API.cab.eleven(A.clave11),
+        signal: lim.señal,
+        body: JSON.stringify({
+          text: `En capítulos anteriores. ${ultima.texto}`,
+          model_id: A.vozModelo, language_code: "es",
+          voice_settings: { stability: 0.45, similarity_boost: 0.75, style: 0.35 },
+        }),
+      },
+    );
+    if (!r.ok) throw new Error(explicar("ElevenLabs", r.status));
+    const blob = await r.blob();
+    E.gasto.ttsCar += ultima.texto.length;
+    guardarEstado();
+    pintarGasto();
+
+    if (urlRecap) URL.revokeObjectURL(urlRecap);
+    urlRecap = URL.createObjectURL(blob);
+    const au = new Audio(urlRecap);
+    au.play().catch(() => {
+      nota.textContent = "El navegador no ha dejado sonar el audio. Toca otra vez el botón.";
+    });
+    nota.textContent = `Sesión ${ultima.n} · ${ultima.fecha}`;
+  } catch (e) {
+    nota.textContent = `No he podido grabar el recap: ${e.message}`;
+  } finally {
+    lim.listo();
+    b.disabled = false;
+    b.querySelector("span:last-child").textContent = "En capítulos anteriores…";
+  }
+}
+
+$("#recap").addEventListener("click", recapHablado);
+
 /** La última ilustración de la sesión, para poder volver a ella y para que sobreviva a recargar. */
 const CLAVE_ILUSTRACION = "corvalar.ilustracion.v1";
 let ilustrando = false;
+
+/**
+ * La semilla del generador, fija POR LOCALIZACIÓN.
+ *
+ * Sin semilla, flux devuelve una aleatoria en cada llamada y dos imágenes seguidas del mismo sitio
+ * no se parecen en nada: cambia la hora del día, el tipo de bosque y hasta la arquitectura. En una
+ * campaña eso rompe el sitio, que es lo único que la mesa tiene para ubicarse.
+ *
+ * Se deriva del id de la localización, así que todas las imágenes de la iglesia comparten semilla
+ * y salen del mismo mundo, mientras que el vado tiene el suyo. No es control de personaje —para
+ * eso harían falta referencias de imagen— pero sí mantiene el aire del lugar.
+ */
+function semillaDeLugar() {
+  const clave = `${A.aventura}:${E.local}`;
+  let h = 2166136261;
+  for (let i = 0; i < clave.length; i++) {
+    h ^= clave.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % 2_000_000_000;
+}
 
 async function ilustrarEscena(prompt, pie) {
   if (ilustrando) return; // una a la vez: dos en paralelo se pisan en pantalla y cuestan doble
   ilustrando = true;
   pintarIlustracion({ estado: "pintando", pie });
+  const paraElChip = chipPintando();
+  const semilla = semillaDeLugar();
 
   const lim = conLimite(90_000, "la ilustración");
   try {
-    const r = await fetch("https://fal.run/fal-ai/flux/dev", {
+    const r = await fetch(`${API.fal}/fal-ai/flux/dev`, {
       method: "POST",
-      headers: { Authorization: `Key ${A.claveFal}`, "content-type": "application/json" },
+      headers: API.cab.fal(A.claveFal),
       signal: lim.señal,
       body: JSON.stringify({
         prompt: `${prompt}. ${ESTILO_ILUSTRACION}`,
         image_size: { width: 1024, height: 576 },
         num_images: 1,
         enable_safety_checker: true,
+        seed: semilla,
       }),
     });
     if (!r.ok) throw new Error(explicar("fal.ai", r.status));
@@ -3557,7 +4951,7 @@ async function ilustrarEscena(prompt, pie) {
         fr.onerror = () => rej(new Error("no se ha podido leer"));
         fr.readAsDataURL(bytes);
       });
-      guardarIlustracion({ datos, pie: pie ?? "", prompt });
+      guardarIlustracion({ datos, pie: pie ?? "", prompt, semilla });
     } catch (e2) {
       if (e2?.name === "AbortError") throw e2;
       datos = url;
@@ -3569,9 +4963,32 @@ async function ilustrarEscena(prompt, pie) {
     avisar(err?.message ?? "La ilustración no ha salido.");
   } finally {
     lim.listo();
+    paraElChip();
     ilustrando = false;
     pintarGasto();
   }
+}
+
+/**
+ * El aviso de «se está pintando», con los segundos corriendo.
+ *
+ * El indicador que va DENTRO del marco de la ilustración se queda tapado en cuanto alguien abre
+ * una capa, y entonces la mesa no ve que la imagen viene en camino: a los diez segundos de nada,
+ * eso ya parece que se ha colgado. Este va fijo y por fuera del escenario, así que se ve pase lo
+ * que pase. Los segundos son lo que convierte «no responde» en «está tardando».
+ *
+ * Devuelve la función de pararlo, para que quien lo enciende no pueda olvidarse de apagarlo.
+ */
+function chipPintando() {
+  const chip = $("#pintando");
+  const desde = Date.now();
+  chip.textContent = "pintando…";
+  chip.hidden = false;
+  const t = setInterval(() => {
+    const s = Math.round((Date.now() - desde) / 1000);
+    chip.textContent = `pintando… ${s}s`;
+  }, 1000);
+  return () => { clearInterval(t); chip.hidden = true; };
 }
 
 /**
@@ -3582,6 +4999,72 @@ async function ilustrarEscena(prompt, pie) {
 function guardarIlustracion(x) {
   try { localStorage.setItem(CLAVE_ILUSTRACION, JSON.stringify(x)); }
   catch { localStorage.removeItem(CLAVE_ILUSTRACION); }
+  archivarMomento(x);
+}
+
+/**
+ * LOS MEJORES MOMENTOS
+ *
+ * Cada ilustración se guardaba en la MISMA clave, así que la siguiente pisaba la anterior: de una
+ * sesión entera sobrevivía una sola imagen, la última, y las demás se perdían sin avisar. Ahora se
+ * archivan todas con lo que estaba pasando cuando se pintaron, que es lo que las convierte en un
+ * recuerdo y no en un fondo de pantalla.
+ *
+ * Va aparte del estado de la partida por lo mismo que la ilustración suelta: son cientos de
+ * kilobytes en base64 y `guardarEstado()` se llama en cada golpe.
+ */
+const CLAVE_MOMENTOS = "corvalar.momentos.v1";
+const TOPE_MOMENTOS = 24;
+
+function leerMomentos() {
+  try { return JSON.parse(localStorage.getItem(CLAVE_MOMENTOS)) ?? []; }
+  catch { return []; }
+}
+
+function archivarMomento(x) {
+  if (!x?.datos) return;
+  const l = actual();
+  // El «qué pasó para llegar aquí»: las dos últimas cosas dichas y lo que el DJ acababa de anotar.
+  // Sin eso, dentro de tres semanas es una imagen bonita de la que nadie se acuerda.
+  const contexto = E.charla.slice(-2).map((t) => `${t.de === "mesa" ? "Vosotros" : "El DJ"}: ${t.texto}`);
+  const momento = {
+    datos: x.datos,
+    pie: x.pie ?? "",
+    semilla: x.semilla ?? null,
+    lugar: `${l.id} · ${l.nombre}`,
+    sesion: (leerDiario().length ?? 0) + 1,
+    cuando: new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long" }),
+    contexto,
+  };
+  const todos = [...leerMomentos(), momento];
+  // Si no cabe, se van cayendo los más viejos hasta que quepa. Perder el más antiguo es mucho
+  // mejor que perderlos todos porque el navegador se plantó con el cupo.
+  while (todos.length) {
+    try { localStorage.setItem(CLAVE_MOMENTOS, JSON.stringify(todos.slice(-TOPE_MOMENTOS))); return; }
+    catch { todos.shift(); }
+  }
+}
+
+function pintarMomentos() {
+  const caja = $("#momentos");
+  if (!caja) return;
+  const m = leerMomentos();
+  caja.innerHTML = m.length
+    ? [...m].reverse().map((x, i) => `
+        <figure class="momento">
+          <img src="${esc(x.datos)}" alt="${esc(x.pie)}" loading="lazy">
+          <figcaption>
+            <b>${esc(x.pie || "Sin pie")}</b>
+            <span class="momento-donde">Sesión ${x.sesion} · ${esc(x.lugar)} · ${esc(x.cuando)}</span>
+            ${x.contexto?.length
+              ? `<span class="momento-que">${x.contexto.map((c) => esc(c)).join("<br>")}</span>`
+              : ""}
+            <a class="descargar" href="${esc(x.datos)}"
+               download="momento-${m.length - i}.webp">⤓ Guardar</a>
+          </figcaption>
+        </figure>`).join("")
+    : `<p class="vacio">Todavía ninguno. Cada vez que el DJ ilustre algo, la imagen se queda aquí
+         con lo que estaba pasando.</p>`;
 }
 
 function pintarIlustracion({ estado, datos, pie }) {
@@ -3612,8 +5095,8 @@ function recuperarIlustracion() {
  */
 async function pedirIlustracion() {
   if (ilustrando) return avisar("Ya se está pintando una. Espera a que termine.");
-  if (!A.claveFal) return avisar("Falta la clave de fal.ai en Ajustes para poder ilustrar.");
-  if (!A.claveCl) return avisar("Falta la clave de Claude en Ajustes.");
+  if (faltaFal()) return avisar(sinClave("fal.ai", "poder ilustrar"));
+  if (faltaClaude()) return avisar(sinClave("Anthropic", "describir la escena al generador"));
   limpiarAviso();
   const b = $("#acc-ilustrar");
   b.disabled = true;
@@ -3622,7 +5105,7 @@ async function pedirIlustracion() {
   const ultimas = E.charla.slice(-4).map((t) => `${t.de === "mesa" ? "MESA" : "DJ"}: ${t.texto}`);
   const lim = conLimite(40_000, "el prompt de la ilustración");
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch(API.claude, {
       method: "POST", headers: cabecerasClaude(), signal: lim.señal,
       body: JSON.stringify({
         model: A.modelo, max_tokens: 300,
@@ -3708,7 +5191,7 @@ let resumenEnCurso = false;
 
 async function generarResumen() {
   if (resumenEnCurso) return;
-  if (!A.claveCl) return avisar("Falta la clave de Claude. Está en Ajustes.");
+  if (faltaClaude()) return avisar(sinClave("Anthropic", "escribir el resumen"));
   if (!(E.registro ?? []).length &&
       !confirm("El registro está vacío, así que el resumen va a ser muy pobre. ¿Lo hago igual?")) {
     return;
@@ -3721,7 +5204,7 @@ async function generarResumen() {
 
   const lim = conLimite(90_000, "el resumen");
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch(API.claude, {
       method: "POST",
       headers: cabecerasClaude(),
       signal: lim.señal,
@@ -3766,7 +5249,7 @@ let urlAudioResumen = null;
 
 async function audioDelResumen() {
   if (!E.resumen) return avisar("Primero hay que escribir el resumen.");
-  if (!A.clave11) return avisar("Falta la clave de ElevenLabs. Está en Ajustes.");
+  if (faltaOnce()) return avisar(sinClave("ElevenLabs", "grabar el audio del resumen"));
   limpiarAviso();
   const b = $("#cierre-audio");
   b.disabled = true;
@@ -3775,10 +5258,10 @@ async function audioDelResumen() {
   const lim = conLimite(60_000, "el audio del resumen");
   try {
     const r = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${VOZ.narrador}?output_format=mp3_44100_128`,
+      `${API.once}/text-to-speech/${VOZ.narrador}?output_format=mp3_44100_128`,
       {
         method: "POST",
-        headers: { "xi-api-key": A.clave11, "content-type": "application/json" },
+        headers: API.cab.eleven(A.clave11),
         signal: lim.señal,
         body: JSON.stringify({
           text: E.resumen, model_id: A.vozModelo, language_code: "es",
@@ -3855,12 +5338,634 @@ if (ES_TELE) {
       CAMPANA = CAMPANAS[A.aventura];
     }
     const nuevo = cargar(claveEstado(A.aventura));
-    if (nuevo) { E = nuevo; pintarTodo(); recuperarIlustracion(); }
+    // La tele asigna `E` entera desde fuera, así que aquí también hay que sanear: si el tablet
+    // guardó con una versión anterior de la app, la pestaña de la tele sería la primera en
+    // encontrarse un campo que no existe.
+    if (nuevo) { E = nuevo; sanearEstado(); pintarTodo(); recuperarIlustracion(); }
   });
   // La ilustración vive en su propia clave, y esa sí avisa por `storage` entre pestañas.
   addEventListener("storage", (ev) => {
     if (ev.key === CLAVE_ILUSTRACION) recuperarIlustracion();
   });
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// EL CABLEADO DEL SERVIDOR DE MESA
+// ═════════════════════════════════════════════════════════════════════════════
+/**
+ * Todo lo de aquí abajo está detrás de un `if (!MESA)`. Si el Pocophone no arranca mañana, nada de
+ * esto corre y la app es la de siempre. Eso NO es una precaución teórica: es la única razón por la
+ * que se puede probar esto el día antes de jugar.
+ */
+
+// ── Quién soy en este aparato ────────────────────────────────────────────────
+/**
+ * `A.miPj` es el nombre del personaje de quien tiene ESTE móvil. No es un rol ni un permiso —todos
+ * los aparatos ven lo mismo, y eso está decidido— sino una comodidad: sirve para que «Mi ficha»
+ * abra una ficha y no un menú, para que el selfie sepa a quién le pone la cara, y para encender el
+ * marco de tu personaje en la banda. Se aprende de dos gestos que ya se hacen (hacerse la foto y
+ * abrir tu ficha desde el grupo) en vez de pedir que alguien lo configure.
+ */
+function recordarMiPj(pj) {
+  if (!pj || A.miPj === pj) return;
+  A.miPj = pj;
+  guardarAjustes();
+  pintarBanda();
+  pintarMio();
+}
+
+const miIndice = () => (A.miPj ? E.partida.findIndex((p) => p.pj === A.miPj) : -1);
+
+/**
+ * La fila «lo mío» del layout de mando. El marcado lo pone `index.html` con `hidden`; aquí solo se
+ * decide si aparece, y solo aparece en un móvil: en la tablet ocuparía sitio para ir a un sitio al
+ * que ya se llega tocando la cara de la banda.
+ */
+function pintarMio() {
+  const n = $("#mio");
+  if (!n) return;   // todavía no está en el marcado: no pasa nada, todo lo demás sigue
+  n.hidden = !enMando();
+  const i = miIndice();
+  const f = $("#mi-ficha")?.querySelector("span:last-child");
+  if (f) f.textContent = i >= 0 ? `Ficha de ${recortar(E.partida[i].pj, 14)}` : "Mi ficha";
+}
+
+$("#mi-ficha")?.addEventListener("click", () => {
+  const i = miIndice();
+  if (i >= 0) { irA("escena"); abrirFicha(i); return; }
+  irA("grupo");
+  avisar("Toca tu personaje en esta lista. A partir de ahí, «Mi ficha» te lo abre directo.");
+});
+
+$("#mi-cara")?.addEventListener("click", () => {
+  irA("grupo");
+  const i = miIndice();
+  // Se dispara el mismo `input[type=file][capture=user]` que ya usa «Vuestras caras»: en un móvil
+  // eso abre la cámara frontal directamente, que es todo el gesto que queremos.
+  const inp = i >= 0 ? $(`#caras input[data-foto="${i}"]`) : null;
+  if (inp) { inp.click(); return; }
+  $("#caras")?.scrollIntoView({ block: "center" });
+  avisar("Busca tu nombre en «Vuestras caras» y dale a «Hacer foto».");
+});
+
+// ── Los retratos, de un móvil a la tablet ────────────────────────────────────
+/**
+ * Reencoge un retrato ya pintado antes de compartirlo.
+ *
+ * El retrato que vuelve del generador es un cuadrado de 1024 px: como data URL son 200-400 KB, y
+ * el servidor manda el documento ENTERO a los cinco aparatos en cada cambio. Cuatro retratos a
+ * tamaño original serían más de un mega viajando por la wifi cada vez que alguien pierde un punto
+ * de golpe. A 448 px y calidad 0,72 son unos 40 KB y en la banda —donde el marco mide 44 px— o en
+ * la ficha no se distingue la diferencia.
+ */
+function encogerImagen(dataUrl, lado = 448, calidad = 0.72) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onerror = () => rej(new Error("no he podido releer el retrato"));
+    img.onload = () => {
+      const corte = Math.min(img.width, img.height);
+      const c = document.createElement("canvas");
+      c.width = c.height = Math.min(lado, corte);
+      const cx = c.getContext("2d");
+      cx.drawImage(img, (img.width - corte) / 2, (img.height - corte) / 2, corte, corte,
+                   0, 0, c.width, c.height);
+      res(c.toDataURL("image/jpeg", calidad));
+    };
+    img.src = dataUrl;
+  });
+}
+
+/** La clave del anexo tiene que cumplir `^[\w.-]{1,64}$`, así que el nombre va sin acentos. */
+const claveCara = (pj) =>
+  `cara.${norm(pj).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "pj"}`;
+
+/**
+ * El retrato hecho en un móvil tiene que acabar en la tablet y en la tele.
+ *
+ * Va por el «anexo» del servidor, que es el cajón compartido, y **como un buzón, no como un
+ * almacén**: la mesa lo recoge, se lo guarda en su propio `localStorage` y borra el anexo. Si se
+ * quedara ahí, los cuatro retratos viajarían dentro de cada documento el resto de la partida —y el
+ * documento se manda entero en cada cambio—. Los retratos ya viven donde tienen que vivir: en el
+ * aparato que los pinta y en la tablet que los enseña.
+ */
+async function compartirCara(pj, datos) {
+  if (!MESA || !pj || !datos) return;
+  try {
+    const chico = await encogerImagen(datos);
+    await MESA.enviar({ tipo: "anexo", clave: claveCara(pj), valor: { pj, datos: chico } });
+  } catch {
+    // El retrato ya está en este aparato y se ve aquí: compartirlo es un extra, no la función.
+  }
+}
+
+/** La otra mitad: la mesa vacía el buzón. Ver `compartirCara`. */
+function recogerCaras(anexos) {
+  if (!enMesa() || !MESA || !anexos) return;
+  const entradas = Object.entries(anexos).filter(([k, v]) => k.startsWith("cara.") && v?.pj && v?.datos);
+  if (!entradas.length) return;
+  const caras = leerCaras();
+  let algo = false;
+  for (const [clave, v] of entradas) {
+    if (caras[v.pj] !== v.datos) { caras[v.pj] = v.datos; algo = true; }
+    MESA.enviar({ tipo: "anexo", clave, valor: null });
+  }
+  if (!algo) return;
+  try { localStorage.setItem(CLAVE_CARAS, JSON.stringify(caras)); }
+  catch { avisar("No caben más retratos en la tablet. Quita alguno en Grupo → Vuestras caras."); return; }
+  pintarBanda(); pintarCaras(); pintarGrupo();
+  // Y un guardado para que la pestaña de la tele se entere por `BroadcastChannel`: los retratos
+  // viven en su propia clave y la tele los relee al repintar.
+  guardarEstado();
+  ponEstado(`Retrato nuevo de ${entradas.map(([, v]) => v.pj).join(", ")}.`, "ok");
+}
+
+// ── El estado, en las dos direcciones ────────────────────────────────────────
+/**
+ * La mesa publica la partida. **Agrupado, no por token.**
+ *
+ * `guardarEstado()` se llama varias veces por turno (al apuntar lo que dijo la mesa, después de
+ * cada herramienta, al cerrar el turno) y publicar en cada una serían cinco documentos por frase
+ * multiplicados por cuatro móviles escuchando: es tirar la batería de todos. Con medio segundo de
+ * espera, un turno entero se convierte en dos o tres publicaciones y en mesa no se nota.
+ *
+ * Se manda envuelto en `{aventura, app, estado}` porque la aventura no vive en `E`: sin ella, un
+ * móvil que se conecta mientras se juega la prueba pintaría las localizaciones de la campaña.
+ */
+let relojPublicar = null;
+
+function publicarPartida() {
+  if (!MESA || !enMesa()) return;
+  clearTimeout(relojPublicar);
+  relojPublicar = setTimeout(() => {
+    relojPublicar = null;
+    MESA.enviar({
+      tipo: "partida",
+      partida: { aventura: A.aventura, app: VERSION_APP, estado: E },
+    });
+  }, 500);
+}
+
+/**
+ * Un móvil adopta la partida que publica la mesa.
+ *
+ * Se acepta la forma envuelta y también un `E` pelado, por si algún día lo publica otra cosa. Y
+ * **no se llama a `guardarEstado()`**: eso volvería a publicar, y con dos aparatos publicándose el
+ * uno al otro el bucle no lo para nada. Se escribe el almacén a mano, que además deja al móvil con
+ * lo último que vio si el servidor se cae a mitad de partida.
+ */
+function adoptarPartida(p) {
+  const nuevo = p?.estado && typeof p.estado === "object"
+    ? p.estado
+    : (p && typeof p === "object" && ("charla" in p || "partida" in p) ? p : null);
+  if (!nuevo || !Array.isArray(nuevo.partida)) return;
+
+  const av = p?.aventura;
+  if (av && av !== A.aventura && CAMPANAS[av]) {
+    A.aventura = av;
+    guardarAjustes();
+    CAMPANA = CAMPANAS[av];
+    $("#aventura").value = av;
+  }
+  E = nuevo;
+  // La misma red que en el arranque: si la escena guardada no existe en esta aventura, la app se
+  // queda en blanco y no dice por qué.
+  if (!CAMPANA.localizaciones.some((l) => l.id === E.local)) E.local = CAMPANA.localizaciones[0].id;
+  sanearEstado();
+  try { localStorage.setItem(claveEstado(A.aventura), JSON.stringify(E)); } catch { /* sin sitio */ }
+  pintarTodo();
+  recuperarIlustracion();
+}
+
+// ── La cola de turnos de los móviles ─────────────────────────────────────────
+/** Lo que el servidor tiene pendiente. Se pinta al final de la conversación (ver `pintarCola`). */
+let COLA_MESA = [];
+let atendiendo = false;
+
+/**
+ * Los turnos que ESTE aparato ya ha resuelto, para no resolverlos dos veces.
+ *
+ * Hacía falta por un fallo que solo aparece con la wifi regular. Al acabar un turno se manda
+ * «hecho» al servidor y se rearma `atenderCola()` a los 400 ms por si ese envío no sale. Pero si
+ * el envío tarda MÁS de 400 ms —wifi que parpadea, o el POST agotando su tiempo—, el turno sigue
+ * en la cola local y `find()` lo vuelve a coger: **el DJ resuelve otra vez la misma frase**, con su
+ * gasto y su voz repetida encima. Y el segundo «hecho» llega cuando el servidor ya lo había
+ * quitado, así que contesta 404, y el cliente trata eso como fallo de transporte y **corta el flujo
+ * SSE vivo** para reconectar. Un turno duplicado tumbaba la conexión de la mesa.
+ *
+ * Es local a propósito y no se persiste: si la tablet se recarga a mitad de un turno, el conjunto
+ * vuelve vacío y el turno se reintenta, que es justo lo que se quiere —nadie lo resolvió—.
+ */
+const RESUELTOS = new Set();
+
+/**
+ * La tablet se come la cola, de uno en uno y en orden.
+ *
+ * Se coge SIEMPRE la cabeza, sea cual sea su estado, en vez de buscar el primero «pendiente». Es a
+ * propósito: si la tablet se recarga a mitad de un turno, ese turno se quedó marcado «atendido» en
+ * el servidor y buscando por estado no lo cogería nadie nunca —la frase de un jugador se quedaría
+ * ahí colgada—. Marcar «atendido» sirve solo para que el móvil vea que le han hecho caso; lo que de
+ * verdad saca el turno de la cola es marcarlo «hecho» al acabar.
+ *
+ * Y de uno en uno porque dos turnos a la vez son dos voces del DJ hablando encima de la otra.
+ */
+async function atenderCola() {
+  if (!MESA || !enMesa() || atendiendo || ocupado) return;
+  const t = COLA_MESA.find((x) => x?.texto && x.estado !== "hecho" && !RESUELTOS.has(x.id));
+  if (!t) return;
+  atendiendo = true;
+  // Con el nombre delante si se sabe: el DJ necesita saber quién habla para dirigirse a alguien,
+  // y en la conversación queda constancia de quién dijo qué.
+  const quien = String(t.nombre ?? "").trim();
+  const dicho = quien ? `${quien}: ${t.texto}` : t.texto;
+  try {
+    MESA.enviar({ tipo: "turno", id: t.id, estado: "atendido" });
+
+    // Sin clave de Anthropic —ni en el .env del servidor ni en Ajustes— no hay DJ, y la petición
+    // no se intenta. Los otros tres sitios que arrancan un turno (el micrófono, el recuadro de
+    // escribir y la tirada) ya lo comprobaban; este no, porque entra a `turno()` por dentro. Se
+    // vio en pruebas: el turno de un móvil salía hacia api.anthropic.com SIN clave, con sus
+    // cuatro reintentos, y lo que aparecía en la tablet era «el navegador ha bloqueado la
+    // llamada… prueba por https», que manda a pelearse con el túnel cuando lo que falta es una
+    // clave. Este aviso dice la verdad a la primera.
+    if (faltaClaude()) {
+      // La frase se queda en la conversación aunque el DJ no pueda contestar. Al marcar el turno
+      // «hecho» desaparece de la cola, y sin esta constancia el jugador vería su frase esfumarse
+      // del móvil sin explicación ninguna.
+      E.charla.push({ de: "mesa", texto: dicho });
+      guardarEstado(); pintarCharla(); pintarArrancar();
+      avisar(sinClave("Anthropic", "hablar con el DJ"));
+      return;
+    }
+
+    await turno(null, 0, dicho);
+  } catch (e) {
+    avisar(`No he podido resolver el turno de un móvil: ${e?.message ?? "error"}`);
+  } finally {
+    // «hecho» pase lo que pase: un turno que falla y se queda en la cola bloquea a los cuatro
+    // móviles para siempre, y en mesa eso se lee como que la app no escucha.
+    // Apuntado ANTES de avisar al servidor: lo que impide resolverlo dos veces es esto, no que el
+    // envío llegue. Si se apuntara después, la ventana entre el envío y su respuesta es
+    // exactamente el agujero por el que se colaba el turno duplicado.
+    RESUELTOS.add(t.id);
+    MESA.enviar({ tipo: "turno", id: t.id, estado: "hecho" });
+    atendiendo = false;
+    // Que no crezca sin fin en una partida de cuatro horas: en cuanto el servidor quita un turno
+    // de la cola, su id ya no hace falta aquí.
+    if (RESUELTOS.size > 200) {
+      const vivos = new Set(COLA_MESA.map((x) => x?.id));
+      for (const id of RESUELTOS) if (!vivos.has(id)) RESUELTOS.delete(id);
+    }
+    // Normalmente lo que despierta el siguiente turno es el documento que llega al quitar este de
+    // la cola. Pero si ese envío no sale —wifi que parpadea— no llegaría ningún documento y los
+    // demás se quedarían esperando en silencio, que es el fallo que hace parecer que la app no
+    // escucha. Se rearma SOLO si queda algo sin resolver: rearmar a ciegas era lo que repetía el
+    // turno cuando el «hecho» tardaba más de 400 ms.
+    if (COLA_MESA.some((x) => x?.texto && x.estado !== "hecho" && !RESUELTOS.has(x.id))) {
+      setTimeout(atenderCola, 400);
+    }
+  }
+}
+
+// ── Lo que el DJ está haciendo, para los móviles ─────────────────────────────
+/**
+ * El estado del DJ va al anexo `dj` para que los móviles lo vean sin tener que recibir la partida
+ * entera. Solo cuando CAMBIA: `modo()` se llama cada segundo mientras se graba (el cronómetro), y
+ * publicar eso serían sesenta documentos por minuto para cinco aparatos.
+ */
+let djPublicado = "";
+
+function anunciarDj(m) {
+  if (!MESA || !enMesa() || m === djPublicado) return;
+  djPublicado = m;
+  MESA.enviar({ tipo: "anexo", clave: "dj", valor: { estado: m, cuando: Date.now() } });
+}
+
+/**
+ * La otra mitad de la tarjeta X: alguien la ha tocado en su móvil y la tablet CALLA.
+ *
+ * Se compara la marca de tiempo con la última atendida para no callar otra vez cada vez que llega
+ * un documento nuevo, y se borra el anexo en cuanto se ha hecho caso. Se calla y se abre el panel
+ * en la tablet también: la mesa tiene que ver que alguien ha parado la escena, sin que nadie tenga
+ * que explicar por qué.
+ */
+let paradaAtendida = 0;
+
+function atenderParada(anexos) {
+  if (!enMesa()) return;
+  const p = anexos?.parar;
+  const cuando = Number(p?.cuando ?? 0);
+  if (!cuando || cuando <= paradaAtendida) return;
+  paradaAtendida = cuando;
+  MESA?.enviar({ tipo: "anexo", clave: "parar", valor: null });
+  callarTodo();
+  $("#tx-fondo").hidden = false;
+  $("#tx-panel").hidden = false;
+}
+
+/** Y al revés: en un móvil, la cara del DJ refleja lo que está haciendo en la tablet. */
+function reflejarDj(v) {
+  if (!enMando()) return;
+  // Salvo mientras este móvil está grabando o mandando: entonces la cara cuenta lo de AQUÍ, que es
+  // lo que su dueño necesita ver. Si no, empezar a hablar y que la cara vuelva a «esperando» un
+  // segundo después parece que no ha cogido el micro.
+  if (ocupado || grabadora) return;
+  const m = v?.estado;
+  if (!m) return;
+  $("#dj").dataset.estado = m;
+  $("#dj-estado").textContent = TEXTO_DJ[m] ?? m;
+  // Y en palabras, para que en el móvil se entienda de quién es el turno. Sin esto, un jugador que
+  // habla mientras el DJ está resolviendo lo de otro no sabe si le ha oído o si se ha colgado.
+  const hace = $("#dj-hace");
+  if (!hace) return;
+  const txt = m === "hablando" ? "está hablando en la mesa · escucha"
+    : m === "pensando" ? "está pensando la respuesta"
+    : m === "grabando" ? "está escuchando a la mesa"
+    : "";
+  hace.textContent = txt;
+  hace.hidden = !txt;
+}
+
+// ── El rótulo de la conexión ─────────────────────────────────────────────────
+/**
+ * Un aparato que miente sobre estar conectado es peor que uno que dice que no lo está.
+ *
+ * El chip vive en la cabecera del DJ (`#mesa-estado`, en `index.html`) y **está oculto mientras no
+ * haya servidor**: en la app de siempre no hay nada que contar. Cuando no hay conexión dice de
+ * cuándo es lo que se está viendo, que es el dato que evita jugar diez minutos con una pantalla
+ * congelada creyendo que va al día.
+ *
+ * Tocarlo reintenta ya, sin esperar a que se cumpla la espera creciente de `sesion.js`.
+ */
+function pintarMesaEstado() {
+  const chip = $("#mesa-estado");
+  if (!chip) return;
+  if (!MESA) { chip.hidden = true; return; }
+  const c = MESA.conexion;
+  const viejo = MESA.antiguedad;
+  const minutos = viejo == null ? 0 : Math.round(viejo / 60_000);
+  chip.hidden = false;
+  chip.dataset.conexion = c;
+  // «Viejo» es lo que enciende el aviso aunque el chip diga «conectado»: si el último estado tiene
+  // más de dos minutos con la conexión en pie, algo va mal por encima del transporte.
+  chip.dataset.viejo = viejo != null && viejo > 120_000 ? "si" : "no";
+  const pend = MESA.pendientes ? ` · ${MESA.pendientes} sin enviar` : "";
+  const txt =
+    c === "conectado" ? (MODO === "mando" ? "en la mesa" : "mesa lista")
+    : c === "clave" ? "falta la contraseña"
+    : c === "cerrado" ? "sin la mesa"
+    : c === "conectando" ? "conectando…"
+    : viejo == null ? "sin conexión" : `sin conexión · de hace ${minutos || 1} min`;
+  $("#mesa-estado-txt").textContent = txt + pend;
+  chip.title = `Mesa ${MESA.id} · este aparato es ${
+    MODO === "mesa" ? "la mesa (aquí suena la voz)" : MODO === "mando" ? "un mando (aquí no suena)" : "independiente"
+  }. Tócalo para reintentar.`;
+  pintarPanelMesa();
+}
+
+/** El panel de Ajustes/Grupo: para cantar el id a quien llega tarde y ver quién ha entrado. */
+function pintarPanelMesa() {
+  const panel = $("#mesa-panel");
+  if (!panel) return;
+  panel.hidden = !MESA;
+  if (!MESA) return;
+  $("#mesa-panel-sesion").textContent = MESA.id;
+  // La dirección que hay que cantar es la de ESTA página: si se ha llegado aquí, funciona.
+  $("#mesa-panel-url").textContent = location.origin.replace(/^https?:\/\//, "");
+  $("#mesa-modo-txt").textContent =
+    MODO === "mesa" ? "Este aparato es la mesa · cambiar"
+    : MODO === "mando" ? "Este aparato es un mando · cambiar"
+    : "Elegir qué es este aparato";
+  const caja = $("#mesa-aparatos");
+  const aparatos = Object.entries(MESA.estado?.aparatos ?? {});
+  caja.innerHTML = aparatos.length
+    ? aparatos
+        .map(([id, a]) => `<div class="mesa-aparato" data-aqui="${id === MESA.dispositivo ? "si" : "no"}"
+             data-conectado="${a?.conectado ? "si" : "no"}">
+            <b>${esc(a?.nombre || (id === MESA.dispositivo ? "este aparato" : "alguien"))}</b>
+            <span class="que">${esc(a?.modo ?? "?")}</span>
+          </div>`)
+        .join("")
+    : `<div class="mesa-aparato"><b>solo este aparato</b><span class="que">${esc(MODO)}</span></div>`;
+}
+
+// ── La pantalla de entrada: qué papel hace este aparato ──────────────────────
+/**
+ * Se elige al entrar y se recuerda en el aparato. No es un permiso —todos ven lo mismo, y eso está
+ * decidido— es reparto de trabajo: uno lleva el bucle del DJ y suena, los demás mandan turnos y
+ * callan, porque la voz tiene que salir por un solo altavoz.
+ *
+ * El marcado es de `index.html` (`#entrada`). Aquí solo se rellena, se enseña y se espera. Devuelve
+ * el modo elegido, `"solo"` si se ha pedido jugar sin la mesa, o `null` si no se puede preguntar
+ * (por ejemplo en una versión de la app cuyo `index.html` todavía no tiene la pantalla).
+ */
+function pantallaEntrada({ pedirClave = false } = {}) {
+  const caja = $("#entrada");
+  if (!caja) return Promise.resolve(null);
+  return new Promise((listo) => {
+    const formaClave = $("#entrada-clave");
+    const fallo = $("#entrada-fallo");
+    const espera = $("#entrada-espera");
+
+    $("#entrada-sesion").textContent = MESA?.id ?? "—";
+    $("#entrada-donde").textContent = location.origin.replace(/^https?:\/\//, "");
+    if (formaClave) formaClave.hidden = !pedirClave;
+    if (fallo) { fallo.hidden = true; fallo.textContent = ""; }
+    if (espera) espera.hidden = true;
+    caja.hidden = false;
+    if (pedirClave) $("#entrada-pase")?.focus();
+
+    const cerrar = (m) => { caja.hidden = true; quitar(); listo(m); };
+    const trabajando = (txt) => {
+      if (!espera) return;
+      espera.hidden = !txt;
+      $("#entrada-espera-txt").textContent = txt ?? "";
+    };
+    const decirFallo = (txt) => {
+      trabajando(null);
+      if (!fallo) return;
+      fallo.hidden = false;
+      fallo.textContent = txt;
+    };
+
+    /**
+     * La contraseña se comprueba ANTES de dejar entrar, y si falla se dice por qué y se deja el
+     * campo puesto. Sin esto, elegir «la mesa» con una contraseña mala te metía en una app que
+     * parecía funcionar y que no recibía nada, que es el peor de los dos fallos posibles.
+     */
+    const conClave = async () => {
+      if (!pedirClave) return true;
+      const pase = $("#entrada-pase")?.value.trim() ?? "";
+      if (!pase) { decirFallo("Hace falta la contraseña. La dice quien ha puesto el servidor."); return false; }
+      trabajando("comprobando la contraseña…");
+      const vale = await MESA.entrar(pase);
+      if (!vale) { decirFallo("Esa contraseña no vale. Pregúntala otra vez, en voz alta."); return false; }
+      pedirClave = false;
+      if (formaClave) formaClave.hidden = true;
+      return true;
+    };
+
+    const elegir = async (m) => {
+      if (!(await conClave())) return;
+      trabajando("entrando…");
+      cerrar(m);
+    };
+
+    const alMesa = () => elegir("mesa");
+    const alMando = () => elegir("mando");
+    const alSolo = () => cerrar("solo");
+    const alClave = (ev) => { ev.preventDefault(); conClave().then((ok) => { if (ok) trabajando(null); }); };
+
+    function quitar() {
+      $("#entrada-mesa")?.removeEventListener("click", alMesa);
+      $("#entrada-mando")?.removeEventListener("click", alMando);
+      $("#entrada-solo")?.removeEventListener("click", alSolo);
+      formaClave?.removeEventListener("submit", alClave);
+    }
+    $("#entrada-mesa")?.addEventListener("click", alMesa);
+    $("#entrada-mando")?.addEventListener("click", alMando);
+    $("#entrada-solo")?.addEventListener("click", alSolo);
+    formaClave?.addEventListener("submit", alClave);
+  });
+}
+
+/**
+ * Jugar sin la mesa, teniéndola delante. Es la salida de emergencia del día de la partida: si el
+ * Pocophone se pone tonto a mitad, esto devuelve el tablet a la app de siempre —estado local,
+ * claves de Ajustes— sin recargar y sin perder nada de lo guardado.
+ *
+ * Se recuerda, porque quien lo pulsa no quiere que se le vuelva a preguntar en cada recarga; y el
+ * camino de vuelta sigue a la vista en «La mesa en red», que es lo que hace que sea reversible.
+ */
+function pasarASolo({ recordar = true } = {}) {
+  MODO = "solo";
+  delete document.documentElement.dataset.modo;
+  if (recordar) { A.sinMesa = true; guardarAjustes(); }
+  API = apisPara(null);
+  MESA?.cerrar();
+  actualizarBotonHablar();
+  pintarTodo();
+  pintarMesaEstado();
+  ponEstado("Este aparato juega solo, con sus claves y su estado. La mesa sigue ahí si la quieres.", "");
+}
+
+/** Y la vuelta: se vuelve a preguntar qué es este aparato y se reengancha el flujo. */
+async function volverAElegir() {
+  if (!MESA) return;
+  A.sinMesa = false;
+  guardarAjustes();
+  MESA.reconectar();
+  const m = await pantallaEntrada({ pedirClave: MESA.conexion === "clave" });
+  if (m === "solo" || !m) { pasarASolo(); return; }
+  recordarModo(m);
+  aplicarModo(m);
+  if (enMesa()) publicarPartida();
+}
+
+$("#mesa-modo")?.addEventListener("click", volverAElegir);
+$("#mesa-solo")?.addEventListener("click", () => pasarASolo());
+// Tocar el chip reintenta. Y **para la propagación**: el chip está DENTRO de `.dj`, cuya cara es el
+// botón de hablar; sin esto, mirar la conexión arrancaría una grabación.
+$("#mesa-estado")?.addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  MESA?.reconectar();
+  pintarMesaEstado();
+});
+
+// ── Arrancar la sesión de mesa ───────────────────────────────────────────────
+/**
+ * Se aplica el modo: al documento (para que `movil.css` haga su trabajo), a la sesión (que lo
+ * recuerda y reabre el flujo con él) y a las APIs. Y se repinta todo, porque de esto depende qué
+ * suena, qué botones están vivos y qué se ve.
+ */
+function aplicarModo(m) {
+  MODO = m;
+  document.documentElement.dataset.modo = m;
+  MESA?.elegirModo(m);
+  MESA?.enviar({ tipo: "presencia", modo: m, nombre: A.miPj ?? "" });
+  API = apisPara(MESA);
+  actualizarBotonHablar();
+  pintarBotonAmbiente();
+  pintarTodo();
+  pintarMesaEstado();
+}
+
+async function arrancarMesa() {
+  // La pestaña de la tele comparte `localStorage` con la tablet y se entera por `BroadcastChannel`:
+  // si además se conectara al servidor sería un segundo aparato peleándose por el papel de mesa.
+  if (ES_TELE) return;
+
+  let m = null;
+  try { m = await conectarMesa(); } catch { m = null; }
+  if (!m) {
+    // No hay servidor: la app de siempre. Y hay que DESHACER la apuesta del script de `index.html`,
+    // que pone `data-modo` con lo que este aparato eligió la última vez para no pintar el tablero de
+    // tablet y saltar al de móvil un instante después. Si no se quita, un móvil que jugó con mesa
+    // ayer se quedaría con el reparto de mando sin mesa ninguna detrás.
+    delete document.documentElement.dataset.modo;
+    $("#mesa-estado") && ($("#mesa-estado").hidden = true);
+    if ($("#mesa-panel")) $("#mesa-panel").hidden = true;
+    return;
+  }
+  MESA = m;
+  API = apisPara(m);
+
+  // De qué claves dispone el servidor. Si no contesta se supone que las tiene todas: es mejor
+  // intentar la llamada y enseñar el error de verdad que bloquear un botón por si acaso.
+  try {
+    const r = await m.pedir("/mesa/salud");
+    const d = await r.json();
+    if (d?.apis && typeof d.apis === "object") CLAVES_SERVIDOR = { ...CLAVES_SERVIDOR, ...d.apis };
+    else CLAVES_SERVIDOR = { claude: true, once: true, fal: true };
+  } catch {
+    CLAVES_SERVIDOR = { claude: true, once: true, fal: true };
+  }
+  // Y con las claves ya sabidas se rehace el reparto: `apisPara` decide por servicio (ver allí).
+  API = apisPara(m);
+  actualizarBotonHablar();
+
+  // El estado de la conexión, a la vista y contándose solo: `alConexion` se repite cada cinco
+  // segundos mientras no hay conexión para que el «de hace 2 min» siga subiendo sin temporizador.
+  m.alConexion(() => pintarMesaEstado());
+
+  m.alCambiar((doc) => {
+    if (!doc || typeof doc !== "object") return;
+    COLA_MESA = Array.isArray(doc.cola) ? doc.cola : [];
+    if (enMando()) {
+      adoptarPartida(doc.partida);
+      reflejarDj(doc.anexos?.dj);
+    }
+    recogerCaras(doc.anexos);
+    atenderParada(doc.anexos);
+    pintarCharla();          // la cola pendiente se ve al final de la conversación
+    pintarMesaEstado();
+    if (enMesa()) atenderCola();
+  });
+
+  // Quien pidió jugar sin la mesa no vuelve a que se le pregunte al recargar. Pero se conecta igual
+  // —es barato— para que «La mesa en red» siga a la vista con el camino de vuelta.
+  if (A.sinMesa) { pasarASolo({ recordar: false }); return; }
+
+  // El papel de este aparato: el recordado, y si no hay ninguno se pregunta. Se pregunta también
+  // cuando hace falta la contraseña, porque la pantalla de entrada es donde se mete.
+  let elegido = m.modo ?? modoRecordado();
+  if (!elegido || m.conexion === "clave") {
+    elegido = (await pantallaEntrada({ pedirClave: m.conexion === "clave" })) ?? elegido;
+  }
+  if (elegido === "solo") { pasarASolo(); return; }
+  if (!elegido) {
+    // Sin papel elegido no se toca nada: la app sigue siendo la de siempre y el chip invita a
+    // elegir. Mejor eso que decidir por la mesa y que suene la voz en cuatro móviles.
+    pintarMesaEstado();
+    return;
+  }
+  recordarModo(elegido);
+  aplicarModo(elegido);
+
+  // La mesa publica lo que tiene en cuanto entra: un móvil que se conecta después recibe el
+  // documento íntegro, así que si la mesa no ha publicado nunca, vería una partida vacía.
+  if (enMesa()) publicarPartida();
+  else if (m.estado) adoptarPartida(m.estado.partida);
 }
 
 
@@ -3876,7 +5981,9 @@ if (A.ambiente) {
   const arrancar = () => {
     removeEventListener("pointerdown", arrancar);
     removeEventListener("keydown", arrancar);
-    encenderAmbiente(true);
+    // `puedeSonar()` se comprueba DENTRO y no fuera a propósito: cuando esto se registra todavía no
+    // se sabe si este aparato va a ser un móvil (eso lo decide `arrancarMesa`, que va por la red).
+    if (puedeSonar()) encenderAmbiente(true);
   };
   addEventListener("pointerdown", arrancar, { once: false });
   addEventListener("keydown", arrancar, { once: false });
@@ -3884,13 +5991,18 @@ if (A.ambiente) {
 actualizarBotonHablar();
 irA(location.hash.slice(1) || "escena", false);
 
+// Y por último, el servidor de mesa: si lo hay, este aparato entra en la sesión. Si no lo hay,
+// `arrancarMesa` se va a la primera línea y aquí no ha pasado nada. Va al final y sin `await`
+// porque la app tiene que estar pintada y usable antes de ir a preguntar nada por la red.
+arrancarMesa();
+
 /**
  * La versión, a la vista en Ajustes. `VERSION_APP` la sube a mano quien cambia la app; la del
  * service worker se le pregunta a él, y son dos cosas distintas a propósito: si no coinciden, el
  * tablet está sirviendo código viejo de la caché, que es lo primero que hay que descartar cuando
  * en mesa algo «no funciona».
  */
-const VERSION_APP = "corvalar-v19";
+const VERSION_APP = "corvalar-v23";
 $("#version").textContent = `app ${VERSION_APP} · service worker: preguntando…`;
 
 if ("serviceWorker" in navigator) {

@@ -1,0 +1,577 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   movil.css — la vista de MANDO: un jugador, su móvil, en vertical
+
+   La app está dibujada para una tablet en horizontal: la escena a sangre, la lateral del DJ a
+   la derecha y la banda de los cuatro personajes abajo. En vertical el index ya apila las dos
+   columnas por debajo de 780 px, pero eso no es una vista de móvil: la escena se queda con el
+   44 % del alto para una ilustración que en el móvil nadie mira, y el botón de hablar —lo que
+   más se toca de toda la app— cae a MEDIA pantalla, porque es el primer hijo de la lateral y la
+   lateral empieza ahí. Justo donde el pulgar no llega sin recolocar la mano.
+
+   Aquí se reparte al revés, por orden de lo que un jugador quiere en su móvil:
+
+     1. HABLAR, enorme y pegado al borde de abajo, donde cae el pulgar sin mirar.
+     2. Su ficha (vida, armadura, lo que lleva, sus acciones), a un toque.
+     3. La misión: lo que sabéis, lo que habéis averiguado y los relojes.
+     4. Su cara: hacerse el selfie y que le salga el retrato.
+     5. Lo que el DJ va diciendo, en TEXTO. El móvil no reproduce la voz: eso lo hace el
+        aparato en modo `mesa` y solo él, porque cinco altavoces con la misma voz desfasada
+        unas décimas en la misma habitación suenan a cueva.
+
+   DOS REGLAS QUE SE SIGUEN EN TODO EL FICHERO
+   ───────────────────────────────────────────
+   1. TODOS los selectores empiezan por `:root[data-modo="mando"]`. No es adorno:
+        · si `data-modo` no es `mando` —la tablet, la tele, la app de hoy sin servidor— este
+          fichero no cambia absolutamente nada, y
+        · al llevar un atributo por delante gana por especificidad al <style> de index.html y a
+          las consultas de `max-width: 780px` que ya hay allí, así que da igual dónde se
+          enganche el <link>. Es el mismo criterio que ornado.css.
+      Si alguna vez se añade una regla sin ese prefijo, se rompe el contrato: la tablet no se
+      toca.
+   2. Solo las variables de color que ya existen (--turba, --musgo, --musgo-alto, --liquen,
+      --tiza, --tiza-baja, --sebo, --herrumbre, --ambar, y las de ornado.css con reserva). Ni un
+      color a pelo. Donde el original usaba un hexadecimal suelto en una sombra se pone la
+      variable más cercana, no un hexadecimal nuevo.
+
+   Y una tercera, de reparto: aquí no se esconde material. Lo único que desaparece es un mando
+   DUPLICADO (la miniatura del mapa, que en la tira de escena mide un tercio de ella y abre lo
+   mismo que el botón «Mapa»); todo lo demás se reordena y se prioriza.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+
+/* ═══ 1. Las medidas del mando ══════════════════════════════════════════════════════════════
+   Las cuatro medidas que mandan el resto del fichero. Van en variables porque la altura del
+   botón de hablar la necesitan además las capas, la ficha, el documento y la tarjeta X: todos
+   se paran justo encima de él para que HABLAR no quede nunca tapado ni por debajo de la barra
+   del sistema.
+
+   `--hablar-hueco` mete el área segura del móvil con muesca DENTRO de la cuenta. Sin eso el
+   botón queda medio comido por la barra de gestos: se toca y el sistema entiende «volver». */
+:root[data-modo="mando"] {
+  --hablar-alto: clamp(76px, 12.5vh, 104px);
+  --hablar-hueco: calc(var(--hablar-alto) + env(safe-area-inset-bottom));
+  /* La tira de escena de arriba. No es la escena: es «dónde estáis», con la ilustración de
+     fondo. Lo que se mira en el móvil es el texto del DJ y los botones. */
+  --tira-escena: clamp(126px, 21vh, 200px);
+  /* Los retratos de la banda, dentro de esa tira. El clamp de la app (hasta 158 px) dejaba la
+     tira entera ocupada por cuatro caras y ni un píxel de ilustración. */
+  --marco: clamp(44px, 8.5vh, 64px);
+  /* El hueco de la tarjeta X, que en mando comparte la banda de abajo con el botón de hablar. */
+  --x-ancho: 62px;
+}
+
+/* Alto real de la ventana, no el 100 % de siempre. En el móvil la barra de direcciones aparece
+   y desaparece, y con `height:100%` el botón de hablar se quedaba tapado por ella justo al
+   entrar. `dvh` va detrás del 100 % de reserva: quien no lo entienda se queda como antes. */
+:root[data-modo="mando"],
+:root[data-modo="mando"] body { height: 100%; height: 100dvh; }
+
+
+/* ═══ 2. El armazón: una sola columna ═══════════════════════════════════════════════════════
+   Tira de escena arriba, el DJ y su texto en el medio, los mandos y HABLAR abajo. El orden del
+   DOM se queda intacto —el botón de hablar está antes que el avatar, que es lo bueno en la
+   tablet— y aquí se recoloca con `order`, que es lo único que hace falta al ser la lateral un
+   flex en columna. */
+:root[data-modo="mando"] .tablero { flex-direction: column; }
+
+:root[data-modo="mando"] .escenario {
+  flex: none;
+  height: var(--tira-escena);
+}
+
+:root[data-modo="mando"] .lateral {
+  width: auto; flex: 1; min-height: 0;
+  border-left: none;
+  border-top: 1px solid var(--liquen);
+}
+
+/* Lo que no se nombre aquí se queda en `order: 0` y sube al principio de la columna, lejos del
+   pulgar. Es la reserva sana: si mañana se añade un trasto a la lateral, no aparece encima del
+   botón de hablar. */
+:root[data-modo="mando"] .lateral > .dj       { order: 1; }
+:root[data-modo="mando"] .lateral > .aviso    { order: 2; }
+:root[data-modo="mando"] .lateral > .charla   { order: 3; }
+:root[data-modo="mando"] .lateral > .acciones { order: 4; }
+:root[data-modo="mando"] .lateral > #cancelar { order: 5; min-height: 46px; }
+:root[data-modo="mando"] .lateral > .hablar   { order: 6; }
+
+
+/* ═══ 3. La tira de escena ══════════════════════════════════════════════════════════════════
+   Dónde estáis, con la ilustración de fondo. Cabe poco, así que solo entra lo que se mira de un
+   vistazo: el rótulo del lugar, los relojes, la iniciativa si hay pelea y las cuatro caras. */
+
+/* El rótulo, con el área segura de arriba DENTRO del relleno: con `viewport-fit=cover` el
+   contenido empieza debajo de la muesca y el nombre del lugar salía partido por ella. */
+:root[data-modo="mando"] .rotulo {
+  padding: max(9px, env(safe-area-inset-top)) 12px 18px;
+  gap: 9px; flex-wrap: wrap;
+}
+:root[data-modo="mando"] .rotulo h1 { font-size: 1rem; }
+:root[data-modo="mando"] .rotulo .lugar { font-size: .58rem; }
+:root[data-modo="mando"] .rotulo .reloj { padding: 4px 8px; font-size: .58rem; }
+
+/* El hueco de «sin arte» tiene que empezar por debajo del rótulo, que va encima de él. */
+:root[data-modo="mando"] .escenario .sin-arte {
+  font-size: .82rem;
+  padding: 54px 16px 16px;
+}
+
+/* La miniatura del mapa se va. Es el ÚNICO mando que desaparece en esta vista y por una razón
+   de sitio, no de secreto: a 96 px se come un tercio de la tira, y abre exactamente lo mismo
+   que el botón «Mapa» de la fila de atajos, que está a un pulgar de distancia. El mapa sigue
+   entero y disponible. */
+:root[data-modo="mando"] .minimapa { display: none; }
+
+/* Los relojes de tensión, en una fila que no envuelve: en columna se comían la tira. Lo que se
+   sale se corta contra el borde, y la lista completa está en Misión. */
+:root[data-modo="mando"] .relojes {
+  top: calc(env(safe-area-inset-top) + 44px);
+  left: 8px; right: 8px;
+  flex-direction: row; flex-wrap: nowrap;
+  gap: 6px; overflow: hidden;
+}
+:root[data-modo="mando"] .reloj-t { padding: 4px 8px 4px 5px; gap: 7px; }
+:root[data-modo="mando"] .reloj-t figcaption b { font-size: .74rem; max-width: 9ch; }
+:root[data-modo="mando"] .reloj-t figcaption span { font-size: .56rem; }
+
+/* Con la iniciativa puesta, los relojes se apartan. No es esconder: en combate lo único que
+   importa es de quién es el turno, los dos bloques caen en la misma franja de una tira de
+   180 px y los relojes están a un toque en Misión. */
+:root[data-modo="mando"] .escenario:has(.iniciativa:not([hidden])) .relojes { display: none; }
+
+/* La tira de iniciativa: una fila que se arrastra a lo ancho. Envolviendo, con seis
+   combatientes, ocupaba la tira entera y tapaba las caras. */
+:root[data-modo="mando"] .iniciativa {
+  top: calc(env(safe-area-inset-top) + 42px);
+  flex-wrap: nowrap; justify-content: flex-start;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding: 0 8px;
+}
+:root[data-modo="mando"] .turno-ini { flex: none; min-height: 44px; padding: 0 13px; }
+
+/* La banda de personajes, compacta al pie de la tira. Se queda porque es el camino a la ficha
+   —se toca una cara y se abre— y porque de un vistazo dice quién está mal.
+
+   El oficio y los px se van de debajo del retrato. No es esconder nada: los dos están en la
+   ficha, a un toque de esa misma cara, y aquí eran dos renglones de 10 px que sumados a la barra
+   y al número dejaban el marco en 44 px dentro de una tira de 126. Debajo del retrato se queda
+   lo que sí se mira en marcha: el nombre, la barra de vida y la cifra. */
+:root[data-modo="mando"] .banda { padding: 6px 5px; gap: 4px; }
+:root[data-modo="mando"] .pj-banda { gap: 3px; }
+:root[data-modo="mando"] .pj-banda .nom { font-size: .6rem; }
+:root[data-modo="mando"] .pj-banda .oficio { display: none; }
+:root[data-modo="mando"] .pj-banda .px { display: none; }
+:root[data-modo="mando"] .pj-banda .pgnum { font-size: .62rem; }
+
+/* Si app.js marca cuál de los cuatro es el dueño de ESTE móvil (`data-mio="si"`, el mismo
+   nombre de atributo que ya usa la tira de iniciativa), su marco se enciende en ámbar. Sin ese
+   atributo no pasa nada: la regla no encuentra a nadie y la banda se ve igual. */
+:root[data-modo="mando"] .pj-banda[data-mio="si"] .marco {
+  box-shadow: inset 0 0 0 1px var(--ambar), inset 0 0 0 3px var(--turba), 0 1px 0 var(--turba);
+}
+:root[data-modo="mando"] .pj-banda[data-mio="si"] .nom { color: var(--tiza); }
+
+/* La ilustración en vivo se queda dentro de la tira (es lo que hay), pero su pie estaba
+   anclado a `--alto-banda`, que en la tablet vale 200 px: en una tira de 180 px el texto caía
+   fuera y `overflow:hidden` se lo comía entero. */
+:root[data-modo="mando"] .ilus-pie { bottom: 5px; font-size: .8rem; padding: 0 12px; }
+:root[data-modo="mando"] .ilus-pintando { padding: 10px 14px; font-size: .86rem; }
+:root[data-modo="mando"] .ilus-cerrar { top: 8px; left: 8px; min-height: 44px; min-width: 46px; }
+
+/* El recuadro de la tirada NO puede vivir dentro de la tira: es `position:absolute` centrado en
+   el escenario, mide unos 260 px de alto y la tira recorta lo que se sale, así que en el móvil
+   aparecía cortado por la mitad justo en el momento en que la mesa mira la pantalla. Pasa a
+   fijo sobre toda la ventana y por encima de las capas y de la ficha, que es donde tiene que
+   estar cuando el DJ pide un dado. */
+:root[data-modo="mando"] .tirada-caja {
+  position: fixed; z-index: 45;
+  /* Un poco por encima del centro y con el alto acotado: así ni el recuadro más largo llega a
+     pisar la banda de abajo, que es lo único que no puede quedar tapado. */
+  top: 40%; left: 50%;
+  width: min(94vw, 420px);
+  max-height: calc(100% - var(--hablar-hueco) - 40px);
+  overflow-y: auto;
+}
+:root[data-modo="mando"] .tir-cerrar { min-height: 44px; min-width: 44px; }
+
+
+/* ═══ 4. El DJ y lo que va diciendo ═════════════════════════════════════════════════════════
+   Sin voz en este aparato: aquí el DJ se LEE. Por eso la conversación es la que se lleva el
+   hueco que sobra, y el avatar se queda en una franja fina que solo dice si está pensando,
+   grabando o hablando. */
+:root[data-modo="mando"] .dj { padding: 7px 12px; gap: 10px; }
+:root[data-modo="mando"] .dj .cara-dj { width: 44px; height: 44px; }
+:root[data-modo="mando"] .dj .quien-dj b { font-size: .84rem; }
+:root[data-modo="mando"] .dj .quien-dj span { font-size: .58rem; }
+
+/* El aviso sube al principio de la columna (order 2): al pie de una lateral de móvil se lo
+   comía el botón de hablar. Su borde pasa de arriba a abajo, y el color lo toma del texto para
+   no inventar ninguno: el error ya es rosa, el peligro ámbar y el atasco morado, así que la
+   línea sale del tono correcto en los tres casos y también en el que se añada mañana. */
+:root[data-modo="mando"] .aviso {
+  border-top: none;
+  border-bottom: 1px solid currentColor;
+  min-height: 46px;
+  font-size: .86rem;
+}
+
+:root[data-modo="mando"] .lateral .charla {
+  padding: 12px 14px 14px;
+  gap: 14px;
+}
+/* La conversación no tenía estilo propio en el index —salían los márgenes de <p> del navegador y
+   un «director de juego» en 16 px de serifa, igual de gordo que lo que decía—. A un palmo de la
+   cara y con luz de salón lo que tiene que destacar es el TEXTO, así que el rótulo de quién
+   habla baja a etiqueta de mono y lo dicho sube a 1 rem con renglón ancho. */
+:root[data-modo="mando"] .charla .turno { display: flex; flex-direction: column; gap: 5px; }
+:root[data-modo="mando"] .charla .turno .quien {
+  font: 500 .58rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--tiza-baja);
+}
+:root[data-modo="mando"] .charla .turno p {
+  margin: 0;
+  font: 400 1rem/1.62 var(--serif);
+}
+/* Lo que dijo la mesa se ve —quien habló por el móvil tiene que reconocer su frase— pero en
+   segundo plano: al lado, en tiza plena, competía con la respuesta del DJ. */
+:root[data-modo="mando"] .charla .turno[data-de="mesa"] {
+  border-left: 2px solid var(--liquen); padding-left: 9px;
+}
+:root[data-modo="mando"] .charla .turno[data-de="mesa"] p {
+  color: var(--tiza-baja); font-style: italic;
+}
+/* El «repetir en voz» sigue ahí porque el marcado es el mismo en los dos modos, con un objetivo
+   decente y arrinconado a la derecha del rótulo. En mando no suena: la voz es del aparato de
+   mesa, y quien la reparte es app.js, no esta hoja. */
+:root[data-modo="mando"] .charla .repe {
+  margin-left: auto; min-height: 34px; min-width: 46px;
+}
+
+
+/* ═══ 5. El bloque de mandos, justo encima del pulgar ═══════════════════════════════════════
+   Rejilla de dos columnas en vez de la pila de la tablet, y con `order` de arriba abajo por
+   prioridad INVERSA: lo que menos se usa arriba (lejos del pulgar, para no tocarlo sin querer)
+   y lo que más, pegado al botón de hablar.
+
+   De arriba abajo: volúmenes · empezar · utilidades de escena · el dado · escribir · atajos ·
+   lo mío. Lo que no se nombre se queda en `order: 0`, o sea arriba del todo, que es el sitio
+   inofensivo. */
+:root[data-modo="mando"] .lateral .acciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding: 8px 10px 10px;
+}
+:root[data-modo="mando"] .lateral .acciones > * { grid-column: 1 / -1; }
+
+:root[data-modo="mando"] .acciones > #mandos-sonido  { order: 1; }
+:root[data-modo="mando"] .acciones > #arrancar       { order: 2; }
+:root[data-modo="mando"] .acciones > .utiles         { order: 3; }
+:root[data-modo="mando"] .acciones > #esc-nota-audio { order: 4; }
+:root[data-modo="mando"] .acciones > #tirada-forma   { order: 5; }
+:root[data-modo="mando"] .acciones > #escribir-forma { order: 6; }
+:root[data-modo="mando"] .acciones > .atajos         { order: 7; }
+:root[data-modo="mando"] .acciones > .mio            { order: 8; }
+
+/* «Empezar la escena» deja de ser el botón grande: es cosa del aparato de mesa, y app.js lo
+   quita en cuanto la conversación tiene un turno. Se queda arriba, pequeño y tocable. */
+:root[data-modo="mando"] .acciones > #arrancar.grande {
+  min-height: 46px; font-size: .9rem; border-color: var(--liquen);
+}
+
+/* Los dos campos. 1 rem NO es capricho: por debajo de 16 px, Safari de iOS hace zoom al
+   enfocar un campo, y con la app así el tablero se queda descolocado y hay que pellizcar para
+   volver. El relleno de la derecha deja libre el botón que va dentro del campo. */
+:root[data-modo="mando"] .acciones .campo input {
+  min-height: 46px;
+  padding: 10px 48px 10px 12px;
+  font: 400 1rem/1.2 var(--serif);
+}
+:root[data-modo="mando"] .acciones .campo button { width: 44px; }
+
+/* Las utilidades de escena, en una fila de cinco con el icono encima del rótulo: en fila con el
+   icono al lado, a 63 px de columna, «Narración» no cabía. Suben a 46 px de alto, que es
+   objetivo de dedo; en la tablet son de 34 porque allí se pinchan con precisión. */
+:root[data-modo="mando"] .utiles { grid-template-columns: repeat(5, 1fr); gap: 5px; }
+:root[data-modo="mando"] .utiles button {
+  flex-direction: column; gap: 3px;
+  min-height: 46px; padding: 5px 3px;
+  font-size: .56rem; letter-spacing: .02em;
+}
+:root[data-modo="mando"] .utiles button .icono { font-size: .9rem; }
+
+/* Los atajos, en una fila de cinco. Misión y Grupo van marcados en sebo porque son los dos que
+   busca un jugador —su ficha está en Grupo y lo que sabéis en Misión—; los otros tres siguen
+   ahí, en gris, sin robarles sitio. El orden también cambia: Misión y Grupo primero. */
+:root[data-modo="mando"] .atajos { grid-template-columns: repeat(5, 1fr); gap: 5px; margin: 0; }
+:root[data-modo="mando"] .atajos button { min-height: 52px; font-size: .56rem; padding: 6px 3px; }
+:root[data-modo="mando"] .atajos button .g { font-size: 1.15rem; }
+:root[data-modo="mando"] .atajos button[data-capa="mision"] { order: 1; }
+:root[data-modo="mando"] .atajos button[data-capa="grupo"]  { order: 2; }
+:root[data-modo="mando"] .atajos button[data-capa="mapa"]   { order: 3; }
+:root[data-modo="mando"] .atajos button[data-capa="quienes"]{ order: 4; }
+:root[data-modo="mando"] .atajos button[data-capa="ajustes"]{ order: 5; }
+:root[data-modo="mando"] .atajos button[data-capa="mision"],
+:root[data-modo="mando"] .atajos button[data-capa="grupo"] {
+  border-color: var(--sebo); color: var(--tiza);
+}
+
+/* «Lo mío»: la fila de dos botones —mi ficha y mi cara— que pide este fichero al marcado (ver
+   el final de la respuesta del agente). Va la última, o sea la más cerca del pulgar después de
+   HABLAR, porque son las dos cosas que un jugador abre sin parar.
+
+   Si nadie añade ese marcado, estas reglas no encuentran nada y no pasa nada: la ficha se sigue
+   abriendo tocando la propia cara en la banda de arriba, y la cámara está en Grupo → Vuestras
+   caras. Esto es el atajo, no el único camino. */
+:root[data-modo="mando"] .mio { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+:root[data-modo="mando"] .mio button {
+  min-height: 56px; gap: 9px;
+  font: 400 .95rem/1.1 var(--serif);
+  border-color: var(--sebo);
+}
+:root[data-modo="mando"] .mio button .g { font-size: 1.2rem; color: var(--sebo); }
+
+/* Los volúmenes, si alguien los abre: en mando este aparato no reproduce nada, así que van
+   arriba y pequeños. No se quitan porque el interruptor que los abre sigue en la fila. */
+:root[data-modo="mando"] .mandos { padding: 8px 9px; }
+:root[data-modo="mando"] .mandos input[type="range"] { height: 30px; }
+
+
+/* ═══ 6. La banda de abajo: HABLAR y la tarjeta X ═══════════════════════════════════════════
+   Lo que se pidió y la razón de todo lo anterior. El botón ocupa el borde inferior entero menos
+   el hueco de la tarjeta X, con el área segura metida en su propio alto: así el rótulo queda por
+   encima de la barra de gestos y el dedo aterriza siempre dentro.
+
+   No es `position:fixed`: es el último hijo de una columna que mide lo que la ventana, que da lo
+   mismo y no se pelea con el teclado en pantalla cuando alguien escribe en un campo. */
+:root[data-modo="mando"] .lateral > .hablar {
+  flex: none;
+  width: auto;
+  margin-right: var(--x-ancho);
+  height: calc(var(--hablar-alto) + env(safe-area-inset-bottom));
+  padding: 0 16px env(safe-area-inset-bottom);
+  gap: 12px;
+  font: 400 1.16rem/1.1 var(--serif); letter-spacing: .03em;
+  /* Sin esto, dos toques seguidos del pulgar los entiende el móvil como doble toque y hace zoom
+     en medio de la partida. */
+  touch-action: manipulation;
+}
+:root[data-modo="mando"] .lateral > .hablar .icono { font-size: 1.5rem; }
+
+/* La tarjeta X pasa a la esquina de abajo a la derecha, a ras del botón de hablar y con su
+   mismo alto: comparten la banda. Estaba a la izquierda y en el móvil caía ENCIMA del botón
+   grande, que es la peor mezcla posible —el aparato que sirve para parar la escena solapado con
+   el que sirve para hablar—. Sigue fija y por encima de todo lo demás: o se alcanza siempre o
+   no sirve de nada. */
+:root[data-modo="mando"] .tarjeta-x {
+  left: auto; right: 0; bottom: 0;
+  width: var(--x-ancho);
+  height: calc(var(--hablar-alto) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  border-radius: 0;
+  border-width: 1px 0 0 1px;
+}
+:root[data-modo="mando"] .tx-aspa { font-size: 1.3rem; }
+
+/* El chip de «pintando», encima de la banda: donde estaba lo tapaba el botón de hablar y una
+   ilustración en marcha volvía a parecer un cuelgue, que es justo lo que el chip vino a evitar. */
+:root[data-modo="mando"] .pintando-chip {
+  left: 10px;
+  bottom: calc(var(--hablar-hueco) + 10px);
+}
+
+/* El panel de la tarjeta X sí tapa la banda entera: cuando la mesa para, no hay nada que decirle
+   al DJ. Solo se le da aire de móvil. */
+:root[data-modo="mando"] .tx-panel {
+  width: min(420px, calc(100vw - 24px));
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+}
+:root[data-modo="mando"] .tx-opcion { min-height: 60px; }
+:root[data-modo="mando"] #tx-seguir { min-height: 48px; }
+
+
+/* ═══ 7. Las capas, y el botón de hablar siempre a la vista ═════════════════════════════════
+   En la tablet las capas se abren DENTRO del escenario. En el móvil ya se ponían fijas por la
+   consulta de 780 px, pero tapando la pantalla entera, y con ella el botón de hablar: para
+   decir algo mientras se lee la misión había que cerrar la capa.
+
+   Aquí se paran justo encima de la banda de abajo. Es lo que hace que las cuatro cosas que
+   quiere un jugador —hablar, su ficha, la misión y su cara— convivan sin turnarse. */
+:root[data-modo="mando"] .capa {
+  position: fixed;
+  inset: 0 0 var(--hablar-hueco);
+  z-index: 30;
+}
+:root[data-modo="mando"] .capa-cab {
+  padding: max(10px, env(safe-area-inset-top)) 12px 10px;
+}
+:root[data-modo="mando"] .capa-cerrar { min-height: 48px; min-width: 52px; font-size: 1.25rem; }
+/* El relleno de abajo ya no tiene que dejar hueco a la banda de personajes (la capa acaba antes
+   de ella), así que se recupera todo ese espacio para el contenido. */
+:root[data-modo="mando"] .capa-cuerpo { padding: 12px 12px 18px; gap: 12px; }
+:root[data-modo="mando"] .capa-cuerpo > section { padding: 11px 12px; }
+
+/* Objetivos de dedo dentro de las capas. Los botones normales ya nacen con 48 px de alto en el
+   index, así que aquí solo hay que arreglar los pequeños: 30, 32 y 36 px, medidas de pinchar con
+   precisión en una tablet apoyada en la mesa. En un móvil, con una sola mano, eso se falla. */
+:root[data-modo="mando"] .capa .menudos button { min-height: 44px; font-size: .82rem; }
+:root[data-modo="mando"] .capa .sumin button { min-height: 44px; min-width: 44px; }
+:root[data-modo="mando"] .capa .mas-cartas summary { padding: 12px 0; }
+
+/* Campos y desplegables de las capas (Ajustes, sobre todo). Otra vez el zoom de iOS: las claves
+   se escriben en un `input[type=password]` sin estilo, o sea a 13 px, y al enfocarlo el móvil
+   ampliaba la página. Los interruptores y los deslizadores quedan fuera a propósito: un
+   `min-height` de 46 px en una casilla la convierte en un cuadrado enorme. */
+:root[data-modo="mando"] .capa input:not([type="checkbox"]):not([type="range"]):not([type="file"]),
+:root[data-modo="mando"] .capa select {
+  min-height: 46px;
+  font: 400 1rem/1.2 var(--serif);
+}
+:root[data-modo="mando"] .capa .casilla {
+  display: flex; align-items: flex-start; gap: 11px;
+  min-height: 46px; padding: 4px 0;
+}
+:root[data-modo="mando"] .capa .casilla input[type="checkbox"] {
+  width: 22px; height: 22px; margin: 2px 0 0; flex: none;
+  accent-color: var(--sebo);
+}
+:root[data-modo="mando"] .capa .estado-linea { font-size: .84rem; }
+
+/* Grupo: las tarjetas en una columna y la cara del personaje más grande, que es lo que se busca
+   al abrirlo. La rejilla de la app cabe a partir de 330 px y en un móvil de 360 ya se pone en
+   una columna sola; aquí se fija para que en apaisado tampoco se parta en dos medias tarjetas. */
+:root[data-modo="mando"] #grupo-lista { grid-template-columns: 1fr; }
+:root[data-modo="mando"] .tarjeta-cara { width: 66px; height: 86px; }
+
+/* Vuestras caras: el selfie. El label ES el botón que abre la cámara, así que es el que tiene
+   que ser grande; en la fila apretada de la tablet medía 34 px de alto y quedaba pegado a la
+   ✕ de quitar el retrato, que es justo el error que no se puede cometer aquí. */
+:root[data-modo="mando"] #caras { gap: 10px; }
+:root[data-modo="mando"] .cara-fila { flex-wrap: wrap; gap: 10px; padding: 10px; }
+:root[data-modo="mando"] .cara-mini { width: 56px; height: 56px; flex: 0 0 56px; }
+:root[data-modo="mando"] .cara-hacer {
+  flex: 1 1 60%; justify-content: center;
+  min-height: 50px; font-size: .92rem;
+}
+:root[data-modo="mando"] .cara-quitar { width: 44px; height: 44px; font-size: 1.05rem; }
+
+/* Misión: el orden del DOM ya es el bueno para un jugador (dónde estáis, lo que sabéis, lo que
+   habéis averiguado, los relojes, y el cierre y el diario al final), así que aquí solo se
+   engorda lo que se lee. */
+:root[data-modo="mando"] #capa-mision ul.sabeis li { font-size: 1rem; line-height: 1.55; }
+:root[data-modo="mando"] #capa-mision .donde-grande { font-size: 1.08rem; }
+:root[data-modo="mando"] .relojes-lista { gap: 8px; }
+:root[data-modo="mando"] .relojes-lista .reloj-t { flex: 1 1 100%; }
+
+
+/* ═══ 8. La ficha, que es la pantalla número dos ════════════════════════════════════════════
+   ornado.css ya la pone a pantalla completa por debajo de 780 px. Aquí se hacen tres cosas más:
+
+   1. Se para encima de la banda de abajo, como las capas: se puede leer la ficha y hablarle al
+      DJ sin cerrarla, que es media razón de ser de este modo.
+   2. Se reordena por lo que quiere el jugador: vida y heridas, luego lo que lleva, luego lo que
+      puede hacer. En el DOM las cartas de acción van ANTES del equipo, y son diecinueve: había
+      que arrastrar media pantalla para llegar a ver qué llevaba puesto.
+   3. El botón de cerrar se queda pegado abajo. Con el equipo y las cartas, la ficha mide dos
+      pantallas y media, y para salir había que llegar hasta el fondo. */
+:root[data-modo="mando"] .ficha { inset: 0 0 var(--hablar-hueco); }
+
+:root[data-modo="mando"] .ficha [data-bloque="pg"]       { order: 1; }
+:root[data-modo="mando"] .ficha [data-bloque="heridas"]  { order: 2; }
+:root[data-modo="mando"] .ficha [data-bloque="equipo"]   { order: 3; }
+:root[data-modo="mando"] .ficha [data-bloque="acciones"] { order: 4; }
+:root[data-modo="mando"] .ficha [data-bloque="quien"]    { order: 5; }
+:root[data-modo="mando"] .ficha [data-bloque="notas"]    { order: 6; }
+:root[data-modo="mando"] .ficha [data-bloque="donde"]    { order: 7; }
+:root[data-modo="mando"] .ficha .ficha-caja > .fila:last-child {
+  order: 8;
+  position: sticky; bottom: 0; z-index: 2;
+  /* El margen negativo con el mismo relleno de vuelta hace que el pie tape también los 12 px de
+     canto de la caja; sin él, el texto se veía deslizarse por dos rendijas a los lados. */
+  margin-inline: -12px;
+  padding: 9px 12px 4px;
+  /* Fondo del pergamino de ornado.css, con el musgo de la app de reserva por si esa hoja no
+     llegó a cargar: un pie translúcido dejaría pasar el texto que se desliza por debajo. */
+  background: var(--pergamino, var(--musgo));
+}
+:root[data-modo="mando"] .ficha .ficha-caja > .fila:last-child > button { min-height: 50px; }
+
+/* Los números de PG se tocan mucho y son los más pequeños de la ficha. */
+:root[data-modo="mando"] .ficha .pg-fila button { min-height: 48px; }
+/* Y el zoom de iOS otra vez, aquí al escribir lo que lleva puesto en los huecos de equipo:
+   ornado los deja en .94 rem y el index en .86, o sea 15 y 14 px. */
+:root[data-modo="mando"] .ficha input { font-size: 1rem; min-height: 46px; }
+:root[data-modo="mando"] .ficha .bolsa li button { min-height: 40px; min-width: 40px; }
+
+/* El documento de atrezo también respeta la banda: si no, la tarjeta X y el botón de hablar
+   quedaban debajo de un papel a pantalla completa. */
+:root[data-modo="mando"] .documento {
+  inset: 0 0 var(--hablar-hueco);
+  padding: 14px;
+}
+:root[data-modo="mando"] .documento-cerrar { min-height: 48px; }
+
+
+/* ═══ 9. Pantalla corta (móvil pequeño, o el teclado a medio abrir) ═════════════════════════
+   El index ya achica la banda y los atajos por debajo de 700 px de alto; esto va en la misma
+   dirección, no en contra: se recorta la tira de escena y el botón de hablar para que a la
+   conversación le quede algo más que dos renglones. */
+@media (max-height: 700px) {
+  :root[data-modo="mando"] {
+    --tira-escena: clamp(112px, 19vh, 160px);
+    --hablar-alto: clamp(66px, 11vh, 84px);
+    --marco: clamp(40px, 7.5vh, 52px);
+  }
+  :root[data-modo="mando"] .lateral .acciones { gap: 6px; padding: 6px 9px 8px; }
+  :root[data-modo="mando"] .mio button { min-height: 48px; font-size: .9rem; }
+  :root[data-modo="mando"] .atajos button { min-height: 46px; }
+  :root[data-modo="mando"] .utiles button { min-height: 40px; }
+  :root[data-modo="mando"] .acciones .campo input { min-height: 44px; }
+  :root[data-modo="mando"] .lateral .charla { padding: 10px 12px; gap: 11px; }
+}
+
+
+/* ═══ 10. Móvil estrecho de verdad ══════════════════════════════════════════════════════════
+   Mismo corte que usa ornado.css para la ficha (420 px), para que la app no cambie de criterio a
+   media pantalla. Con cinco columnas de atajos, aquí cada una se queda en 58 px: los rótulos
+   aguantan, pero solo si el interletrado se cierra. */
+@media (max-width: 420px) {
+  :root[data-modo="mando"] { --x-ancho: 56px; }
+  :root[data-modo="mando"] .atajos button,
+  :root[data-modo="mando"] .utiles button { letter-spacing: 0; font-size: .54rem; }
+  :root[data-modo="mando"] .mio button { font-size: .88rem; gap: 7px; }
+  :root[data-modo="mando"] .rotulo h1 { font-size: .94rem; }
+  :root[data-modo="mando"] .capa-cuerpo { padding: 10px 10px 16px; }
+  :root[data-modo="mando"] .capa-cuerpo > section { padding: 10px 11px; }
+}
+
+
+/* ═══ 11. Y si alguien pone el móvil de lado ════════════════════════════════════════════════
+   El mando está pensado en vertical, pero un móvil se gira solo. En apaisado la pantalla mide
+   340-420 px de alto: la columna de arriba (tira + DJ + mandos + HABLAR) no cabe ni de lejos, y
+   sin esto el botón de hablar se salía por debajo.
+
+   Ojo: un móvil apaisado suele medir MÁS de 780 px de ancho, así que la consulta de la app no
+   entra y el tablero se queda en dos columnas. Se aprovecha: la tira de escena a la izquierda
+   como columna estrecha, y a la derecha la conversación con sus mandos. */
+@media (orientation: landscape) and (max-height: 560px) {
+  :root[data-modo="mando"] {
+    --hablar-alto: clamp(56px, 15vh, 72px);
+    --marco: clamp(38px, 15vh, 56px);
+  }
+  :root[data-modo="mando"] .tablero { flex-direction: row; }
+  :root[data-modo="mando"] .escenario { flex: 1; height: auto; min-width: 0; }
+  :root[data-modo="mando"] .lateral {
+    width: min(62%, 520px); flex: none;
+    border-top: none; border-left: 1px solid var(--liquen);
+  }
+  /* Con más de la mitad del ancho para los mandos, los dos campos caben uno al lado del otro: el
+     dado a la izquierda y escribir a la derecha. Es la fila que se puede ahorrar sin tocar nada
+     de lo que se toca a ciegas. */
+  :root[data-modo="mando"] .acciones > #tirada-forma,
+  :root[data-modo="mando"] .acciones > #escribir-forma { grid-column: span 1; }
+  :root[data-modo="mando"] .atajos button { min-height: 44px; }
+  :root[data-modo="mando"] .utiles button { min-height: 38px; }
+  :root[data-modo="mando"] .mio button { min-height: 44px; }
+  :root[data-modo="mando"] .lateral > .hablar { font-size: 1.05rem; }
+}

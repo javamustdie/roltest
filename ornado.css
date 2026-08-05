@@ -926,3 +926,287 @@
   .ficha .pxbar i::after { animation: none; opacity: .25; }
   .ficha .bolsa li, .ficha .muneco .ranura { transition: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   RELOJES DE TENSIÓN, LA TARJETA X Y LOS DOCUMENTOS DE ATREZO
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Los relojes, sobre la escena y arriba a la izquierda: el lado que no ocupan ni el rótulo del
+   lugar ni el minimapa. Van en columna porque en horizontal se comen la escena, que es lo que
+   hay que mirar. */
+.relojes {
+  /* Debajo del rótulo del lugar, que ocupa la esquina: encima lo tapaban. Y por debajo de las
+     capas (z6), que si no la Misión y Quiénes se abren con tres relojes encima. El hueco de
+     arriba lo ocupa la tira de iniciativa en combate, así que empiezan por debajo de ella. */
+  position: absolute; top: 104px; left: 14px; z-index: 5;
+  display: flex; flex-direction: column; gap: 10px;
+  pointer-events: none;
+}
+.reloj-t {
+  margin: 0; display: flex; align-items: center; gap: 9px;
+  padding: 6px 11px 6px 7px;
+  background: color-mix(in srgb, var(--turba) 78%, transparent);
+  border: 1px solid var(--liquen); border-radius: 3px;
+  backdrop-filter: blur(2px);
+}
+.reloj-t figcaption { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.reloj-t figcaption b {
+  font: 600 .84rem/1.2 var(--serif); color: var(--tiza);
+  max-width: 17ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.reloj-t figcaption span {
+  font: 500 .64rem/1.3 var(--mono); letter-spacing: .06em; color: var(--tiza-baja);
+}
+/* Uno lleno se sale del gris: es el único que tiene que gritar. */
+.reloj-t[data-estado="lleno"] { border-color: var(--herrumbre); }
+.reloj-t[data-estado="lleno"] figcaption b { color: var(--ambar); }
+.reloj-t[data-estado="urgente"] { border-color: color-mix(in srgb, var(--herrumbre) 55%, var(--liquen)); }
+
+/* En la Misión caben en rejilla porque ahí sí hay sitio y se miran de uno en uno. */
+.relojes-lista { display: flex; flex-wrap: wrap; gap: 10px; }
+.relojes-lista .reloj-t { background: var(--musgo); }
+.relojes-lista .reloj-t[data-estado="archivado"] { opacity: .5; }
+
+/* ── La tarjeta X ──────────────────────────────────────────────────────────────────────────
+   Serena a propósito: nada de rojo de alarma. Quien la toca puede estar pasándolo mal, y un
+   botón que parece una emergencia cuesta más de pulsar justo cuando más falta hace. */
+.tarjeta-x {
+  /* Esquina de abajo a la izquierda: es el hueco que queda al lado de la banda de personajes, está
+     en el lado de los jugadores —no en la lateral del DJ— y no hay nada más que tocar cerca.
+     Estuvo un rato abajo a la derecha y allí caía dentro de la rejilla de botones del DJ, donde un
+     aspa sin más parece un «cerrar». Lleva rótulo por lo mismo. */
+  position: fixed; left: 14px; bottom: 14px; z-index: 60;
+  width: 58px; height: 52px; padding: 0; gap: 1px;
+  display: grid; place-items: center; align-content: center;
+  background: color-mix(in srgb, var(--turba) 88%, transparent);
+  border: 1px solid var(--liquen); border-radius: 3px;
+  cursor: pointer;
+}
+.tx-aspa { font: 300 1.1rem/1 var(--serif); color: var(--tiza-baja); }
+.tx-rotulo {
+  font: 500 .54rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--tiza-baja);
+}
+.tarjeta-x:hover .tx-aspa, .tarjeta-x:focus-visible .tx-aspa,
+.tarjeta-x:hover .tx-rotulo, .tarjeta-x:focus-visible .tx-rotulo { color: var(--tiza); }
+.tarjeta-x:hover, .tarjeta-x:focus-visible { color: var(--tiza); border-color: var(--tiza-baja); }
+
+.tx-fondo { position: fixed; inset: 0; z-index: 61; background: rgba(7,8,4,.72); }
+.tx-panel {
+  position: fixed; z-index: 62; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(420px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 20px; background: var(--musgo); border: 1px solid var(--liquen); border-radius: 4px;
+}
+.tx-titular { margin: 0 0 6px; font: 400 1.15rem/1.35 var(--serif); color: var(--tiza); }
+.tx-titular span {
+  display: block; margin-top: 5px;
+  font: 400 .84rem/1.45 var(--serif); color: var(--tiza-baja);
+}
+.tx-opcion {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  padding: 11px 14px; text-align: left;
+  background: var(--musgo-alto); border: 1px solid var(--liquen); border-radius: 3px;
+  color: var(--tiza); cursor: pointer;
+}
+.tx-opcion:hover, .tx-opcion:focus-visible { border-color: var(--tiza-baja); }
+.tx-opcion b { font: 600 .95rem/1.2 var(--serif); }
+.tx-opcion span { font: 400 .78rem/1.35 var(--serif); color: var(--tiza-baja); }
+#tx-seguir {
+  margin-top: 4px; padding: 9px; background: none; border: 0;
+  font: 400 .82rem/1.3 var(--serif); color: var(--tiza-baja); cursor: pointer;
+}
+
+/* El telón de pausa: tapa la escena entera para que no haya nada que mirar. Esa es la idea. */
+.pausa {
+  position: fixed; inset: 0; z-index: 63;
+  display: grid; place-content: center; justify-items: center; gap: 14px; text-align: center;
+  background: var(--turba);
+}
+.pausa b { font: 500 1.9rem/1 var(--mono); letter-spacing: .3em; color: var(--tiza-baja); }
+.pausa p { margin: 0; font: 400 .95rem/1.5 var(--serif); color: var(--tiza-baja); }
+
+/* «Se está pintando», al lado de la tarjeta X: fuera del escenario, así que una capa abierta no
+   lo tapa. A los diez segundos sin señal, una ilustración en marcha parece un cuelgue. */
+.pintando-chip {
+  position: fixed; left: 82px; bottom: 27px; z-index: 59;
+  padding: 6px 11px 6px 22px;
+  font: 500 .68rem/1 var(--mono); letter-spacing: .08em; color: var(--tiza-baja);
+  background: color-mix(in srgb, var(--turba) 88%, transparent);
+  border: 1px solid var(--liquen); border-radius: 3px;
+}
+.pintando-chip::before {
+  content: ""; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--ambar);
+  animation: latir 1.4s ease-in-out infinite;
+}
+@keyframes latir { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+
+/* ── El documento de atrezo ────────────────────────────────────────────────────────────────
+   Por debajo de la tarjeta X a propósito: con un papel puesto, parar la escena tiene que
+   seguir siendo posible. */
+.documento {
+  position: fixed; inset: 0; z-index: 55;
+  display: grid; place-items: center; gap: 16px; align-content: center;
+  padding: 20px; background: rgba(7,8,4,.86); overflow: auto;
+}
+.documento-hoja { max-width: min(620px, 100%); }
+.documento-cerrar {
+  padding: 10px 20px; background: var(--musgo); border: 1px solid var(--liquen);
+  border-radius: 3px; font: 400 .86rem/1.2 var(--serif); color: var(--tiza); cursor: pointer;
+}
+.documento-cerrar:hover { border-color: var(--tiza-baja); }
+
+/* Los «todavía nada» de las listas nuevas, con el mismo aire que los que ya había. */
+.vacio { color: var(--tiza-baja); font-style: italic; list-style: none; margin-left: -1.4em; }
+.relojes-lista .vacio { margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pintando-chip::before { animation: none; opacity: .7; }
+}
+
+/* ── La galería de «Quién es quién» ────────────────────────────────────────────────────────
+   `quienes.js` emite las tarjetas y el medallón en SVG a `width:100%`, así que el tamaño lo
+   manda esto. Sin una caja con medidas, el medallón crece hasta llenar la pantalla: una cara
+   de dos metros y ni un nombre a la vista. */
+#quienes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.qn {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: center;
+  padding: 11px 13px;
+  background: var(--musgo); border: 1px solid var(--liquen); border-radius: 3px;
+}
+.qn-cara {
+  position: relative; grid-row: span 2;
+  width: 62px; height: 62px; flex: 0 0 62px;
+  border-radius: 50%; overflow: hidden;
+}
+.qn-foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.qn-datos { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qn-nombre { font: 600 .98rem/1.25 var(--serif); color: var(--tiza); }
+.qn-que, .qn-nota { font: 400 .78rem/1.35 var(--serif); color: var(--tiza-baja); }
+.qn-nota { font-style: italic; }
+.qn-disp {
+  grid-column: 2; justify-self: start;
+  padding: 2px 8px; border: 1px solid var(--liquen); border-radius: 2px;
+  font: 500 .58rem/1.6 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--tiza-baja);
+}
+/* Cómo os tratan, de un vistazo y sin tener que leer la etiqueta. */
+.qn[data-disposicion="hostil"] .qn-disp { color: var(--herrumbre); border-color: var(--herrumbre); }
+.qn[data-disposicion="tenso"] .qn-disp,
+.qn[data-disposicion="asustado"] .qn-disp,
+.qn[data-disposicion="impaciente"] .qn-disp { color: var(--sebo); border-color: var(--sebo); }
+.qn[data-disposicion="aliado"] .qn-disp { color: var(--ambar); border-color: var(--ambar); }
+.qn[data-muerto="si"] { opacity: .55; }
+.qn[data-muerto="si"] .qn-nombre { text-decoration: line-through; }
+
+/* ── El papel de atrezo ────────────────────────────────────────────────────────────────────
+   `documentos.js` pone la estructura y las manchas en SVG; el papel es esto. Sin ello el
+   documento sale como texto suelto sobre el fondo y no parece un objeto del mundo, que es todo
+   lo que se le pedía. */
+.doc {
+  position: relative; margin: 0; padding: 30px 32px 34px;
+  background:
+    radial-gradient(120% 90% at 30% 10%, #E4D9B8 0%, #D3C49C 45%, #B9A87E 100%);
+  color: #2A2114;
+  box-shadow: 0 18px 46px rgba(0,0,0,.66);
+  /* El borde irregular es lo que separa «papel viejo» de «rectángulo beige». */
+  clip-path: polygon(
+    0.4% 1%, 24% 0.2%, 51% 1.4%, 77% 0.1%, 99.6% 1.2%,
+    99% 26%, 99.8% 52%, 99.2% 78%, 99.5% 99%,
+    74% 99.7%, 48% 98.8%, 22% 99.9%, 0.5% 98.9%,
+    1% 74%, 0.2% 49%, 0.8% 25%
+  );
+}
+.doc-titulo {
+  margin: 0 0 16px; text-align: center;
+  font: 600 1.22rem/1.3 var(--serif); color: #241B10;
+  letter-spacing: .01em;
+}
+.doc-cuerpo { font: 400 1rem/1.72 var(--serif); }
+.doc-cuerpo p { margin: 0 0 .8em; }
+.doc-cuerpo p:last-child { margin-bottom: 0; }
+.doc-firma { display: block; margin-top: 18px; text-align: right; font-style: italic; }
+.doc-vacio { font-style: italic; opacity: .6; }
+/* Las manchas y los dobleces van detrás del texto y no capturan el dedo. */
+.doc-marcas { position: absolute; inset: 0; pointer-events: none; }
+
+/* La piedra no es papel: gris, mayúsculas espaciadas y sin serifa dulce. */
+.doc[data-tipo="inscripcion"] {
+  background: radial-gradient(120% 90% at 35% 15%, #8E8B7E 0%, #747165 50%, #56544B 100%);
+  color: #16150F;
+  text-shadow: 0 1px 0 rgba(255,255,255,.16);
+}
+.doc[data-tipo="inscripcion"] .doc-cuerpo {
+  font: 500 .96rem/1.9 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+  text-align: center;
+}
+.doc[data-tipo="inscripcion"] .doc-titulo { color: #16150F; letter-spacing: .1em; }
+
+/* El registro es una lista, no una carta: se lee en columna y con renglones. */
+.doc[data-tipo="registro"] .doc-cuerpo {
+  font: 400 .95rem/2.05 var(--mono);
+  background-image: repeating-linear-gradient(
+    to bottom, transparent 0 calc(2.05em - 1px), rgba(42,33,20,.16) calc(2.05em - 1px) 2.05em);
+}
+
+/* ── Los mejores momentos ──────────────────────────────────────────────────────────────────
+   Cada ilustración con lo que estaba pasando cuando se pintó. La imagen sola no vale: a las tres
+   semanas nadie se acuerda de por qué había un ahogado en un pozo. */
+.momentos { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.momento {
+  margin: 0; display: flex; flex-direction: column;
+  background: var(--musgo); border: 1px solid var(--liquen); border-radius: 3px; overflow: hidden;
+}
+.momento img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.momento figcaption { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px 12px; }
+.momento figcaption b { font: 600 .9rem/1.3 var(--serif); color: var(--tiza); }
+.momento-donde {
+  font: 500 .58rem/1.4 var(--mono); letter-spacing: .07em; text-transform: uppercase;
+  color: var(--tiza-baja);
+}
+.momento-que {
+  font: 400 .78rem/1.45 var(--serif); font-style: italic; color: var(--tiza-baja);
+  padding-top: 4px; border-top: 1px solid color-mix(in srgb, var(--liquen) 55%, transparent);
+}
+.momento .descargar { align-self: flex-start; margin-top: 2px; }
+
+/* La narración grabada en la conversación: se distingue del DJ en vivo porque no es él hablando,
+   es una pieza que ya estaba escrita, y porque se relanza con su MP3 y no volviendo a sintetizar. */
+.turno[data-de="grabada"] { border-left: 2px solid var(--sebo); padding-left: 9px; }
+.turno[data-de="grabada"] .quien { color: var(--sebo); }
+.turno[data-de="grabada"] p { font-style: italic; }
+
+/* ── Vuestras caras: el retrato desde una foto, hecho en mesa ───────────────────────────────── */
+#caras { display: flex; flex-direction: column; gap: 8px; }
+.cara-fila {
+  display: flex; align-items: center; gap: 11px;
+  padding: 8px 10px; background: var(--musgo); border: 1px solid var(--liquen); border-radius: 3px;
+}
+.cara-mini {
+  width: 46px; height: 46px; flex: 0 0 46px; overflow: hidden; border-radius: 2px;
+  background: var(--hueco); display: grid; place-items: center;
+}
+.cara-mini img { width: 100%; height: 100%; object-fit: cover; }
+.cara-mini .ini { font: 500 1.1rem/1 var(--serif); color: var(--tiza-baja); }
+.cara-quien { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+.cara-quien b { font: 600 .92rem/1.2 var(--serif); color: var(--tiza); }
+.cara-quien span {
+  font: 500 .6rem/1.3 var(--mono); letter-spacing: .07em; text-transform: uppercase;
+  color: var(--tiza-baja);
+}
+/* El label ES el botón: dentro lleva el input de fichero escondido, que es lo que abre la cámara
+   en tablet y en móvil sin tener que pedir permisos ni montar una vista previa propia. */
+.cara-hacer {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 8px 13px; background: var(--musgo-alto);
+  border: 1px solid var(--liquen); border-radius: 3px;
+  font: 400 .82rem/1.2 var(--serif); color: var(--tiza);
+}
+.cara-hacer:hover { border-color: var(--tiza-baja); }
+.cara-quitar {
+  width: 30px; height: 30px; padding: 0; cursor: pointer;
+  background: none; border: 1px solid var(--liquen); border-radius: 2px;
+  font: 300 .9rem/1 var(--serif); color: var(--tiza-baja);
+}
+.cara-quitar:hover { color: var(--herrumbre); border-color: var(--herrumbre); }
